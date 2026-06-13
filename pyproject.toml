@@ -31,6 +31,9 @@ dependencies = [
 Homepage = "https://github.com/cdeust/cortex-viz"
 Repository = "https://github.com/cdeust/cortex-viz"
 
+[project.scripts]
+cortex-viz = "cortex_viz.__main__:main"
+
 [project.optional-dependencies]
 # CPU-only graph viz path — moved verbatim from neuro-cortex-memory.
 # Precomputed igraph layout + Datashader tile rendering + Apache Arrow
