@@ -37,7 +37,10 @@ _STAGES = (
 
 _STAGE_METRICS_SQL = (
     "SELECT COUNT(*) as count, "
-    "AVG(heat) as avg_heat, AVG(importance) as avg_importance, "
+    # source: memories table column is heat_base (no `heat` column exists —
+    # verified via information_schema 2026-06-14); selecting heat raised a
+    # 500 on /api/sankey. heat_base is the canonical thermodynamic heat field.
+    "AVG(heat_base) as avg_heat, AVG(importance) as avg_importance, "
     "AVG(replay_count) as avg_replay, AVG(access_count) as avg_access, "
     "AVG(encoding_strength) as avg_encoding, "
     "AVG(interference_score) as avg_interference, "

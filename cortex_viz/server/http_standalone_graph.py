@@ -99,6 +99,33 @@ _graph_build_lock = threading.Lock()
 # server process (normal in-process behaviour).
 _SINK_Q = None
 
+# ── Epochs (Lamport protocol) ─────────────────────────────────────────
+#
+# A build is identified by an integer epoch. The SERVER owns the
+# authoritative ``_SERVER_EPOCH``; every applier (apply_delta / apply_progress
+# / apply_phase_ready / apply_graph_replace / apply_done) takes an epoch
+# argument and returns early when it does not match — so a stale child whose
+# drain messages arrive after a roster re-kick can never corrupt the new
+# build's state. ``begin_epoch`` is the single server-side reset point.
+#
+# The CHILD owns ``_BUILD_EPOCH`` (set once by build_process._worker via
+# ``set_build_epoch``). ``_forward`` stamps it into index 1 of every message
+# tuple, so the drain can epoch-gate without threading the value through every
+# sink call.
+_SERVER_EPOCH: int = 0
+_BUILD_EPOCH: int = 0
+
+
+def set_build_epoch(epoch: int) -> None:
+    """CHILD-side: record the epoch this build child belongs to.
+
+    Pre: called once in the build child before _kick_background_build.
+    Post: every subsequent _forward stamps ``epoch`` at message index 1.
+    """
+    global _BUILD_EPOCH
+    _BUILD_EPOCH = int(epoch)
+
+
 # (No _DELTA_STREAM_CAP: the baseline blob rides the out-of-band graph_file,
 # only naturally-bounded L6 batches stream — see _merge below.)
 #
@@ -113,18 +140,20 @@ _L6_PROJECT_TIMEOUT_S = 180.0
 
 
 def _forward(msg: tuple) -> None:
-    """Push a sink message to the parent if running in the build child."""
+    """Push a sink message to the parent if running in the build child.
+
+    The child's ``_BUILD_EPOCH`` is stamped into index 1 of every message
+    (``(kind, epoch, *payload)``) so the server drain can drop stale-epoch
+    messages from a child that outlived its build. The caller passes the
+    message WITHOUT the epoch field (``(kind, *payload)``); _forward inserts
+    it — one place owns the wire shape.
+    """
     q = _SINK_Q
     if q is not None:
         try:
-            q.put(msg)
+            q.put((msg[0], _BUILD_EPOCH, *msg[1:]))
         except Exception:  # pragma: no cover - queue closed during shutdown
             pass
-
-
-def _progress_snapshot() -> dict:
-    with _build_progress_lock:
-        return dict(_build_progress)
 
 
 # ── Server-process appliers (called by build_process._drain) ──────────
@@ -137,8 +166,67 @@ def _progress_snapshot() -> dict:
 _apply_lock = threading.Lock()
 
 
-def apply_progress(snap: dict) -> None:
+def begin_epoch(epoch: int) -> None:
+    """SERVER-side single reset point for a new build epoch.
+
+    Pre: called by build_process.start_build BEFORE the child is spawned /
+    the drain thread starts, so the empty state is published before any
+    delta of the new epoch can arrive.
+    Post: _SERVER_EPOCH == epoch; the graph cache is empty; all dedup /
+    index / adjacency / phase state is cleared; the FIXED phases are
+    pending; dynamic L6:* phases are dropped; _build_progress is reset.
+
+    Atomic publish: the empty cache is swapped under _apply_lock so a
+    concurrent /api/graph read never observes a half-cleared cache.
+    """
+    global _SERVER_EPOCH, _graph_cache, _graph_cache_ts
+    with _apply_lock:
+        _SERVER_EPOCH = int(epoch)
+        _graph_cache = {
+            "data": {"nodes": [], "edges": [], "links": [], "meta": {}},
+            "domain_filter": None,
+        }
+        _graph_cache_ts = time.monotonic()
+        _applied_node_ids.clear()
+        _node_index.clear()
+        _adjacency.clear()
+        # Drop dynamic L6 phases from the prior build, reset fixed-phase
+        # buffers, and flip every fixed phase pending.
+        for _k in list(PHASES):
+            if _k.startswith("L6:") or _k == "L6_CROSS":
+                PHASES.pop(_k, None)
+                _phase_payloads.pop(_k, None)
+            else:
+                PHASES[_k]["ready"] = False
+        for _k in list(_phase_payloads):
+            _phase_payloads[_k] = {"nodes": [], "edges": []}
     with _build_progress_lock:
+        _build_progress.update(
+            {
+                "phase": "starting",
+                "phase_seq": 0,
+                "pct": 0.0,
+                "message": "",
+                "baseline_ready": False,
+                "full_ready": False,
+                "node_count": 0,
+                "edge_count": 0,
+                "started_at": time.monotonic(),
+                "elapsed": 0.0,
+                "phases": {k: False for k in PHASES},
+            }
+        )
+
+
+def apply_progress(epoch: int, snap: dict) -> None:
+    if epoch != _SERVER_EPOCH:
+        return  # stale build — drop
+    with _build_progress_lock:
+        # started_at is SERVER-owned (set by begin_epoch on the server's
+        # monotonic clock). The child runs on a DIFFERENT monotonic origin,
+        # so a forwarded started_at would make get_build_progress compute a
+        # garbage elapsed. Drop it.
+        snap = {k: v for k, v in snap.items() if k != "started_at"}
         # phase_seq must be monotone: an out-of-order drain (or a stale
         # forwarded snapshot) must never roll the client's seq backwards,
         # or it would re-fetch an older graph. Take the max of current and
@@ -158,28 +246,50 @@ def apply_progress(snap: dict) -> None:
 _applied_node_ids: set = set()
 
 
-def apply_delta(stage: str, slim_nodes: list, edges: list) -> None:
+def apply_delta(
+    epoch: int, phase_key: str | None, stage: str, nodes: list, edges: list
+) -> None:
     """Append a forwarded build delta into the server-process cache AND
     re-emit it to the live /api/graph/events subscribers. O(batch).
+
+    INV-NODE (Liskov node-shape contract): the cache always holds FULL
+    DICTS. The cross-process delta carries full dicts (``nodes``); the slim
+    ``[id,kind,x,y]`` projection is ONLY the SSE wire format, produced here
+    on emit. So apply_delta:
+      * stores full dicts in _graph_cache["data"]["nodes"];
+      * maintains _node_index[nid]=node and _adjacency for each edge, so
+        /api/graph/node and /api/graph/node neighbors resolve mid-build;
+      * reconstructs the per-phase buffer from the delta stream by appending
+        fresh nodes/edges into _phase_payloads[phase_key] (the slim wire
+        drops phase membership; the real phase_key rides as a field);
+      * emits SLIM nodes to the SSE stream only.
 
     Atomic publish: build the new node/edge lists privately, then swap the
     _graph_cache reference under _apply_lock. /api/graph readers see either
     the pre-delta dict or the post-delta dict, never a torn intermediate.
     """
     global _graph_cache, _graph_cache_ts
+    if epoch != _SERVER_EPOCH:
+        return  # stale build — drop
     with _apply_lock:
         old = _graph_cache["data"] if _graph_cache else None
         new_nodes = list(old["nodes"]) if old else []
         new_edges = list(old["edges"]) if old else []
         new_meta = dict(old["meta"]) if old and old.get("meta") else {}
-        fresh = []
-        for n in slim_nodes:
-            nid = n[0] if isinstance(n, list) else n.get("id")
+        fresh: list[dict] = []
+        for n in nodes:
+            nid = n.get("id")
             if nid and nid not in _applied_node_ids:
                 new_nodes.append(n)
                 _applied_node_ids.add(nid)
+                _node_index[nid] = n
                 fresh.append(n)
-        new_edges.extend(edges)
+        for e in edges:
+            new_edges.append(e)
+            s, t, ek = e.get("source"), e.get("target"), e.get("kind")
+            if s and t:
+                _adjacency.setdefault(s, []).append((t, ek, "out"))
+                _adjacency.setdefault(t, []).append((s, ek, "in"))
         new_meta["node_count"] = len(new_nodes)
         new_meta["edge_count"] = len(new_edges)
         cur = {
@@ -190,30 +300,91 @@ def apply_delta(stage: str, slim_nodes: list, edges: list) -> None:
         }
         _graph_cache = {"data": cur, "domain_filter": None}
         _graph_cache_ts = time.monotonic()
+        # Rebuild the server-side per-phase buffer from the delta stream.
+        # _phase_payloads is authoritative for /api/graph/phase on the
+        # server; the slim wire dropped phase membership so the real
+        # phase_key is forwarded as a field and reassembled here.
+        if phase_key:
+            buf = _phase_payloads.setdefault(phase_key, {"nodes": [], "edges": []})
+            buf["nodes"].extend(fresh)
+            buf["edges"].extend(edges)
     try:
         from cortex_viz.server import graph_event_stream as _ev
 
         if fresh:
-            _ev.emit(stage, fresh, [], chunk=1000)
+            _ev.emit(stage, [_slim_node(n) for n in fresh], [], chunk=1000)
     except Exception:  # pragma: no cover - defensive
         pass
 
 
-def apply_graph_replace(data: dict) -> None:
+def apply_phase_ready(epoch: int, phase_key: str, phase_seq: int) -> None:
+    """SERVER-side: flip a phase ready in response to a forwarded
+    ``phase_ready`` message. phase_seq is taken as max so an out-of-order
+    drain never rolls the client's snapshot pointer backwards."""
+    if epoch != _SERVER_EPOCH:
+        return  # stale build — drop
+    # Dynamic L6:* / L6_CROSS phases are registered in the CHILD only; the
+    # child's PHASES dict does not cross the process boundary. Create the
+    # server-side entry on first phase_ready so /api/graph/phase reports the
+    # authoritative ready flag (not the node_total>0 fallback). deps are not
+    # needed server-side — the server publishes whatever the child marked
+    # ready; the dependency gate is enforced in the child build loop.
+    if phase_key not in PHASES:
+        PHASES[phase_key] = {"deps": [], "ready": True, "label": phase_key}
+    else:
+        PHASES[phase_key]["ready"] = True
+    with _build_progress_lock:
+        _build_progress["phase_seq"] = max(
+            _build_progress.get("phase_seq", 0), int(phase_seq)
+        )
+        _build_progress["phases"] = {k: v["ready"] for k, v in PHASES.items()}
+
+
+def apply_done(epoch: int, status: str) -> None:
+    """SERVER-side terminal progress for a build epoch.
+
+    status ∈ {"ok","error","killed"}. ``ok`` flips full_ready so the client
+    stops polling; ``error``/``killed`` set the phase so the UI shows the
+    build ended rather than spinning forever. Dropped if epoch is stale."""
+    if epoch != _SERVER_EPOCH:
+        return  # stale build — drop
+    with _build_progress_lock:
+        if status == "ok":
+            _build_progress.update({"phase": "full_ready", "pct": 1.0, "full_ready": True})
+        else:
+            _build_progress.update(
+                {"phase": status, "message": f"build {status}", "full_ready": False}
+            )
+
+
+def apply_graph_replace(epoch: int, data: dict) -> None:
     """Install the authoritative full-record graph from the finished child.
+
+    INV-NODE: the cache is always full dicts, so node ids read with
+    ``n.get("id")`` unconditionally (no slim-list branch).
 
     Atomic publish: swap the _graph_cache reference under _apply_lock so a
     concurrent /api/graph read never observes the cache mid-replacement.
     """
     global _graph_cache, _graph_cache_ts
+    if epoch != _SERVER_EPOCH:
+        return  # stale build — drop
     with _apply_lock:
         _graph_cache = {"data": data, "domain_filter": None}
         _graph_cache_ts = time.monotonic()
         _applied_node_ids.clear()
+        _node_index.clear()
+        _adjacency.clear()
         for n in data.get("nodes", []):
-            nid = n[0] if isinstance(n, list) else n.get("id")
+            nid = n.get("id")
             if nid:
                 _applied_node_ids.add(nid)
+                _node_index[nid] = n
+        for e in data.get("edges", []):
+            s, t, ek = e.get("source"), e.get("target"), e.get("kind")
+            if s and t:
+                _adjacency.setdefault(s, []).append((t, ek, "out"))
+                _adjacency.setdefault(t, []).append((s, ek, "in"))
 
 
 def graph_cache_data() -> dict | None:
@@ -538,10 +709,10 @@ def ensure_build_started(store) -> None:
 
     Called once at server launch (http_standalone.main) so the galaxy
     streams in from the start, and again by the phase poller on first
-    GRAPH-tab visit. Repeated polls are harmless —
-    _kick_background_build acquires the build lock non-blocking and
-    returns if a build is already running.
+    GRAPH-tab visit. Repeated polls are harmless — start_build refuses
+    while a live build child exists.
     """
+    global _graph_roster_fingerprint
     if _graph_cache and _graph_cache.get("data", {}).get("nodes"):
         return
     # Run the CPU-bound build in a separate PROCESS so it cannot starve the
@@ -557,6 +728,11 @@ def ensure_build_started(store) -> None:
     if url:
         from cortex_viz.server import build_process
 
+        # Record the roster fingerprint NOW so the first /api/graph call
+        # does not see a spurious roster_change (server fp starts at () but
+        # the real roster is non-empty) and needlessly kill-then-restart the
+        # build this call just started.
+        _graph_roster_fingerprint = _roster_fingerprint()
         build_process.start_build(url, None)
     else:
         _set_progress(
@@ -599,75 +775,19 @@ def _register_phase(key: str, deps: list[str], label: str) -> None:
         _build_progress.setdefault("phases", {})[key] = False
 
 
-_PHASE_KINDS: dict[str, set[str]] = {
-    "L0": {"domain"},
-    # L1 = structural setup layer (~190 nodes: skills, hooks, agents, MCPs).
-    # "command" is Bash-execution telemetry (5878 nodes) — NOT setup.
-    # Commands belong in L2 alongside tool_hubs via command_in_hub edges.
-    "L1": {"skill", "hook", "agent", "mcp"},
-    "L2": {"tool_hub", "command"},
-    "L3": {"file"},
-    "L4": {"discussion"},
-    "L5": {"memory"},
-}
-
-
 def get_phase_payload(key: str, offset: int = 0, limit: int | None = None) -> dict:
     spec = PHASES.get(key)
     pl = _phase_payloads.get(key, {"nodes": [], "edges": []})
     nodes = pl.get("nodes", [])
     edges = pl.get("edges", [])
 
-    # Fallback: _phase_payloads is empty when the streaming builder
-    # populates _graph_cache directly instead of the phase cache.
-    # Extract the relevant kind-slice from the full cache so the
-    # phase endpoint always returns useful data.
-    if not nodes and key in _PHASE_KINDS:
-        cache = _graph_cache
-        if cache:
-            cache_data = (
-                cache.get("data") if isinstance(cache.get("data"), dict) else cache
-            )
-            all_nodes: list = (
-                cache_data.get("nodes", []) if isinstance(cache_data, dict) else []
-            )
-            all_edges: list = (
-                cache_data.get("edges", []) if isinstance(cache_data, dict) else []
-            )
-            allowed_kinds = _PHASE_KINDS[key]
-            nodes = [
-                n
-                for n in all_nodes
-                if (n.get("kind") or n.get("type")) in allowed_kinds
-            ]
-            if nodes:
-                node_ids = {n["id"] for n in nodes}
-                # Edge scoping — AND, not OR.
-                #
-                # Symptom: "[lod] L0 cortex +20N +484347E" — L0 returns 20
-                # domain nodes but 484,347 edges (all edges in the graph).
-                #
-                # Root cause: with an OR predicate every edge that merely
-                # *touches* a phase node is included. L0 nodes are the ~20
-                # domain hubs, and nearly every node in the graph carries an
-                # ``in_domain`` edge pointing TO its domain hub. OR therefore
-                # matched all those edges → the entire edge set.
-                #
-                # Fix: a phase payload must carry only edges INTERNAL to the
-                # phase — both endpoints inside this phase's node set. Under
-                # the client's append model (lod.js → appendGraphDelta), a
-                # cross-phase parent edge (e.g. tool_hub -> domain) is owned
-                # by the CHILD phase, which the client appends on top of the
-                # already-loaded parent phase; the dedup sets in graph.js
-                # keep repeats a no-op. So no edge is lost by requiring both
-                # endpoints here, and L0 collapses back to its ~20 structural
-                # domain-to-domain edges.
-                edges = [
-                    e
-                    for e in all_edges
-                    if e.get("source") in node_ids and e.get("target") in node_ids
-                ]
-
+    # _phase_payloads is now authoritative on the server: apply_delta
+    # reconstructs it from the forwarded delta stream (the real phase_key
+    # rides as a field). The prior cache-scan fallback (kind-slice over
+    # _graph_cache) is removed per the Lamport spec — it did n.get(kind) on
+    # cache items that could be slim lists and crashed /api/graph/phase with
+    # an AttributeError. INV-NODE makes the cache always-dicts, but the
+    # fallback is unnecessary regardless: the phase buffer is complete.
     node_total = len(nodes)
     edge_total = len(edges)
     if limit is not None:
@@ -708,7 +828,11 @@ def _mark_phase_ready(phase_key: str) -> None:
     with _build_progress_lock:
         _build_progress["phase_seq"] = _build_progress.get("phase_seq", 0) + 1
         _build_progress["phases"] = {k: v["ready"] for k, v in PHASES.items()}
-    _forward(("progress", _progress_snapshot()))
+        phase_seq = _build_progress["phase_seq"]
+    # Forward the phase-ready transition so the SERVER flips PHASES[key].ready
+    # too (the child's PHASES dict does not cross the process boundary).
+    # apply_phase_ready takes phase_seq=max, so it is order-tolerant.
+    _forward(("phase_ready", phase_key, phase_seq))
 
 
 def _kick_background_build(store, domain_filter: str | None) -> None:
@@ -845,9 +969,13 @@ def _kick_background_build(store, domain_filter: str | None) -> None:
             if (
                 _SINK_Q is not None
                 and stage != "baseline"
-                and (_slim_added or added_edges)
+                and (added_nodes or added_edges)
             ):
-                _forward(("delta", stage, _slim_added, added_edges))
+                # INV-NODE: forward FULL dicts (added_nodes), not the slim
+                # projection — the server cache is always dicts; the server
+                # slims only on SSE emit. The REAL phase_key rides as a field
+                # so the server reconstructs _phase_payloads from the stream.
+                _forward(("delta", phase_key, stage, added_nodes, added_edges))
             _set_progress(
                 phase=stage,
                 pct=pct,
@@ -1724,22 +1852,25 @@ def get_graph_response(store, path: str) -> dict:
     change (a new project appeared).
     """
     global _graph_roster_fingerprint
+    from cortex_viz.server import build_process
+
     params = parse_graph_query(path)
     domain_filter = params["domain_filter"]
     current_fp = _roster_fingerprint()
     roster_changed = current_fp != _graph_roster_fingerprint
-    build_in_progress = _graph_build_lock.locked()
+    # "In progress" is now a LIVE build CHILD, not the server's in-process
+    # build lock (the server never runs the GIL-hogging in-process build).
+    build_in_progress = build_process._is_alive()
     cache_has_data = bool(
         _graph_cache
         and _graph_cache.get("data")
-        and _graph_cache.get("domain_filter") == domain_filter
+        and _graph_cache.get("data", {}).get("nodes")
     )
 
-    # Never re-kick while a build is running — the background thread
-    # owns the AST loop, and double-triggering it would reset all
-    # phase state mid-stream.
-    # Also never re-kick if we already have a completed graph whose
-    # roster hasn't changed — it's still current.
+    # Never re-kick while a build child is alive — it owns the AST loop, and
+    # double-triggering would reset all phase state mid-stream.
+    # Also never re-kick if we already have a populated graph whose roster
+    # hasn't changed — it's still current.
     if build_in_progress or (cache_has_data and not roster_changed):
         if cache_has_data:
             return _graph_cache["data"]
@@ -1757,13 +1888,18 @@ def get_graph_response(store, path: str) -> dict:
             },
         }
 
+    # Roster changed (a new project indexed): the prior build's cache is
+    # stale. Kill the current child (if any) so its epoch is retired, then
+    # start a fresh epoch. begin_epoch (inside start_build) resets state.
+    if roster_changed:
+        _graph_roster_fingerprint = current_fp
+        build_process.kill_current_build()
+
     # Route the (re)build to the child PROCESS — never run the GIL-hogging
     # in-process build in the SERVER process. On roster_changed we still
     # return the existing cache immediately below (never block on the kick).
     url = getattr(store, "_url", None)
     if url:
-        from cortex_viz.server import build_process
-
         build_process.start_build(url, domain_filter)
 
     # If there's any cache at all (stale TTL or prior domain), return
