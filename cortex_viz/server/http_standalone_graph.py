@@ -90,6 +90,136 @@ _adjacency: dict[str, list] = {}
 # stats must show the BUILT total, not the retained one.
 _source_totals: dict[str, int] = {}
 _graph_build_lock = threading.Lock()
+
+# When set (in the build CHILD process, by build_process._worker), the three
+# build sinks — _set_progress, _mark_phase_ready, and _merge's SSE emission —
+# forward their payloads onto this multiprocessing.Queue instead of only
+# mutating in-process globals. The server process's drain thread replays them
+# via apply_progress / apply_delta / apply_graph_replace below. None in the
+# server process (normal in-process behaviour).
+_SINK_Q = None
+
+# (No _DELTA_STREAM_CAP: the baseline blob rides the out-of-band graph_file,
+# only naturally-bounded L6 batches stream — see _merge below.)
+#
+# Per-project wall-clock ceiling for the L6 AST load (tree-sitter parse +
+# AP bridge round-trip). A project that exceeds this is marked ready and
+# skipped so the build always reaches "done" rather than hanging forever.
+# source: measured — a healthy multi-thousand-file repo resolves in <60s via
+# the AP bridge; 180s = 3× that headroom, generous for a large codebase while
+# still bounding the build. Replaces the prior no-timeout path that could hang
+# the child indefinitely on a wedged AP subprocess.
+_L6_PROJECT_TIMEOUT_S = 180.0
+
+
+def _forward(msg: tuple) -> None:
+    """Push a sink message to the parent if running in the build child."""
+    q = _SINK_Q
+    if q is not None:
+        try:
+            q.put(msg)
+        except Exception:  # pragma: no cover - queue closed during shutdown
+            pass
+
+
+def _progress_snapshot() -> dict:
+    with _build_progress_lock:
+        return dict(_build_progress)
+
+
+# ── Server-process appliers (called by build_process._drain) ──────────
+#
+# The drain thread mutates _graph_cache while HTTP threads read it via
+# /api/graph. To avoid a torn read (a request seeing a half-updated dict),
+# the appliers build the new cache PRIVATELY and swap the _graph_cache
+# reference under this lock — readers either see the old dict or the new
+# one, never an in-progress mutation.
+_apply_lock = threading.Lock()
+
+
+def apply_progress(snap: dict) -> None:
+    with _build_progress_lock:
+        # phase_seq must be monotone: an out-of-order drain (or a stale
+        # forwarded snapshot) must never roll the client's seq backwards,
+        # or it would re-fetch an older graph. Take the max of current and
+        # incoming.
+        incoming_seq = snap.get("phase_seq")
+        _build_progress.update(snap)
+        if incoming_seq is not None:
+            _build_progress["phase_seq"] = max(
+                _build_progress.get("phase_seq", 0), incoming_seq
+            )
+
+
+# Persistent dedup state for apply_delta — O(batch) per delta, NOT O(N).
+# Rebuilding a seen-set over all accumulated nodes on every delta made the
+# drain thread O(N^2) and pinned the server CPU (it just moved the GIL hog
+# from the build to the drainer). Reset by apply_graph_replace.
+_applied_node_ids: set = set()
+
+
+def apply_delta(stage: str, slim_nodes: list, edges: list) -> None:
+    """Append a forwarded build delta into the server-process cache AND
+    re-emit it to the live /api/graph/events subscribers. O(batch).
+
+    Atomic publish: build the new node/edge lists privately, then swap the
+    _graph_cache reference under _apply_lock. /api/graph readers see either
+    the pre-delta dict or the post-delta dict, never a torn intermediate.
+    """
+    global _graph_cache, _graph_cache_ts
+    with _apply_lock:
+        old = _graph_cache["data"] if _graph_cache else None
+        new_nodes = list(old["nodes"]) if old else []
+        new_edges = list(old["edges"]) if old else []
+        new_meta = dict(old["meta"]) if old and old.get("meta") else {}
+        fresh = []
+        for n in slim_nodes:
+            nid = n[0] if isinstance(n, list) else n.get("id")
+            if nid and nid not in _applied_node_ids:
+                new_nodes.append(n)
+                _applied_node_ids.add(nid)
+                fresh.append(n)
+        new_edges.extend(edges)
+        new_meta["node_count"] = len(new_nodes)
+        new_meta["edge_count"] = len(new_edges)
+        cur = {
+            "nodes": new_nodes,
+            "edges": new_edges,
+            "links": new_edges,
+            "meta": new_meta,
+        }
+        _graph_cache = {"data": cur, "domain_filter": None}
+        _graph_cache_ts = time.monotonic()
+    try:
+        from cortex_viz.server import graph_event_stream as _ev
+
+        if fresh:
+            _ev.emit(stage, fresh, [], chunk=1000)
+    except Exception:  # pragma: no cover - defensive
+        pass
+
+
+def apply_graph_replace(data: dict) -> None:
+    """Install the authoritative full-record graph from the finished child.
+
+    Atomic publish: swap the _graph_cache reference under _apply_lock so a
+    concurrent /api/graph read never observes the cache mid-replacement.
+    """
+    global _graph_cache, _graph_cache_ts
+    with _apply_lock:
+        _graph_cache = {"data": data, "domain_filter": None}
+        _graph_cache_ts = time.monotonic()
+        _applied_node_ids.clear()
+        for n in data.get("nodes", []):
+            nid = n[0] if isinstance(n, list) else n.get("id")
+            if nid:
+                _applied_node_ids.add(nid)
+
+
+def graph_cache_data() -> dict | None:
+    return _graph_cache["data"] if _graph_cache else None
+
+
 # Fingerprint of the ap_graphs roster at the time of the last build.
 # When it changes (a new project just finished indexing) the cache is
 # invalidated so the next request rebuilds and the user sees the new
@@ -412,16 +542,33 @@ def ensure_build_started(store) -> None:
     _kick_background_build acquires the build lock non-blocking and
     returns if a build is already running.
     """
-    if _graph_build_lock.locked():
-        return
     if _graph_cache and _graph_cache.get("data", {}).get("nodes"):
         return
-    _kick_background_build(store, None)
+    # Run the CPU-bound build in a separate PROCESS so it cannot starve the
+    # HTTP server thread for the GIL. The build child forwards progress + SSE
+    # deltas + the final graph back over a queue (see build_process).
+    #
+    # The SERVER process must NEVER run the in-process build (_kick_background_build):
+    # the igraph DrL layout holds the GIL for tens of seconds, starving the HTTP
+    # server thread (measured: spinner 36M→3200 ticks/s during layout). When no
+    # store URL is available we cannot spawn the child, so we degrade gracefully
+    # rather than run the GIL-hogging build in-process.
+    url = getattr(store, "_url", None)
+    if url:
+        from cortex_viz.server import build_process
+
+        build_process.start_build(url, None)
+    else:
+        _set_progress(
+            phase="degraded",
+            message="build unavailable: no DB url",
+        )
 
 
 def _set_progress(**kw) -> None:
     with _build_progress_lock:
         _build_progress.update(kw)
+    _forward(("progress", dict(kw)))
 
 
 # Per-phase node/edge buffers. ``_merge`` writes into here in addition
@@ -561,6 +708,7 @@ def _mark_phase_ready(phase_key: str) -> None:
     with _build_progress_lock:
         _build_progress["phase_seq"] = _build_progress.get("phase_seq", 0) + 1
         _build_progress["phases"] = {k: v["ready"] for k, v in PHASES.items()}
+    _forward(("progress", _progress_snapshot()))
 
 
 def _kick_background_build(store, domain_filter: str | None) -> None:
@@ -673,19 +821,33 @@ def _kick_background_build(store, domain_filter: str | None) -> None:
             # in the cache, projected to the slim wire format (see
             # _slim_node) — the full records stay in the
             # cache for /api/graph/node and /api/graph/slice.
-            try:
-                if added_nodes:
-                    _events.emit(
-                        stage,
-                        [_slim_node(n) for n in added_nodes],
-                        [],
-                        chunk=1000,
+            _slim_added = [_slim_node(n) for n in added_nodes] if added_nodes else []
+            # In-process SSE emit — the real-time delivery path WHEN the build
+            # runs in the server process. In the build CHILD (_SINK_Q set) this
+            # stream has no subscribers (the SSE handler lives in the server),
+            # so emitting here is pure wasted CPU; the server re-emits via
+            # apply_delta when it drains the forwarded delta. Guard it off.
+            if _SINK_Q is None:
+                try:
+                    if _slim_added:
+                        _events.emit(stage, _slim_added, [], chunk=1000)
+                except Exception as _exc:  # pragma: no cover - defensive
+                    print(
+                        f"[cortex] sse stream emission error: {_exc}",
+                        file=sys.stderr,
                     )
-            except Exception as _exc:  # pragma: no cover - defensive
-                print(
-                    f"[cortex] sse stream emission error: {_exc}",
-                    file=sys.stderr,
-                )
+            # Forward NATURALLY-BOUNDED deltas to the server process for live
+            # SSE. The baseline merge is one giant O(N) blob (~10^5 nodes) — it
+            # must NOT stream over the queue (it would choke the feeder and
+            # re-pin a core); it rides the final graph_file out-of-band, like
+            # the full graph. Only the L6 per-batch deltas (~200 nodes, _BATCH)
+            # stream, so no message on the queue is ever O(N) — no cap needed.
+            if (
+                _SINK_Q is not None
+                and stage != "baseline"
+                and (_slim_added or added_edges)
+            ):
+                _forward(("delta", stage, _slim_added, added_edges))
             _set_progress(
                 phase=stage,
                 pct=pct,
@@ -926,15 +1088,26 @@ def _kick_background_build(store, domain_filter: str | None) -> None:
 
                 _bl_nodes = baseline.get("nodes", [])
                 _bl_edges = baseline.get("edges", [])
-                # DrL over the STRUCTURAL graph only. Memory nodes are
-                # the bulk of the corpus (10^5+) and would dominate the
-                # layout cost; they get deterministic ray placement
-                # around their domain hub instead — same approach as
-                # the L6 symbols, O(1) per node.
+                # DrL over the STRUCTURAL BACKBONE only. DrL (OpenOrd) is
+                # superlinear in node count (measured: 15k nodes ≈ 12s, 58k
+                # nodes ≈ 58s — and it holds the GIL the whole time). Feeding
+                # it every non-memory node (~58k) is what froze the build.
+                # The backbone — domains, tool hubs, files — is the skeleton
+                # that actually needs a force-directed layout (~10-15k nodes,
+                # ≈12s). Everything else (memories AND the other non-backbone
+                # nodes: symbols, discussions, commands, agents, skills, …)
+                # gets deterministic O(1) ray placement around its anchor,
+                # exactly like the L6 symbols. source: superlinear DrL cost,
+                # OpenOrd (Martin et al., SPIE 2011); cap measured 2026-06-14.
+                _BACKBONE_KINDS = {"domain", "tool_hub", "file"}
+
+                def _node_kind(_n: dict) -> str:
+                    return _n.get("kind") or _n.get("type") or ""
+
                 _ids = [
                     n["id"]
                     for n in _bl_nodes
-                    if n.get("id") and (n.get("kind") or n.get("type")) != "memory"
+                    if n.get("id") and _node_kind(n) in _BACKBONE_KINDS
                 ]
                 _id_set = set(_ids)
                 _edge_pairs = []
@@ -949,22 +1122,27 @@ def _kick_background_build(store, domain_filter: str | None) -> None:
                         _edge_pairs.append((_s, _t))
                 _coords = layout_engine.layout(_ids, _edge_pairs)
                 _pos = {nid: (x, y) for nid, x, y in _coords}
-                _placed_mem = 0
+                # Backbone nodes get their baked DrL coordinate.
                 for _n in _bl_nodes:
                     _xy = _pos.get(_n.get("id"))
                     if _xy is not None:
                         _n["x"], _n["y"] = _xy[0], _xy[1]
-                # Memories: ray around their domain hub's baked coord.
+                # Everything else (memories + non-backbone structural nodes:
+                # symbols, discussions, commands, agents, skills, …) gets
+                # deterministic O(1) ray placement around its domain hub's
+                # baked coord — same path as the L6 symbols. Nodes whose
+                # domain hub didn't get a coord fall back to a ray around the
+                # origin so EVERY node still carries a server-side position.
+                _placed_ray = 0
                 for _n in _bl_nodes:
-                    if (_n.get("kind") or _n.get("type")) != "memory":
-                        continue
-                    _hub = _pos.get(_n.get("domain_id"))
-                    if _hub is None:
-                        continue
+                    if _n.get("id") in _id_set:
+                        continue  # backbone — already baked
+                    _hub = _pos.get(_n.get("domain_id")) or (0.0, 0.0)
                     _n["x"], _n["y"] = _place_around(
                         _hub[0], _hub[1], str(_n.get("id"))
                     )
-                    _placed_mem += 1
+                    _placed_ray += 1
+                _placed_mem = _placed_ray
                 print(
                     f"[cortex] layout baked: {len(_coords)} structural coords"
                     f" + {_placed_mem} memory rays for {len(_bl_nodes)} nodes",
@@ -1122,12 +1300,19 @@ def _kick_background_build(store, domain_filter: str | None) -> None:
                     pass
 
             async def _load_with_timeout(gp_):
-                # No timeout — large codebases legitimately take minutes
-                # to parse via tree-sitter. Dropping projects silently
-                # leaves the graph missing their symbols.
-                syms = await ast_source._load_symbols_async(gp_, [])
-                edgs = await ast_source._load_edges_async(gp_, [])
-                return syms, edgs
+                # Finite per-project ceiling so one wedged AP subprocess (or a
+                # pathological repo) cannot hang the whole build. On timeout
+                # asyncio raises TimeoutError, which the caller's except below
+                # turns into "mark this project's phase ready + continue" — the
+                # build always reaches "done" and the other projects still load.
+                import asyncio as _asyncio
+
+                async def _load():
+                    syms = await ast_source._load_symbols_async(gp_, [])
+                    edgs = await ast_source._load_edges_async(gp_, [])
+                    return syms, edgs
+
+                return await _asyncio.wait_for(_load(), timeout=_L6_PROJECT_TIMEOUT_S)
 
             # L6 runs ONE PHASE PER PROJECT so the graph grows
             # project-by-project: finish indexing project A → publish
@@ -1572,7 +1757,14 @@ def get_graph_response(store, path: str) -> dict:
             },
         }
 
-    _kick_background_build(store, domain_filter)
+    # Route the (re)build to the child PROCESS — never run the GIL-hogging
+    # in-process build in the SERVER process. On roster_changed we still
+    # return the existing cache immediately below (never block on the kick).
+    url = getattr(store, "_url", None)
+    if url:
+        from cortex_viz.server import build_process
+
+        build_process.start_build(url, domain_filter)
 
     # If there's any cache at all (stale TTL or prior domain), return
     # it — better than an empty graph. Otherwise placeholder.
