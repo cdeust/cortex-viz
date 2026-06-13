@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cortex — Neural Graph</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@300;400;500;600&family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/panels.css">
+<link rel="stylesheet" href="/css/detail.css">
+<link rel="stylesheet" href="/css/timeline.css">
+<link rel="stylesheet" href="/css/sankey.css">
+<link rel="stylesheet" href="/css/knowledge.css">
+<link rel="stylesheet" href="/css/workflow_graph.css">
+<link rel="stylesheet" href="/css/memory_science.css">
+<!-- KaTeX for scientific math rendering (load early; math appears in view mode too) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
+</head>
+<body>
+
+<div id="loading">
+  <div class="loader-ring"></div>
+  <div class="loader-title">CORTEX</div>
+  <div class="loader-sub">Initializing neural map</div>
+</div>
+
+<!-- Non-blocking progress bar wired to /api/graph/progress. Shows
+     the server's layered build status (L0 domains → L1 … L6 AST)
+     without ever taking the graph away from the user. Fades in when
+     the server is mid-build; fades out the instant full_ready=true. -->
+
+<div id="scanlines"></div>
+<div id="vignette"></div>
+<div id="graph-container"></div>
+<div id="timeline-container"></div>
+<div id="sankey-container"></div>
+<div id="knowledge-container"></div>
+<div id="wiki-container"></div>
+
+<div id="info-panel" class="hud-panel">
+  <div class="panel-header">
+    <div class="reactor-dot"></div>
+    <div>
+      <div class="panel-title">CORTEX</div>
+      <div class="panel-subtitle">Neural Graph</div>
+    </div>
+  </div>
+  <div class="stat-row"><span>Domains</span><span class="val" id="s-dom">--</span></div>
+  <div class="stat-row"><span>Memories</span><span class="val" id="s-mem">--</span></div>
+  <div class="stat-row"><span>Entities</span><span class="val" id="s-ent">--</span></div>
+  <div class="stat-row"><span>Nodes</span><span class="val" id="s-nodes">--</span></div>
+  <div class="stat-row"><span>Synapses</span><span class="val" id="s-edge">--</span></div>
+  <div class="stat-row"><span>Discussions</span><span class="val" id="s-disc">--</span></div>
+
+  <div id="benchmark-summary" style="margin-top:10px;border-top:1px solid #ffffff10;padding-top:8px;display:none">
+    <div style="font-size:7px;text-transform:uppercase;letter-spacing:0.5px;color:var(--cyan-dim,#508090);margin-bottom:6px">System Benchmarks</div>
+    <div class="stat-row"><span>LongMemEval</span><span class="val bench-val" id="b-lme" style="color:#40D870">--</span></div>
+    <div class="stat-row"><span>LoCoMo</span><span class="val bench-val" id="b-loc" style="color:#40D870">--</span></div>
+    <div class="stat-row"><span>BEAM</span><span class="val bench-val" id="b-beam" style="color:#E0B040">--</span></div>
+  </div>
+
+  <div id="system-vitals" style="margin-top:10px;border-top:1px solid #ffffff10;padding-top:8px;display:none">
+    <div style="font-size:7px;text-transform:uppercase;letter-spacing:0.5px;color:var(--cyan-dim,#508090);margin-bottom:6px">System Vitals</div>
+    <div class="stat-row"><span>Mean Heat</span><span class="val" id="sv-heat">--</span></div>
+    <div class="stat-row"><span>New</span><span class="val" id="sv-labile" style="color:#00D2FF">--</span></div>
+    <div class="stat-row"><span>Growing</span><span class="val" id="sv-eltp" style="color:#60A0E0">--</span></div>
+    <div class="stat-row"><span>Strong</span><span class="val" id="sv-lltp" style="color:#40D870">--</span></div>
+    <div class="stat-row"><span>Stable</span><span class="val" id="sv-cons" style="color:#E8B840">--</span></div>
+    <div class="stat-row"><span>Updating</span><span class="val" id="sv-recon" style="color:#C070D0">--</span></div>
+  </div>
+</div>
+
+<div id="filter-bar">
+  <span class="view-toggle">
+    <button class="view-btn active" data-view="graph">Graph</button>
+    <button class="view-btn" data-view="trace">Trace</button>
+    <button class="view-btn" data-view="knowledge">Knowledge</button>
+    <button class="view-btn" data-view="wiki">Wiki</button>
+    <button class="view-btn" data-view="timeline">Board</button>
+    <button class="view-btn" data-view="sankey">Pipeline</button>
+  </span>
+  <button class="filter-btn" id="glossary-toggle" title="Glossary (?)">?</button>
+  <span class="filter-sep"></span>
+  <!-- Single grouped select replaces 14 individual buttons — same
+       vocabulary, one row. "Reset" restores ``all``. -->
+  <button class="filter-btn" id="wfg-filter-reset"
+          title="Clear the graph filter (show everything)">Reset</button>
+  <select id="wfg-filter-select" class="filter-select"
+          aria-label="Workflow graph filter">
+    <option value="all" selected>All nodes</option>
+    <optgroup label="By layer">
+      <option value="L1">L1 — Claude setup (skills · hooks · commands · agents)</option>
+      <option value="L2">L2 — tools (Edit · Read · Grep · Glob · Bash · Write · Task)</option>
+      <option value="L3">L3 — files touched by tools</option>
+      <option value="L4">L4 — discussions</option>
+      <option value="L5">L5 — memories</option>
+      <option value="L6">L6 — AST symbols (loads on select)</option>
+    </optgroup>
+    <optgroup label="By kind">
+      <option value="kind:skill">Skills only</option>
+      <option value="kind:command">Commands only</option>
+      <option value="kind:hook">Hooks only</option>
+      <option value="kind:agent">Agents only</option>
+      <option value="kind:mcp">MCPs only</option>
+      <option value="kind:symbol">Symbols only (loads on select)</option>
+      <option value="kind:entity">Entities only</option>
+    </optgroup>
+    <optgroup label="By file cluster">
+      <option value="file:edit_write">Files edited / written</option>
+      <option value="file:read">Files read only</option>
+      <option value="file:grep_glob">Files matched by Grep / Glob</option>
+      <option value="file:bash">Files touched only by Bash</option>
+    </optgroup>
+    <optgroup label="By AST edge">
+      <option value="edge:defined_in">defined_in — symbol ↔ file</option>
+      <option value="edge:calls">calls — symbol ↔ symbol</option>
+      <option value="edge:imports">imports — file ↔ symbol</option>
+      <option value="edge:member_of">member_of — method ↔ class</option>
+    </optgroup>
+    <optgroup label="Structural">
+      <option value="cross-domain">Cross-domain (shared)</option>
+    </optgroup>
+  </select>
+  <span class="filter-sep"></span>
+  <select id="domain-select" class="filter-select"><option value="">All Domains</option></select>
+  <input type="text" id="search-box" placeholder="Search path, skill, command…">
+</div>
+
+<!-- Graph-only warning banner. Shown directly below the view-toggle
+     row when the Graph tab is active. The Graph view is enabled but
+     can be unresponsive at scale — explain the situation in-line so
+     users aren't confused if their browser hangs. Hidden by default;
+     controls.js toggles display on view change. -->
+<!-- Obsolete warning banner removed when the force renderer gained
+     a 6 000-node cap + adaptive throttle (commit df1db15). The graph
+     view now stays responsive on the full 135 k-node dev DB by
+     sampling memories/files/entities by heat/count and re-rendering
+     at most every 4 s during ingest. Re-add a warning only if a
+     larger-scale failure mode emerges. -->
+<div id="cortex-graph-warn" role="status" style="display:none"></div>
+<script>
+(function(){
+  var b = document.getElementById('cortex-graph-warn-close');
+  if (b) b.addEventListener('click', function() {
+    var w = document.getElementById('cortex-graph-warn');
+    if (w) { w.style.display = 'none'; w.dataset.dismissed = '1'; }
+  });
+})();
+</script>
+
+<div id="status-bar" class="hud-panel">
+  <div class="status-dot"></div>
+  <span id="status-text">Initializing</span>
+  <span style="color:var(--cyan-dim)">|</span>
+  <span id="status-zoom">L0</span>
+  <span style="color:var(--cyan-dim)">|</span>
+  <span id="status-time"></span>
+</div>
+
+<button id="reset-btn">Reset</button>
+<button id="monitor-toggle">Log <span id="monitor-badge">0</span></button>
+
+<div id="monitor-panel">
+  <div class="mon-header">
+    <div class="mon-title">Monitoring Log</div>
+    <button class="close-btn" id="monitor-close">&#x2715;</button>
+  </div>
+  <div class="mon-tabs">
+    <button class="mon-tab active" data-type="all">All <span class="mon-count">0</span></button>
+    <button class="mon-tab" data-type="domain">Domain <span class="mon-count">0</span></button>
+    <button class="mon-tab" data-type="entry-point">Entry <span class="mon-count">0</span></button>
+    <button class="mon-tab" data-type="recurring-pattern">Pattern <span class="mon-count">0</span></button>
+    <button class="mon-tab" data-type="tool-preference">Tool <span class="mon-count">0</span></button>
+    <button class="mon-tab" data-type="behavioral-feature">Feature <span class="mon-count">0</span></button>
+    <button class="mon-tab" data-type="memory">Memory <span class="mon-count">0</span></button>
+    <button class="mon-tab" data-type="entity">Entity <span class="mon-count">0</span></button>
+    <button class="mon-tab" data-type="discussion">Discussion <span class="mon-count">0</span></button>
+  </div>
+  <div class="mon-tabs mon-tabs-bio">
+    <span class="mon-tabs-label">Bio:</span>
+    <button class="mon-tab" data-bio="emotional">Emotional <span class="mon-count">0</span></button>
+    <button class="mon-tab" data-bio="urgency">Urgency <span class="mon-count">0</span></button>
+    <button class="mon-tab" data-bio="frustration">Frustration <span class="mon-count">0</span></button>
+    <button class="mon-tab" data-bio="satisfaction">Satisfaction <span class="mon-count">0</span></button>
+    <button class="mon-tab" data-bio="discovery">Discovery <span class="mon-count">0</span></button>
+    <button class="mon-tab" data-bio="confusion">Confusion <span class="mon-count">0</span></button>
+    <button class="mon-tab" data-bio="protected">Protected <span class="mon-count">0</span></button>
+    <button class="mon-tab" data-bio="high-heat">Hot <span class="mon-count">0</span></button>
+    <button class="mon-tab" data-bio="labile">New <span class="mon-count">0</span></button>
+    <button class="mon-tab" data-bio="consolidated">Stable <span class="mon-count">0</span></button>
+    <button class="mon-tab" data-bio="high-interference">Interfering <span class="mon-count">0</span></button>
+  </div>
+  <div id="monitor-log"></div>
+</div>
+
+<div id="detail-panel">
+  <div class="detail-peek-bar" id="detail-peek">&#x25B2; DETAIL VIEW</div>
+  <div class="detail-window-btns">
+    <button class="window-btn" id="minimize-detail" title="Minimize">&#x2500;</button>
+    <button class="window-btn" id="close-detail" title="Close">&#x2715;</button>
+  </div>
+  <div id="detail-content"></div>
+</div>
+
+<!-- Process-flow panel: a session's chain-of-call rendered top→bottom,
+     ordered by execution. Lives beside the detail panel; the chain is
+     NOT dumped onto the canvas (which stays the clean hub-and-spoke). -->
+<div id="flow-panel">
+  <div class="flow-header">
+    <span id="flow-title">Chain of work</span>
+    <button class="window-btn" id="flow-close" title="Close">&#x2715;</button>
+  </div>
+  <div id="flow-content"></div>
+</div>
+
+<div id="tooltip"></div>
+
+<div id="diff-modal">
+  <div class="diff-modal-backdrop"></div>
+  <div class="diff-modal-panel">
+    <div class="diff-modal-header">
+      <div><span class="diff-modal-filename"></span><span class="diff-modal-subtitle"></span></div>
+      <button class="diff-modal-close">&#x2715;</button>
+    </div>
+    <div class="diff-modal-body"></div>
+  </div>
+</div>
+
+<div id="conversation-modal">
+  <div class="conv-modal-backdrop"></div>
+  <div class="conv-modal-panel">
+    <div class="conv-modal-header">
+      <div class="conv-modal-title"></div>
+      <button class="conv-modal-close">&#x2715;</button>
+    </div>
+    <div class="conv-modal-body"></div>
+  </div>
+</div>
+
+<div id="legend">
+  <div class="leg-section">Hierarchy — L1 setup</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#FCD34D;box-shadow:0 0 6px #FCD34D60"></div>Domain (hub)</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#FB923C;box-shadow:0 0 6px #FB923C60"></div>Skill</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#FACC15;box-shadow:0 0 6px #FACC1560"></div>Command</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#A855F7;box-shadow:0 0 6px #A855F760"></div>Hook</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#EC4899;box-shadow:0 0 6px #EC489960"></div>Agent</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#6366F1;box-shadow:0 0 6px #6366F160"></div>MCP</div>
+
+  <div class="leg-section">Tools (L2)</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#10B981;box-shadow:0 0 6px #10B98160"></div>Edit</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#059669;box-shadow:0 0 6px #05966960"></div>Write</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#06B6D4;box-shadow:0 0 6px #06B6D460"></div>Read</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#D946EF;box-shadow:0 0 6px #D946EF60"></div>Grep</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#C026D3;box-shadow:0 0 6px #C026D360"></div>Glob</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#F97316;box-shadow:0 0 6px #F9731660"></div>Bash</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#EC4899;box-shadow:0 0 6px #EC489960"></div>Task</div>
+
+  <div class="leg-section">Files (L3)</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#10B981;box-shadow:0 0 6px #10B98160"></div>Edited / Written</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#06B6D4;box-shadow:0 0 6px #06B6D460"></div>Read only</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#D946EF;box-shadow:0 0 6px #D946EF60"></div>Grep / Glob</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#F97316;box-shadow:0 0 6px #F9731660"></div>Bash only</div>
+
+  <div class="leg-section">L4 discussions</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#EF4444;box-shadow:0 0 6px #EF444460"></div>Discussion</div>
+
+  <div class="leg-section">L5 memories</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#86EFAC;box-shadow:0 0 6px #86EFAC60"></div>Memory · labile</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#4ADE80;box-shadow:0 0 6px #4ADE8060"></div>Memory · early LTP</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#16A34A;box-shadow:0 0 6px #16A34A60"></div>Memory · late LTP</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#166534;box-shadow:0 0 6px #16653460"></div>Memory · consolidated</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#C070D0;box-shadow:0 0 6px #C070D060"></div>Memory · semantic</div>
+
+  <div class="leg-section">L6 AST symbols <span style="opacity:0.55;font-weight:400;text-transform:none;letter-spacing:0">(load via filter)</span></div>
+  <div class="leg-item"><div class="leg-dot" style="background:#22D3EE;box-shadow:0 0 6px #22D3EE60"></div>Function</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#38BDF8;box-shadow:0 0 6px #38BDF860"></div>Method</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#8B5CF6;box-shadow:0 0 6px #8B5CF660"></div>Class / Struct / Enum / Trait</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#FBBF24;box-shadow:0 0 6px #FBBF2460"></div>Module / Package / Namespace</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#94A3B8;box-shadow:0 0 6px #94A3B860"></div>Constant / Field / Property</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#50B0C8;box-shadow:0 0 6px #50B0C860"></div>Entity (knowledge graph)</div>
+
+  <div class="leg-section">Edges</div>
+  <div class="leg-item"><div class="leg-line" style="background:rgba(120,200,220,0.7)"></div>in domain</div>
+  <div class="leg-item"><div class="leg-line" style="background:rgba(150,200,180,0.7)"></div>tool → file</div>
+  <div class="leg-item"><div class="leg-line" style="background:rgba(180,210,150,0.7)"></div>invoked skill</div>
+  <div class="leg-item"><div class="leg-line" style="background:rgba(200,170,220,0.7)"></div>triggered hook</div>
+  <div class="leg-item"><div class="leg-line" style="background:rgba(140,220,210,0.7)"></div>spawned agent</div>
+  <div class="leg-item"><div class="leg-line" style="background:rgba(244,63,94,0.65)"></div>discussion → file</div>
+  <div class="leg-item"><div class="leg-line" style="background:rgba(224,168,64,0.65)"></div>command → file</div>
+  <div class="leg-item"><div class="leg-line" style="background:rgba(138,107,255,0.65)"></div>invoked mcp</div>
+  <div class="leg-item"><div class="leg-line" style="background:rgba(100,116,139,0.7)"></div>symbol → file (defined_in)</div>
+  <div class="leg-item"><div class="leg-line" style="background:rgba(120,180,200,0.7)"></div>calls (symbol → symbol)</div>
+  <div class="leg-item"><div class="leg-line" style="background:rgba(200,150,100,0.65)"></div>imports (file → symbol)</div>
+  <div class="leg-item"><div class="leg-line" style="background:rgba(150,200,150,0.7)"></div>member_of (method → class)</div>
+  <div class="leg-item"><div class="leg-line" style="background:rgba(80,176,200,0.65)"></div>about entity</div>
+  <div class="leg-item"><div class="leg-line" style="background:rgba(200,150,255,0.4);border-top:1px dashed rgba(200,150,255,0.6)"></div>cross-domain</div>
+</div>
+
+<div id="glossary-panel">
+  <button class="close-btn" id="glossary-close">&#x2715;</button>
+  <div class="gloss-title">Graph Glossary</div>
+  <div class="gloss-subtitle">What each element represents</div>
+
+  <div class="gloss-section">Reading the map</div>
+  <div class="gloss-entry">
+    <div class="gloss-desc">Every project you work in becomes a <b>cloud of nodes</b> around one gold hub. Inside each cloud, nodes are arranged in five concentric levels by what Claude did: setup (L1), tools (L2), files (L3), discussions (L4), memories (L5). Thin violet threads between clouds mean the same file / skill / MCP is shared across domains.</div>
+  </div>
+
+  <div class="gloss-section">L1 · Claude setup</div>
+  <div class="gloss-entry">
+    <div class="gloss-header"><span class="gloss-dot" style="background:#FCD34D"></span><span class="gloss-name">Domain</span></div>
+    <div class="gloss-desc">The project hub — one big gold node per project you work in. Everything else in the cloud belongs to this domain.</div>
+  </div>
+  <div class="gloss-entry">
+    <div class="gloss-header"><span class="gloss-dot" style="background:#FB923C"></span><span class="gloss-name">Skill</span></div>
+    <div class="gloss-desc">A slash-command available to Claude (<code>/research-session</code>, <code>/loop</code>, plugin skills). Edge to domain = invoked at least once in that project.</div>
+  </div>
+  <div class="gloss-entry">
+    <div class="gloss-header"><span class="gloss-dot" style="background:#FACC15"></span><span class="gloss-name">Command</span></div>
+    <div class="gloss-desc">A distinct shell command executed in the Bash tool. Body = the command text; click for first-seen and last-invoked timestamps.</div>
+  </div>
+  <div class="gloss-entry">
+    <div class="gloss-header"><span class="gloss-dot" style="background:#A855F7"></span><span class="gloss-name">Hook</span></div>
+    <div class="gloss-desc">A hook script configured in <code>settings.json</code> (SessionStart, PostToolUse, etc.). Fires automatically around tool calls.</div>
+  </div>
+  <div class="gloss-entry">
+    <div class="gloss-header"><span class="gloss-dot" style="background:#EC4899"></span><span class="gloss-name">Agent</span></div>
+    <div class="gloss-desc">A subagent type spawned via the Task tool (Explore, Plan, a genius reasoning pattern, …). Edge to domain = spawned at least once.</div>
+  </div>
+  <div class="gloss-entry">
+    <div class="gloss-header"><span class="gloss-dot" style="background:#6366F1"></span><span class="gloss-name">MCP</span></div>
+    <div class="gloss-desc">An MCP server Claude called (cortex, ai-architect, …). When two domains share an MCP, a long indigo thread bridges them.</div>
+  </div>
+
+  <div class="gloss-section">L2 · Tools</div>
+  <div class="gloss-entry">
+    <div class="gloss-desc">One hub per Claude-native tool per domain. Color = the tool:
+      <b style="color:#10B981">Edit</b>, <b style="color:#059669">Write</b>,
+      <b style="color:#06B6D4">Read</b>,
+      <b style="color:#D946EF">Grep</b>, <b style="color:#C026D3">Glob</b>,
+      <b style="color:#F97316">Bash</b>,
+      <b style="color:#EC4899">Task</b>.
+      Files orbit the tool hub that most often touched them.
+    </div>
+  </div>
+
+  <div class="gloss-section">L3 · Files</div>
+  <div class="gloss-entry">
+    <div class="gloss-desc">Every file Claude ever opened, colored by the primary tool that touched it (priority: Edit/Write → Read → Grep/Glob → Bash-only). Click a file for its path, primary-tool cluster, <b>first-seen</b>, <b>last-accessed</b>, and <b>last-modified</b> timestamps, plus a <i>See diff against HEAD</i> button that renders new/modified/deleted/historical content inline.</div>
+  </div>
+  <div class="gloss-entry">
+    <div class="gloss-header"><span class="gloss-dot" style="background:#10B981"></span><span class="gloss-name">Edited / written</span></div>
+    <div class="gloss-desc">File was modified or created by Claude via Edit, Write, MultiEdit, or NotebookEdit.</div>
+  </div>
+  <div class="gloss-entry">
+    <div class="gloss-header"><span class="gloss-dot" style="background:#06B6D4"></span><span class="gloss-name">Read only</span></div>
+    <div class="gloss-desc">File was opened via Read or NotebookRead without being modified.</div>
+  </div>
+  <div class="gloss-entry">
+    <div class="gloss-header"><span class="gloss-dot" style="background:#D946EF"></span><span class="gloss-name">Grep / Glob</span></div>
+    <div class="gloss-desc">File was searched via Grep or Glob without being read or modified.</div>
+  </div>
+  <div class="gloss-entry">
+    <div class="gloss-header"><span class="gloss-dot" style="background:#F97316"></span><span class="gloss-name">Bash only</span></div>
+    <div class="gloss-desc">File was referenced only from a Bash command (<code>cat</code>, <code>tail</code>, pipelines, …).</div>
+  </div>
+
+  <div class="gloss-section">L4 · Discussions</div>
+  <div class="gloss-entry">
+    <div class="gloss-header"><span class="gloss-dot" style="background:#EF4444"></span><span class="gloss-name">Discussion</span></div>
+    <div class="gloss-desc">One Claude Code session. Click for started-at, last-activity, duration, message count, and a <i>View full conversation</i> button that replays every turn (including tool calls) inside the modal.</div>
+  </div>
+
+  <div class="gloss-section">L5 · Memories</div>
+  <div class="gloss-entry">
+    <div class="gloss-desc">Knowledge Cortex has stored. Color = consolidation stage:
+      <b style="color:#86EFAC">labile</b> (freshly encoded),
+      <b style="color:#4ADE80">early LTP</b> (1–6h),
+      <b style="color:#16A34A">late LTP</b> (6–24h),
+      <b style="color:#166534">consolidated</b> (&gt;24h),
+      <b style="color:#C070D0">semantic</b> (extracted schema). Node size reflects heat; click for full content, tags, and every scientific measurement (arousal, surprise, plasticity, …).
+    </div>
+  </div>
+
+  <div class="gloss-section">Edges</div>
+  <div class="gloss-entry">
+    <div class="gloss-header"><span class="gloss-line" style="background:rgba(120,200,220,0.7)"></span><span class="gloss-name">in domain</span></div>
+    <div class="gloss-desc">Structural edge pinning a node to its domain hub.</div>
+  </div>
+  <div class="gloss-entry">
+    <div class="gloss-header"><span class="gloss-line" style="background:rgba(150,200,180,0.7)"></span><span class="gloss-name">tool → file</span></div>
+    <div class="gloss-desc">Weight = number of times that tool touched the file.</div>
+  </div>
+  <div class="gloss-entry">
+    <div class="gloss-header"><span class="gloss-line" style="background:rgba(180,210,150,0.7)"></span><span class="gloss-name">invoked skill</span></div>
+    <div class="gloss-desc">Domain invoked a slash-command.</div>
+  </div>
+  <div class="gloss-entry">
+    <div class="gloss-header"><span class="gloss-line" style="background:rgba(200,170,220,0.7)"></span><span class="gloss-name">triggered hook</span></div>
+    <div class="gloss-desc">Hook script bound to an event in this domain.</div>
+  </div>
+  <div class="gloss-entry">
+    <div class="gloss-header"><span class="gloss-line" style="background:rgba(140,220,210,0.7)"></span><span class="gloss-name">spawned agent</span></div>
+    <div class="gloss-desc">Task hub spawned a subagent of this type.</div>
+  </div>
+  <div class="gloss-entry">
+    <div class="gloss-header"><span class="gloss-line" style="background:rgba(244,63,94,0.65)"></span><span class="gloss-name">discussion → file</span></div>
+    <div class="gloss-desc">That session touched this file. Weight = touches within the session.</div>
+  </div>
+  <div class="gloss-entry">
+    <div class="gloss-header"><span class="gloss-line" style="background:rgba(224,168,64,0.65)"></span><span class="gloss-name">command → file</span></div>
+    <div class="gloss-desc">The Bash command references this file path.</div>
+  </div>
+  <div class="gloss-entry">
+    <div class="gloss-header"><span class="gloss-line" style="background:rgba(138,107,255,0.65)"></span><span class="gloss-name">invoked mcp</span></div>
+    <div class="gloss-desc">Domain called an MCP server tool; label on the edge = the specific tool name.</div>
+  </div>
+  <div class="gloss-entry">
+    <div class="gloss-header"><span class="gloss-line" style="background:rgba(200,150,255,0.4);border-top:1px dashed rgba(200,150,255,0.6)"></span><span class="gloss-name">cross-domain</span></div>
+    <div class="gloss-desc">The same file, skill, or MCP is shared between two domains — renders as a long dashed thread.</div>
+  </div>
+
+  <div class="gloss-section">Filtering</div>
+  <div class="gloss-entry">
+    <div class="gloss-desc">Use the <b>grouped filter select</b> in the top bar to isolate one layer, kind (Skills / Commands / Hooks / Agents / MCPs), file cluster (Edited / Read-only / Searched / Bash-only), or cross-domain files. The <b>Reset</b> button restores every node.</div>
+  </div>
+
+  <div class="gloss-section">Controls</div>
+  <div class="gloss-entry">
+    <div class="gloss-desc">
+      <b>Click node</b> — open detail panel (rich per-kind metadata, dates, diff / conversation buttons).<br>
+      <b>Click background</b> — close detail.<br>
+      <b>Scroll</b> — zoom. At zoom &lt; 0.9 structural edges fade so clouds read cleanly.<br>
+      <b>Drag node</b> — reposition manually (domain hubs stay pinned).<br>
+      <b>R</b> — reset view · <b>M</b> — monitor · <b>Esc</b> — close panels.
+    </div>
+  </div>
+</div>
+
+<!-- Force-graph library — re-enabled so renderer.js can actually
+     mount a canvas and paint. The previous stub was added to suppress
+     a stray alpha rectangle issue, but it left the page unable to
+     render anything. The phase loader feeds JUG.appendGraphDelta →
+     buildGraph → JUG.setGraphData → ForceGraph; without the real
+     library the chain ends in a no-op Proxy and nothing draws. -->
+<script src="/vendor/force-graph.min.js"></script>
+<script src="/js/config.js?v=117ece5"></script>
+<script src="/js/state.js?v=117ece5"></script>
+<script src="/js/workflow_graph_shims.js?v=117ece5"></script>
+<script src="/js/draw.js?v=117ece5"></script>
+<script src="/js/tooltip.js?v=117ece5"></script>
+<script src="/js/renderer.js?v=117ece5"></script>
+<script src="/js/graph.js?v=117ece5"></script>
+<script src="/js/detail_tools.js?v=117ece5"></script>
+<script src="/js/detail_format.js?v=117ece5"></script>
+<script src="/js/detail_diff.js?v=117ece5"></script>
+<script src="/js/detail_panel.js?v=117ece5"></script>
+<script src="/js/trace_detail.js"></script>
+<script src="/js/discussion_detail.js?v=117ece5"></script>
+<script src="/js/memory_science.js?v=117ece5"></script>
+<script src="/js/timeline.js?v=117ece5"></script>
+<script src="/js/sankey.js?v=117ece5"></script>
+<script src="/js/knowledge.js?v=117ece5"></script>
+<script src="/js/wiki.js?v=117ece5"></script>
+<script src="/js/controls.js?v=117ece5"></script>
+<script src="/js/monitor.js?v=117ece5"></script>
+<script src="/js/workflow_graph_labels.js?v=117ece5"></script>
+<script src="/js/workflow_graph_humanize.js?v=117ece5"></script>
+<script src="/js/workflow_graph_panel.js?v=117ece5"></script>
+<script src="/js/workflow_graph_panel_helpers.js?v=117ece5"></script>
+<script src="/js/workflow_graph_panel_renderers.js?v=117ece5"></script>
+<script src="/js/spatial_hash.js?v=117ece5"></script>
+<script src="/js/workflow_graph_render_svg.js?v=117ece5"></script>
+<script src="/js/workflow_graph_render_canvas.js?v=117ece5"></script>
+<script src="/js/workflow_graph_tilemap.js?v=117ece5"></script>
+<script src="/js/workflow_graph.js?v=117ece5"></script>
+<!-- Bridge enabled (2026-05-28): re-enabled now that it has a 500 ms
+     debounce + 5 s safety-net. The old disable comment was from a
+     pre-debounce version of the bridge that destroy-and-remounted on
+     every SSE event. The current bridge collapses bursts of state:
+     lastData updates into at most ~2 renders/sec, which is what the
+     README's brain-region-cloud renderer needs (workflow_graph.js
+     D3 force layout, kind-driven radii + concentric shells). Without
+     the bridge the Graph tab falls back to the legacy force-graph
+     library renderer (graph.js, basic circles) — not what the README
+     screenshot shows. -->
+<script src="/js/workflow_graph_bridge.js?v=117ece5"></script>
+<!-- polling.js re-enabled: its boot fetches /api/graph?meta_only=1
+     which returns just the meta dict (Domains/Memories/Entities/Nodes
+     /Synapses/Discussions counters + system_vitals + benchmarks). The
+     streaming canvas paints the graph via SSE; polling.js owns the
+     sidebar counters and the discussion batches. -->
+<script src="/js/polling.js?v=117ece5"></script>
+<script src="/js/workflow_graph_filters.js?v=117ece5"></script>
+<!-- Trace view: a live, domain-split execution-trace
+     (domain -> session -> chain -> file) fetched per level on demand. -->
+<script src="/js/trace.js"></script>
+<!-- Galaxy (GRAPH tab) phase-driven loader — restored 2026-06-10.
+     df691fd replaced GRAPH with TRACE and removed the galaxy loaders
+     (phase_loader.js / graph_snapshot.js / the SSE startup); the GRAPH
+     tab was restored 2026-06-10 but its loader was not, so nothing ever
+     called JUG.appendGraphDelta for view==='graph' and the canvas stayed
+     blank with Domains/Memories/Discussions = 0.
+
+     This restores the JSON phase loader inline (no separate file, no
+     dependency on the CXGB /api/graph.bin route — which currently
+     404s-to-HTML — nor on graph_snapshot.js which no longer exists).
+     It polls /api/graph/progress and, as each phase flips ready, fetches
+     /api/graph/phase?name=<key> ONCE and appends its nodes+edges via
+     JUG.appendGraphDelta. appendGraphDelta dedups by id, fires
+     state:lastData, and the workflow_graph_bridge renders the L1-L6
+     galaxy. Only runs while the user is on the Graph tab. -->
+<script>
+(function () {
+  // Poll cadence + first-kick delay. Sourced from the prior working
+  // loader (commit f21e255 ui/unified-viz.html): 400 ms between polls
+  // while building, 200 ms first kick. Override via querystring
+  // ?graph_poll_ms=<n> for debugging; no magic constant baked in.
+  var qp = new URLSearchParams(window.location.search || '');
+  var POLL_MS = parseInt(qp.get('graph_poll_ms'), 10);
+  if (!isFinite(POLL_MS) || POLL_MS < 50) POLL_MS = 400;  // source: f21e255 loader
+  var FIRST_KICK_MS = 200;                                  // source: f21e255 loader
+
+  var applied = {};   // phaseKey -> true once appended
+  var inflight = {};  // phaseKey -> true while fetching
+  var deferred = {};  // L6 phaseKey -> true: ready on the server, NOT auto-loaded
+
+  // ── L5/L6 auto-load partition (2026-06-10) ──
+  // Auto-load through L5 (domains, setup, tools, files, discussions,
+  // memories — ~11.8k nodes at the snapshot scale); defer ALL L6 symbol
+  // phases to explicit demand. The full 107k-node sim (≈94k of it L6 AST
+  // symbols) is unusable in-browser; the old usable view was ~29k. This
+  // split is STRUCTURAL — it follows the server's phase taxonomy
+  // (http_standalone_graph.py: fixed L0–L5 + dynamic "L6:<project>" +
+  // "L6_CROSS"), not a tuned node-count threshold.
+  function _isL6(key) {
+    return key === 'L6' || key === 'L6_CROSS' || key.indexOf('L6:') === 0;
+  }
+
+  function _activeViewIsGraph() {
+    return window.JUG && JUG.state && JUG.state.activeView === 'graph';
+  }
+
+  // Honest UI hint while symbols stream in. Reuses the existing
+  // status-text element; no new chrome. Cleared by polling.js on its
+  // next /api/graph/progress tick, or explicitly when the load settles.
+  function _symbolHint(msg) {
+    var el = document.getElementById('status-text');
+    if (el && msg) el.textContent = msg;
+  }
+
+  function _seedLastData() {
+    if (window.JUG && !JUG.state.lastData) {
+      JUG.state.lastData = {
+        nodes: [], edges: [], links: [],
+        meta: { schema: 'workflow_graph.v1', source: 'phase-loader' },
+      };
+    }
+  }
+
+  function applyPhase(key) {
+    if (applied[key] || inflight[key]) return Promise.resolve();
+    inflight[key] = true;
+    return fetch('/api/graph/phase?name=' + encodeURIComponent(key))
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (p) {
+        if (!p || !p.ready) return;
+        if (typeof JUG.appendGraphDelta === 'function') {
+          _seedLastData();
+          JUG.appendGraphDelta(p.nodes || [], p.edges || []);
+          console.log('[phase] applied', key,
+            '+' + ((p.nodes || []).length) + 'N',
+            '+' + ((p.edges || []).length) + 'E');
+        }
+        applied[key] = true;
+      })
+      .catch(function (err) { console.warn('[phase] ' + key + ' failed:', err && err.message); })
+      .then(function () { inflight[key] = false; });
+  }
+
+  function poll() {
+    // Only do galaxy-build work while the user is on the Graph tab —
+    // Knowledge / Board / Wiki / Trace users don't pay the cost.
+    if (!_activeViewIsGraph()) { setTimeout(poll, 1500); return; }
+    fetch('/api/graph/progress')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (p) {
+        if (!p) { setTimeout(poll, 1200); return; }
+        // The server inserts phase keys in DAG order, so iterating the
+        // dict applies them in publish order. appendGraphDelta dedups,
+        // so re-seeing a ready phase is a no-op.
+        //
+        // PARTITION: auto-apply ONLY non-L6 phases (L0–L5). A ready L6
+        // phase is recorded in ``deferred`` instead of loaded, so the
+        // galaxy settles at the ~11.8k-node L5 scale until the user
+        // explicitly pulls symbols in (filter select or domain select →
+        // JUG.loadSymbolPhases* below).
+        var keys = Object.keys(p.phases || {});
+        var seq = Promise.resolve();
+        keys.forEach(function (k) {
+          if (!p.phases[k]) return;          // not ready on the server yet
+          if (_isL6(k)) {
+            if (!applied[k]) deferred[k] = true;  // available, on demand only
+            return;
+          }
+          if (!applied[k]) {
+            seq = seq.then(function () { return applyPhase(k); });
+          }
+        });
+        if (p.full_ready) {
+          // "Drained" once every NON-L6 phase is applied — L6 phases are
+          // intentionally left deferred, so they do not block teardown.
+          var nonL6Done = keys.every(function (k) {
+            return _isL6(k) || applied[k] || !p.phases[k];
+          });
+          if (nonL6Done) return;  // stop polling — L0–L5 loaded, L6 on demand
+        }
+        setTimeout(poll, POLL_MS);
+      })
+      .catch(function () { setTimeout(poll, 1200); });
+  }
+
+  // ── On-demand L6 symbol loading ──
+  // The filter/domain handlers call these when the user explicitly asks
+  // for symbols. Both pull from ``deferred`` (phases the poller saw ready
+  // but did not auto-apply), apply them via the same applyPhase path, and
+  // resolve once every targeted phase is in. Re-entrant-safe: applyPhase
+  // guards on ``applied``/``inflight`` and appendGraphDelta dedups by id.
+
+  function _loadDeferred(predicate, hint) {
+    var targets = Object.keys(deferred).filter(function (k) {
+      return !applied[k] && predicate(k);
+    });
+    if (!targets.length) return Promise.resolve(0);
+    _symbolHint(hint || 'loading symbols…');
+    var seq = Promise.resolve();
+    targets.forEach(function (k) {
+      seq = seq.then(function () { return applyPhase(k); });
+    });
+    return seq.then(function () {
+      _symbolHint('symbols loaded · ' + targets.length + ' phase(s)');
+      return targets.length;
+    });
+  }
+
+  // Load ALL deferred L6 phases (filter select: L6 / kind:symbol / edge:*).
+  function _loadAllSymbolPhases() {
+    return _loadDeferred(function () { return true; },
+      'loading symbols… (this is the heavy AST layer)');
+  }
+
+  // Load only the deferred L6 phase(s) whose project key matches a domain
+  // label (domain select). Phase keys are "L6:<project-dir-name>"; domain
+  // labels are slugs ("cortex"). The two are produced by different slug
+  // paths server-side, so an EXACT match is not guaranteed — we do a
+  // tolerant case-insensitive slug-substring match in either direction.
+  // If nothing matches confidently, load nothing here (the filter trigger
+  // remains the full-symbol path) rather than guess wrong.
+  function _loadDomainSymbolPhases(domainLabel) {
+    var slug = String(domainLabel || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    if (!slug) return Promise.resolve(0);
+    return _loadDeferred(function (k) {
+      if (k.indexOf('L6:') !== 0) return false;  // skip L6_CROSS for per-domain
+      var pslug = k.slice(3).toLowerCase().replace(/[^a-z0-9]+/g, '');
+      return pslug.indexOf(slug) !== -1 || slug.indexOf(pslug) !== -1;
+    }, 'loading ' + domainLabel + ' symbols…');
+  }
+
+  // Report whether any L6 phase is deferred (used by the legend note).
+  function _hasDeferredSymbols() {
+    return Object.keys(deferred).some(function (k) { return !applied[k]; });
+  }
+
+  if (window.JUG) {
+    JUG.loadSymbolPhases = _loadAllSymbolPhases;
+    JUG.loadSymbolPhasesForDomain = _loadDomainSymbolPhases;
+    JUG.hasDeferredSymbols = _hasDeferredSymbols;
+    setTimeout(poll, FIRST_KICK_MS);
+    // Kick immediately when the user switches TO the graph tab, in case
+    // they landed on Trace/Knowledge first.
+    JUG.on('state:activeView', function (ev) {
+      if (ev && ev.value === 'graph') setTimeout(poll, 0);
+    });
+    console.log('[phase] galaxy phase-loader registered');
+  } else {
+    console.warn('[phase] JUG missing — galaxy loader disabled');
+  }
+})();
+</script>
+</body>
+</html>

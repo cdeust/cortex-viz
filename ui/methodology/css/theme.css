@@ -1,0 +1,220 @@
+/* Cortex Methodology Map — Theme */
+
+/* ═══ Design System: HUD / Sci-Fi FUI + Cyberpunk ═══
+   --bg: #0A0A0F (void)
+   --card: #12121A
+   --accent: #00FFFF (neon cyan) / #00FF88 (green) / #FF00FF (magenta)
+   --border: #1A1A2E
+   --font-heading: Orbitron
+   --font-body: JetBrains Mono
+   Thin 1px lines, chamfered corners, neon glow, scanlines
+*/
+:root {
+  --void: #0A0A0F;
+  --card: #0D0D18;
+  --cyan: #00FFFF;
+  --cyan-mid: #00BBDD;
+  --cyan-dim: #005566;
+  --cyan-glow: rgba(0, 255, 255, 0.4);
+  --cyan-subtle: rgba(0, 255, 255, 0.08);
+  --green: #00FF88;
+  --magenta: #FF00FF;
+  --amber: #FFB800;
+  --red: #FF3366;
+  --blue: #0080FF;
+  --border: rgba(0, 255, 255, 0.12);
+  --border-bright: rgba(0, 255, 255, 0.35);
+  --text: #C0E8FF;
+  --text-dim: #2A4060;
+  --text-bright: #E8F8FF;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--void);
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  overflow: hidden;
+  width: 100vw; height: 100vh;
+}
+
+#graph-canvas {
+  position: absolute; inset: 0;
+}
+
+/* ═══ Scanlines ═══════════════════════════════════════ */
+#scanlines {
+  position: fixed; inset: 0;
+  pointer-events: none; z-index: 10;
+  background: repeating-linear-gradient(
+    0deg, transparent, transparent 1px,
+    rgba(0,255,255,0.012) 1px, rgba(0,255,255,0.012) 2px
+  );
+}
+
+/* ═══ CRT vignette ═══════════════════════════════════════ */
+#vignette {
+  position: fixed; inset: 0;
+  pointer-events: none; z-index: 9;
+  background: radial-gradient(ellipse 65% 65% at 50% 50%, transparent 30%, rgba(10,10,15,0.85) 100%);
+}
+
+/* ═══ Arc Reactor (center glow) ════════════════════════ */
+#arc-reactor {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none; z-index: 2;
+}
+#arc-reactor .core {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow:
+    0 0 4px var(--cyan),
+    0 0 15px var(--cyan),
+    0 0 60px var(--cyan-glow),
+    0 0 150px rgba(0,255,255,0.08);
+  animation: core-pulse 3s ease-in-out infinite;
+}
+@keyframes core-pulse {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50%      { opacity: 1;   transform: scale(1.8); }
+}
+
+/* ═══ HUD Rings (rotating) ════════════════════════════ */
+.hud-ring {
+  position: fixed;
+  top: 50%; left: 50%;
+  border-radius: 50%;
+  border: 1px solid;
+  pointer-events: none; z-index: 2;
+}
+.ring-1 {
+  width: 200px; height: 200px;
+  margin: -100px 0 0 -100px;
+  border-color: rgba(0,255,255,0.12);
+  animation: spin-cw 40s linear infinite;
+}
+.ring-2 {
+  width: 380px; height: 380px;
+  margin: -190px 0 0 -190px;
+  border-color: rgba(0,255,255,0.06);
+  border-style: dashed;
+  animation: spin-ccw 70s linear infinite;
+}
+.ring-3 {
+  width: 580px; height: 580px;
+  margin: -290px 0 0 -290px;
+  border-color: rgba(0,128,255,0.04);
+  border-style: dotted;
+  animation: spin-cw 100s linear infinite;
+}
+/* Ring tick marks */
+.ring-1::before, .ring-1::after,
+.ring-2::before, .ring-2::after {
+  content: '';
+  position: absolute;
+  background: rgba(0,255,255,0.25);
+}
+.ring-1::before { width: 20px; height: 1px; top: -1px; left: 50%; transform: translateX(-50%); }
+.ring-1::after  { width: 1px; height: 20px; left: -1px; top: 50%; transform: translateY(-50%); }
+.ring-2::before { width: 30px; height: 1px; top: -1px; left: 50%; transform: translateX(-50%); }
+.ring-2::after  { width: 1px; height: 30px; right: -1px; top: 50%; transform: translateY(-50%); }
+
+@keyframes spin-cw  { to { transform: rotate(360deg); } }
+@keyframes spin-ccw { to { transform: rotate(-360deg); } }
+
+/* ═══ HUD Panel base ══════════════════════════════════ */
+.hud-panel {
+  background: rgba(10,10,15,0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  position: relative;
+  /* Chamfered corners via clip-path */
+  clip-path: polygon(
+    12px 0, calc(100% - 12px) 0, 100% 12px, 100% calc(100% - 12px),
+    calc(100% - 12px) 100%, 12px 100%, 0 calc(100% - 12px), 0 12px
+  );
+}
+
+/* HUD corner brackets overlay */
+.hud-brackets::before, .hud-brackets::after {
+  content: '';
+  position: absolute;
+  width: 20px; height: 20px;
+  pointer-events: none;
+}
+.hud-brackets::before {
+  top: 2px; left: 2px;
+  border-top: 1px solid var(--cyan);
+  border-left: 1px solid var(--cyan);
+  opacity: 0.5;
+}
+.hud-brackets::after {
+  bottom: 2px; right: 2px;
+  border-bottom: 1px solid var(--cyan);
+  border-right: 1px solid var(--cyan);
+  opacity: 0.5;
+}
+
+/* ═══ Info panel (top-left) ═══════════════════════════ */
+#info-panel {
+  position: fixed;
+  top: 24px; left: 24px;
+  width: 280px;
+  padding: 22px 24px 18px;
+  z-index: 100;
+}
+
+.panel-header {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(0,255,255,0.08);
+}
+.reactor-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 6px var(--cyan), 0 0 15px var(--cyan-glow);
+  animation: dot-blink 2s ease-in-out infinite;
+}
+@keyframes dot-blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.3; }
+}
+.panel-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 5px;
+  text-transform: uppercase;
+  color: var(--cyan);
+  text-shadow: 0 0 15px var(--cyan-glow);
+}
+.panel-subtitle {
+  font-size: 8px;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 0;
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+.stat-row + .stat-row { border-top: 1px solid rgba(0,255,255,0.04); }
+.stat-row .val {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 13px; font-weight: 600;
+  color: var(--cyan);
+  text-shadow: 0 0 8px var(--cyan-glow);
+}
