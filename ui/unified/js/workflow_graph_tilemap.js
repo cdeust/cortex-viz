@@ -279,16 +279,12 @@
         var worldRadius = 18 / Math.pow(2, info.viewport.zoom);
         var hit = pickAt(idx, qt, wx, wy, worldRadius);
         if (hit < 0) return;
-        // Hand off to the existing side panel if present.
-        if (window.JUG && JUG._wfg && JUG._wfg.buildSidePanel) {
-          var ctx = { byId: {} };
-          for (var k = 0; k < qt.count; k++) {
-            ctx.byId[qt.ids[k]] = { id: qt.ids[k], kind: qt.kinds[k] };
-          }
-          var panel = window._tilemap_panel ||
-            (window._tilemap_panel = JUG._wfg.buildSidePanel(container));
-          var datum = ctx.byId[qt.ids[hit]];
-          try { panel.show(datum, ctx); } catch (_) {}
+        // Emit on the global bus — #detail-panel (detail_panel.js) is the
+        // SOLE owner of the node-detail panel. The tilemap path joins the
+        // same single-panel contract as the canvas/svg renderers.
+        if (window.JUG && typeof JUG.emit === 'function') {
+          var datum = { id: qt.ids[hit], kind: qt.kinds[hit] };
+          try { JUG.emit('graph:selectNode', datum); } catch (_) {}
         }
       },
       layers: [

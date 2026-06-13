@@ -1,7 +1,7 @@
 // Cortex — Workflow Graph: Canvas renderer (used for nodes > threshold).
-// Exposes JUG._wfg.mountCanvas(container, ctx, sim, panel, width, height).
+// Exposes JUG._wfg.mountCanvas(container, ctx, sim, width, height).
 (function () {
-  function mountCanvas(container, ctx, sim, panel, width, height) {
+  function mountCanvas(container, ctx, sim, width, height) {
     var d3 = window.d3;
     var wfg = window.JUG._wfg;
     var canvas = document.createElement('canvas');
@@ -66,17 +66,15 @@
       var n = findNode(p[0], p[1]);
       if (n) {
         selectedId = n.id;
-        panel.show(n, ctx);
-        // Emit the selection on the global bus so view controllers react
-        // — the Trace view (trace.js) expands the clicked node's children
-        // and detail_panel.js enriches it. Without this, a real canvas
-        // click only showed the panel and never expanded the graph.
+        // Emit the selection on the global bus — #detail-panel
+        // (detail_panel.js, the graph:selectNode listener) is the SOLE
+        // owner of the node-detail panel. The Trace view (trace.js) also
+        // reacts to expand the clicked node's children.
         if (window.JUG && typeof JUG.emit === 'function') {
           try { JUG.emit('graph:selectNode', n); } catch (_e) {}
         }
       } else {
         selectedId = null;
-        panel.hide();
         if (window.JUG && typeof JUG.emit === 'function') {
           try { JUG.emit('graph:deselectNode'); } catch (_e) {}
         }
@@ -347,7 +345,15 @@
         canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
         fitToContent();
       },
-      selectId: function (id) { var n = ctx.byId[id]; if (n) { selectedId = id; panel.show(n, ctx); draw(); } },
+      selectId: function (id) {
+        var n = ctx.byId[id];
+        if (!n) return;
+        selectedId = id;
+        if (window.JUG && typeof JUG.emit === 'function') {
+          try { JUG.emit('graph:selectNode', n); } catch (_e) {}
+        }
+        draw();
+      },
       fit: fitToContent,
       applyFilter: applyFilter,
     };

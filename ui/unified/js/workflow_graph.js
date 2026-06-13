@@ -269,7 +269,9 @@
       pn.x = origin.x + rx * pastFile;
       pn.y = origin.y + ry * pastFile;
     }
-    var panel = wfg.buildSidePanel(container);
+    // Node-detail panel is owned exclusively by #detail-panel
+    // (detail_panel.js), driven via the graph:selectNode bus event the
+    // renderers emit. No second side panel is built here.
 
     // Maxwell-damped config: see ADR-0047 for the full tuning rationale
     // (Thompson scaling audit on the Gap 10 N≈17k → N≈27k jump).
@@ -302,8 +304,8 @@
 
     var useCanvas = nodes.length > CANVAS_THRESHOLD;
     var renderer = useCanvas
-      ? wfg.mountCanvas(container, ctx, sim, panel, width, height)
-      : wfg.mountSVG(container, ctx, sim, panel, width, height);
+      ? wfg.mountCanvas(container, ctx, sim, width, height)
+      : wfg.mountSVG(container, ctx, sim, width, height);
 
     function onResize() {
       var w = container.clientWidth || window.innerWidth;
@@ -486,7 +488,6 @@
         window.removeEventListener('resize', onResize);
         sim.stop();
         renderer.destroy();
-        if (panel.root && panel.root.parentNode) panel.root.parentNode.removeChild(panel.root);
       },
       select: function (id) { renderer.selectId(id); },
       reflow: function () { onResize(); },

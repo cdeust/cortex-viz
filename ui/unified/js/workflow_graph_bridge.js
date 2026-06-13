@@ -46,7 +46,6 @@
       var node = kids[i];
       if (node.nodeType !== 1) continue;
       if (node.id === _wrapperId) continue;
-      if (node.classList && node.classList.contains('wfg-panel')) continue;
       // display:none leaves the element in the DOM and (in Safari) can
       // still produce a compositing layer while it's detached-rendering.
       // remove() evicts the element entirely so there's no hidden box.

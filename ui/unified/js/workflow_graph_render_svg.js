@@ -1,7 +1,7 @@
 // Cortex — Workflow Graph: SVG renderer (used for nodes <= threshold).
-// Exposes JUG._wfg.mountSVG(container, ctx, sim, panel, width, height).
+// Exposes JUG._wfg.mountSVG(container, ctx, sim, width, height).
 (function () {
-  function mountSVG(container, ctx, sim, panel, width, height) {
+  function mountSVG(container, ctx, sim, width, height) {
     var d3 = window.d3;
     var wfg = window.JUG._wfg;
     var svg = d3.select(container).append('svg')
@@ -62,8 +62,18 @@
       linkSel.classed('wfg-link--dim',    function (e) { return !!id && e.source.id !== id && e.target.id !== id; });
       linkSel.classed('wfg-link--active', function (e) { return !!id && (e.source.id === id || e.target.id === id); });
     }
-    function pick(n) { selected = n; highlight(n.id); panel.show(n, ctx); }
-    function clear() { selected = null; highlight(null); panel.hide(); }
+    // #detail-panel (detail_panel.js, the graph:selectNode bus listener)
+    // is the SOLE owner of the node-detail panel. The SVG renderer emits
+    // on the bus only — it must NOT build or drive a second panel. This
+    // mirrors the canvas renderer so both paths open exactly one panel.
+    function pick(n) {
+      selected = n; highlight(n.id);
+      if (window.JUG && JUG.emit) JUG.emit('graph:selectNode', n);
+    }
+    function clear() {
+      selected = null; highlight(null);
+      if (window.JUG && JUG.emit) JUG.emit('graph:deselectNode');
+    }
     nodeSel.on('mouseenter', function (_e, n) { if (!selected) highlight(n.id); });
     nodeSel.on('mouseleave', function () { if (!selected) highlight(null); });
     nodeSel.on('click', function (_e, n) { pick(n); });

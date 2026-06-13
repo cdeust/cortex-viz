@@ -37,7 +37,18 @@
       return;
     }
     if (!_ensureLastData()) return;
-    var nodes = data.nodes || [];
+    // Decode the SLIM positional wire format at the browser boundary.
+    // The server streams nodes as `[id, kind, x, y]` lists, but
+    // appendGraphDelta (and every downstream consumer) is a DICT
+    // consumer — it tests `!n.id`, so a positional list (whose `.id`
+    // is undefined) is silently dropped and never renders. Decode here,
+    // the single entry point where SSE nodes enter the browser, so no
+    // slim list ever reaches a dict consumer. (Liskov: keep the
+    // consumer contract; convert at the boundary.)
+    var rawNodes = data.nodes || data.n || [];
+    var nodes = rawNodes.map(function (n) {
+      return Array.isArray(n) ? { id: n[0], kind: n[1], x: n[2], y: n[3] } : n;
+    });
     var edges = data.edges || [];
     if (typeof JUG.appendGraphDelta === 'function') {
       JUG.appendGraphDelta(nodes, edges);
