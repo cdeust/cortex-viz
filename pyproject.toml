@@ -51,6 +51,7 @@ viz-tile = [
 # artifacts directly. These are the read-path drivers (no write path).
 data = [
     "psycopg[binary]>=3.1",
+    "psycopg-pool>=3.2",
     "pgvector>=0.3",
 ]
 dev = [

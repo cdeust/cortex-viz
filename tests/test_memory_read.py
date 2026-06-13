@@ -150,12 +150,20 @@ def test_entities_and_relationships(reader) -> None:
         assert reader.get_entity_by_id(eid)["id"] == eid
 
 
-def test_raw_conn_select_sankey_path(reader) -> None:
-    """The 4 raw store._conn.execute() sankey sites must work via the reader."""
-    row = reader._conn.execute(
+def test_sankey_path_via_pool(reader) -> None:
+    """The sankey sites run through the pooled _execute (no single _conn)."""
+    row = reader._execute(
         "SELECT COUNT(*) AS c FROM stage_transitions"
     ).fetchone()
     assert "c" in row and isinstance(row["c"], int)
+
+
+def test_no_single_connection(reader) -> None:
+    """Invariant: MemoryReader exposes NO single shared connection — every
+    path is pooled (user directive: all connections load-balanced)."""
+    assert not hasattr(reader, "_conn")
+    assert reader.interactive_pool.max_size >= 1
+    assert reader.batch_pool.max_size >= 1
 
 
 def test_get_last_consolidation_type(reader) -> None:

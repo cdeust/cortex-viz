@@ -52,7 +52,7 @@ _STAGE_METRICS_SQL = (
 
 
 def _sankey_transitions(store) -> list[dict]:
-    rows = store._conn.execute(
+    rows = store._execute(
         "SELECT from_stage, to_stage, COUNT(*) as count "
         "FROM stage_transitions "
         "GROUP BY from_stage, to_stage "
@@ -62,7 +62,7 @@ def _sankey_transitions(store) -> list[dict]:
 
 
 def _sankey_timing(store) -> dict[str, dict[str, float]]:
-    rows = store._conn.execute(
+    rows = store._execute(
         "SELECT from_stage, to_stage, "
         "AVG(hours_in_prev_stage) as avg_hours, "
         "MIN(hours_in_prev_stage) as min_hours, "
@@ -83,7 +83,7 @@ def _sankey_timing(store) -> dict[str, dict[str, float]]:
 def _sankey_stage_metrics(store) -> dict[str, dict]:
     stage_metrics: dict[str, dict] = {}
     for s in _STAGES:
-        r = store._conn.execute(_STAGE_METRICS_SQL, (s,)).fetchone()
+        r = store._execute(_STAGE_METRICS_SQL, (s,)).fetchone()
         stage_metrics[s] = {
             k: round(v, 3) if isinstance(v, float) else (v or 0)
             for k, v in dict(r).items()
@@ -94,7 +94,7 @@ def _sankey_stage_metrics(store) -> dict[str, dict]:
 def serve_sankey(handler, store) -> None:
     """GET /api/sankey — consolidation-pipeline Sankey dataset."""
     try:
-        total = store._conn.execute(
+        total = store._execute(
             "SELECT COUNT(*) as c FROM memories WHERE NOT is_benchmark AND NOT is_stale"
         ).fetchone()
         send_json_ok(
