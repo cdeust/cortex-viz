@@ -29,7 +29,7 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime
-from typing import Any
+from typing import Any, Iterator
 
 import psycopg
 from psycopg.rows import dict_row
@@ -233,3 +233,102 @@ class MemoryReader:
             "SELECT COUNT(*) AS c FROM prospective_memories WHERE is_active"
         ).fetchone()
         return row["c"] if row else 0
+
+    # ── Galaxy graph-build read path ──────────────────────────────────
+    # The workflow-graph build (handlers/workflow_graph via
+    # workflow_graph_source_pg) reads three more methods beyond the 14 the
+    # HTTP routes use. Transcribed verbatim from Cortex pg_store mixins.
+
+    def iter_hot_memories_chunked(
+        self,
+        min_heat: float = 0.0,
+        include_benchmarks: bool = True,
+        chunk_size: int = 1000,
+        columns: str = "*",
+        hard_limit: int | None = None,
+    ) -> "Iterator[list[dict[str, Any]]]":
+        """Stream hot memories hottest-first via KEYSET pagination.
+
+        source: pg_store_queries.py iter_hot_memories_chunked — keyset paging
+        ``WHERE (heat_base, id) < (last_heat, last_id) ORDER BY heat_base DESC,
+        id DESC LIMIT n`` walks the composite index one bounded page at a time
+        so the first batch lands in ~ms (avoids the full-table sort stall).
+        ``columns`` is an internal projection allowlist (NOT user input); keyset
+        values are bound params.
+        """
+        bench_filter = (
+            "" if include_benchmarks else "AND NOT coalesce(is_benchmark, FALSE) "
+        )
+        yielded = 0
+        last_heat: float | None = None
+        last_id: int | None = None
+        cap = int(hard_limit) if hard_limit and hard_limit > 0 else None
+        while True:
+            page = int(chunk_size)
+            if cap is not None:
+                remaining = cap - yielded
+                if remaining <= 0:
+                    return
+                page = min(page, remaining)
+            if last_heat is None:
+                where = "heat_base >= %s "
+                params: list[Any] = [min_heat]
+            else:
+                where = "heat_base >= %s AND (heat_base, id) < (%s, %s) "
+                params = [min_heat, last_heat, last_id]
+            sql = (
+                f"SELECT {columns} FROM memories WHERE {where}{bench_filter}"
+                f"ORDER BY heat_base DESC, id DESC LIMIT {page}"
+            )
+            rows = self._conn.execute(sql, tuple(params)).fetchall()
+            if not rows:
+                return
+            yield [self._normalize_memory_row(dict(r)) for r in rows]
+            yielded += len(rows)
+            tail = rows[-1]
+            last_heat = tail["heat_base"]
+            last_id = tail["id"]
+            if len(rows) < page:
+                return
+
+    def list_memory_entity_edges(self) -> list[dict[str, Any]]:
+        """Every row of the ``memory_entities`` join table → MEMORY→ENTITY
+        edges. source: pg_store_entities.py list_memory_entity_edges."""
+        rows = self._conn.execute(
+            "SELECT memory_id, entity_id FROM memory_entities"
+        ).fetchall()
+        return [
+            {"memory_id": r["memory_id"], "entity_id": r["entity_id"]}
+            for r in rows
+            if r.get("memory_id") is not None and r.get("entity_id") is not None
+        ]
+
+    def search_by_tag_vector(
+        self,
+        query_embedding: bytes | None,
+        tag: str,
+        domain: str | None = None,
+        min_heat: float = 0.01,
+        limit: int = 3,
+    ) -> list[dict[str, Any]]:
+        """Tag-filtered memory search. source: pg_store_queries.py.
+
+        The viz graph-build calls this only with ``query_embedding=None``
+        (tag-filtered, heat-ordered — e.g. tag='tool:bash' command events), so
+        the read path stays pgvector-free. The vector-ranked branch needs the
+        pgvector adapter registered and is not used by the viz; it raises
+        rather than silently degrade.
+        """
+        if query_embedding is not None:
+            raise NotImplementedError(
+                "vector-mode search_by_tag_vector is not supported in the "
+                "read-only viz path (viz callers pass query_embedding=None)"
+            )
+        rows = self._conn.execute(
+            "SELECT *, heat_base::REAL AS score FROM memories "
+            "WHERE tags @> %s::jsonb AND heat_base >= %s AND NOT is_stale "
+            "AND ((%s::TEXT IS NULL) OR domain = %s OR is_global = TRUE) "
+            "ORDER BY heat_base DESC LIMIT %s",
+            (json.dumps([tag]), min_heat, domain, domain, limit),
+        ).fetchall()
+        return [self._normalize_memory_row(r) for r in rows]
