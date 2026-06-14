@@ -276,6 +276,53 @@ def serve_graph_phase(handler) -> None:
         send_json_error(handler, e)
 
 
+def _lod_cell_bbox(level: int, cx: int, cy: int) -> tuple[float, float, float, float]:
+    """World bbox of LOD cell ``(level, cx, cy)`` in [-1, 1] coords.
+
+    span = 2 / 2^level; min = -1 + index * span. source: cortex-viz-scaling.md
+    DECISION 4 (same dyadic decomposition the aggregator bins into).
+    """
+    span = 2.0 / (1 << level)
+    min_x = -1.0 + cx * span
+    min_y = -1.0 + cy * span
+    return (min_x, min_y, min_x + span, min_y + span)
+
+
+def _resolve_lod_cell(store, node_id: str) -> dict:
+    """Drill a coarse ``lod:L:cx:cy`` dot to the REAL nodes in its cell.
+
+    Pre: ``node_id`` is ``lod:<level>:<cx>:<cy>``. Post: returns the real
+    ``workflow_graph_layout`` node ids whose raw coords fall in the cell's world
+    bbox (a bbox pick over the FINE layout), plus the count. A coarse cell at a
+    deep level holds few raw nodes; this terminates at real node ids.
+    """
+    parts = node_id.split(":")
+    if len(parts) != 4:
+        return {"id": node_id, "kind": "lod", "found": False, "error": "bad_lod_id"}
+    try:
+        level, cx, cy = int(parts[1]), int(parts[2]), int(parts[3])
+    except ValueError:
+        return {"id": node_id, "kind": "lod", "found": False, "error": "bad_lod_id"}
+
+    from cortex_viz.infrastructure import layout_pg_store
+
+    min_x, min_y, max_x, max_y = _lod_cell_bbox(level, cx, cy)
+    raw = layout_pg_store.read_positions_in_bbox(
+        store, min_x=min_x, min_y=min_y, max_x=max_x, max_y=max_y
+    )
+    members = [{"id": rid, "x": rx, "y": ry, "kind": rk} for rid, rx, ry, rk in raw]
+    return {
+        "id": node_id,
+        "kind": "lod",
+        "found": bool(members),
+        "level": level,
+        "cell": [cx, cy],
+        "bbox": [min_x, min_y, max_x, max_y],
+        "member_count": len(members),
+        "members": members,
+    }
+
+
 def serve_graph_node(handler, store) -> None:
     """GET /api/graph/node?id=<node_id> — full record for one node.
 
@@ -300,6 +347,14 @@ def serve_graph_node(handler, store) -> None:
             return
 
         kind, _, raw = node_id.partition(":")
+
+        # Coarse LOD dot drill-down: ``lod:L:cx:cy`` resolves to the REAL nodes
+        # in that cell via a raw-layout bbox pick. source: cortex-viz-scaling.md
+        # DECISION 4.
+        if kind == "lod":
+            send_json_ok(handler, _resolve_lod_cell(store, node_id))
+            return
+
         record: dict | None = None
         if kind == "memory" and raw.isdigit() and hasattr(store, "get_memory"):
             record = store.get_memory(int(raw))

@@ -305,6 +305,25 @@ def _auto_enable_ap() -> None:
     threading.Thread(target=_bg_index, name="ap-bg-index", daemon=True).start()
 
 
+def _warm_tile_renderer() -> None:
+    """Pre-trigger the datashader/numba JIT with a 1-point render.
+
+    Runs once at startup on a daemon thread. The numba kernels datashader
+    compiles on first ``Canvas.points`` take ~3-4 s; doing it here keeps the
+    first real tile under the latency bar. Best-effort: any failure (viz-tile
+    extra absent) is swallowed — real requests fall back to their own import
+    error handling.
+    """
+    try:
+        from cortex_viz.core import tile_renderer
+
+        tile_renderer.render_tile_png(
+            [("warm", 0.0, 0.0, "memory")], z=0, x=0, y=0
+        )
+    except Exception:  # pragma: no cover - best-effort warmup
+        pass
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Cortex standalone HTTP server")
     # The ``methodology`` type was removed in Gap 10 — its handler
@@ -349,6 +368,11 @@ def main() -> None:
         args=(server,),
         daemon=True,
     ).start()
+
+    # Warm the datashader/numba JIT off the request thread so the FIRST real
+    # tile request does not pay one-time kernel compilation (~3-4 s). The LOD
+    # data path is already O(1) in N; this removes the only remaining cold cost.
+    threading.Thread(target=_warm_tile_renderer, daemon=True).start()
 
     print(f"[cortex] Standalone {args.type} server at {url}", file=sys.stderr)
     server.serve_forever()

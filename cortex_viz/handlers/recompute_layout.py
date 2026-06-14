@@ -43,6 +43,22 @@ def _extract_topology(graph_data: dict) -> tuple[list[str], list[tuple], dict]:
     return node_ids, edges, kinds
 
 
+def _build_lod_safe(store, fingerprint: str) -> None:
+    """Build the LOD pyramid for ``fingerprint``; never raise.
+
+    A LOD-build failure must not abort the layout build — the raw layout still
+    renders (z>=8 reads raw; coarse zooms degrade to the raw read-path in the
+    tile handler when the pyramid is absent). Mirrors ``_persist_full_layout``'s
+    defensive posture. Idempotent: build_lod is skip-if-fresh.
+    """
+    try:
+        from cortex_viz.infrastructure import lod_pg_store
+
+        lod_pg_store.build_lod(store, fingerprint=fingerprint, max_level=7)
+    except Exception:  # pragma: no cover - defensive; raw path still renders
+        pass
+
+
 def run_recompute(store) -> dict[str, Any]:
     """Run the layout pass against the currently-cached graph.
 
@@ -91,6 +107,10 @@ def run_recompute(store) -> dict[str, Any]:
     except Exception:
         existing = None
     if existing and existing.get("fingerprint") == fp:
+        # Layout unchanged — but the LOD pyramid may be absent (layout
+        # persisted before LOD existed, or a prior build crashed pre-LOD).
+        # build_lod is skip-if-fresh, so this is a cheap no-op when present.
+        _build_lod_safe(store, fp)
         return {
             "status": "ok",
             "node_count": existing["count"],
@@ -109,6 +129,10 @@ def run_recompute(store) -> dict[str, Any]:
     layout_version = layout_pg_store.write_layout(
         store, coords, kinds, topology_fingerprint=fp
     )
+    # Build the multi-resolution LOD pyramid for the just-written layout. Runs
+    # in the same build child, behind the DrL pass; the coarse band lets every
+    # low-zoom tile read ≤64 representatives instead of all N raw rows.
+    _build_lod_safe(store, fp)
     elapsed_ms = int((time.monotonic() - started) * 1000)
     return {
         "status": "ok",
