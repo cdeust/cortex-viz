@@ -13,6 +13,7 @@ from typing import Any
 
 from cortex_viz.errors import McpConnectionError
 from cortex_viz.infrastructure.mcp_call_timeout import default_call_timeout_s
+from cortex_viz.infrastructure.mcp_client_stderr import open_stderr_log, stderr_loop
 
 CLIENT_INFO = {"name": "cortex", "version": "1.0.0"}
 PROTOCOL_VERSION = "2025-11-25"
@@ -469,54 +470,12 @@ class MCPClient:
             self._pending.clear()
 
     async def _stderr_loop(self) -> None:
-        log_fh = self._open_stderr_log()
-        try:
-            while True:
-                line = await self._proc.stderr.readline()  # type: ignore
-                if not line:
-                    break
-                decoded = line.decode("utf-8", errors="replace").rstrip()
-                print(
-                    f"[mcp-client] {self._config['command']}: {decoded}",
-                    file=sys.stderr,
-                )
-                if log_fh is not None:
-                    try:
-                        log_fh.write(decoded + "\n")
-                        log_fh.flush()
-                    except Exception:
-                        pass
-        except asyncio.CancelledError:
-            pass
-        except Exception:
-            pass
-        finally:
-            if log_fh is not None:
-                try:
-                    log_fh.close()
-                except Exception:
-                    pass
+        # Body split into ``mcp_client_stderr`` (500-line limit).
+        await stderr_loop(self)
 
     def _open_stderr_log(self):
-        """Open a per-server stderr log file under ~/.cache/cortex/mcp-logs/.
-
-        Persists upstream MCP stderr (e.g. ai-architect-mcp indexer progress)
-        for post-hoc investigation. Returns None on any error — logging
-        failure must not break the connection.
-        """
-        import os
-        import pathlib
-
-        try:
-            base = pathlib.Path.home() / ".cache" / "cortex" / "mcp-logs"
-            base.mkdir(parents=True, exist_ok=True)
-            raw = self._config.get("command") or "unknown"
-            stem = raw.split("/")[-1] or "unknown"
-            safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in stem)
-            pid = os.getpid()
-            return open(base / f"{safe}.{pid}.log", "a", encoding="utf-8")
-        except Exception:
-            return None
+        # Body split into ``mcp_client_stderr`` (500-line limit).
+        return open_stderr_log(self._config)
 
     async def _idle_loop(self) -> None:
         try:
