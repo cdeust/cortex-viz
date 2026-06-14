@@ -775,19 +775,74 @@ def _register_phase(key: str, deps: list[str], label: str) -> None:
         _build_progress.setdefault("phases", {})[key] = False
 
 
+# Kind-membership of each FIXED baseline phase. The baseline rides the bulk
+# graph FILE out-of-band (phase_key=None, NOT forwarded over the queue), so the
+# server's _phase_payloads[L0..L5] are never populated by apply_delta. So
+# /api/graph/phase for L0-L5 DERIVES the phase node set from _graph_cache by
+# kind. Safe because INV-NODE (Liskov node-shape contract) guarantees the cache
+# is always full dicts — the slim-list AttributeError that motivated removing
+# this fallback can no longer occur. L6:* phases are NOT here: they stream as
+# deltas with a real phase_key and apply_delta rebuilds their buffer (the
+# `if not nodes` guard below skips L6 once populated).
+# source: phase taxonomy (PHASES) + Lamport INV-PHASE decision, 2026-06-14.
+_PHASE_KINDS: dict[str, set[str]] = {
+    "L0": {"domain"},
+    # L1 = structural setup layer (~190 nodes: skills, hooks, agents, MCPs).
+    # "command" is Bash-execution telemetry — NOT setup; it belongs in L2
+    # alongside tool_hubs via command_in_hub edges.
+    "L1": {"skill", "hook", "agent", "mcp"},
+    "L2": {"tool_hub", "command"},
+    "L3": {"file"},
+    "L4": {"discussion"},
+    "L5": {"memory"},
+}
+
+
 def get_phase_payload(key: str, offset: int = 0, limit: int | None = None) -> dict:
     spec = PHASES.get(key)
     pl = _phase_payloads.get(key, {"nodes": [], "edges": []})
     nodes = pl.get("nodes", [])
     edges = pl.get("edges", [])
 
-    # _phase_payloads is now authoritative on the server: apply_delta
-    # reconstructs it from the forwarded delta stream (the real phase_key
-    # rides as a field). The prior cache-scan fallback (kind-slice over
-    # _graph_cache) is removed per the Lamport spec — it did n.get(kind) on
-    # cache items that could be slim lists and crashed /api/graph/phase with
-    # an AttributeError. INV-NODE makes the cache always-dicts, but the
-    # fallback is unnecessary regardless: the phase buffer is complete.
+    # Baseline phases (L0-L5) ride the bulk graph FILE out-of-band: their delta
+    # is NOT forwarded (phase_key=None, stage="baseline"), so _phase_payloads
+    # [L0..L5] is never populated. DERIVE the phase node set from the cumulative
+    # cache by kind. SAFE: INV-NODE guarantees _graph_cache nodes are always
+    # full dicts. L6:* keep their streamed buffer (the `if not nodes` guard
+    # skips them). EPOCH-SAFE: begin_epoch empties the cache under _apply_lock,
+    # so a stale epoch's slice is computed over the empty new-epoch cache.
+    if not nodes and key in _PHASE_KINDS:
+        cache = _graph_cache  # single ref read — swaps are atomic, no torn read
+        if cache:
+            cache_data = (
+                cache.get("data") if isinstance(cache.get("data"), dict) else cache
+            )
+            all_nodes: list = (
+                cache_data.get("nodes", []) if isinstance(cache_data, dict) else []
+            )
+            all_edges: list = (
+                cache_data.get("edges", []) if isinstance(cache_data, dict) else []
+            )
+            allowed_kinds = _PHASE_KINDS[key]
+            nodes = [
+                n
+                for n in all_nodes
+                if (n.get("kind") or n.get("type")) in allowed_kinds
+            ]
+            if nodes:
+                node_ids = {n["id"] for n in nodes}
+                # Edge scoping is AND (both endpoints inside the phase), NOT OR.
+                # OR re-includes every in_domain edge (each node points to its
+                # hub) -> L0 returns 20 nodes + 484k edges. Lossless: under the
+                # client append model a cross-phase parent edge is owned by the
+                # CHILD phase and appended atop the already-loaded parent; the
+                # graph.js dedup sets make repeats a no-op.
+                edges = [
+                    e
+                    for e in all_edges
+                    if e.get("source") in node_ids and e.get("target") in node_ids
+                ]
+
     node_total = len(nodes)
     edge_total = len(edges)
     if limit is not None:
