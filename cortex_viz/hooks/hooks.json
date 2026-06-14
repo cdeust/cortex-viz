@@ -1,0 +1,27 @@
+{
+  "_comment": "cortex-viz live session-activity capture. Registers activity_capture.py on every completed tool call (PostToolUse, matcher '.*' = ALL tools incl mcp__* MCP calls, Skill, Bash terminal, Read/Edit/Write) and on each prompt (UserPromptSubmit). The hook fire-and-forget POSTs the event to the running viz server's /api/activity (discovered via ~/.cache/cortex/viz-server.json). Non-blocking, never errors the session. Install: copy these into ~/.claude/settings.json 'hooks' with an absolute command path, or ship as a plugin (CLAUDE_PLUGIN_ROOT resolves automatically).",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/cortex_viz/hooks/activity_capture.py PostToolUse"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/cortex_viz/hooks/activity_capture.py UserPromptSubmit"
+          }
+        ]
+      }
+    ]
+  }
+}

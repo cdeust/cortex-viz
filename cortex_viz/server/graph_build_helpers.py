@@ -115,7 +115,36 @@ def _persist_full_layout(store) -> dict:
             f" (cached={result.get('cached')}, status={result.get('status')})",
             file=sys.stderr,
         )
+        _persist_snapshot(store, result.get("topology_fingerprint"))
         return result
     except Exception as _exc:  # pragma: no cover - defensive
         print(f"[cortex] full layout persist skipped: {_exc}", file=sys.stderr)
         return {"status": "error", "reason": "exception", "detail": str(_exc)}
+
+
+def _persist_snapshot(store, fingerprint) -> None:
+    """Persist the finished in-process graph as the durable full-graph snapshot.
+
+    Runs right after the layout persist, where ``state._graph_cache["data"]``
+    holds the complete assembled graph (every node + edge — backbone,
+    memories, AST symbols, entities). The snapshot is what ``/api/graph/full``
+    serves, so the full hero view is available instantly from PG and does NOT
+    depend on the volatile in-process cache (which empties/loops between
+    builds). Never raises — a snapshot failure must not abort the build.
+    """
+    try:
+        data = state.graph_cache_data()
+        if not data or not (data.get("nodes")):
+            return
+        from cortex_viz.infrastructure import snapshot_pg_store
+
+        res = snapshot_pg_store.write_snapshot(
+            store, fingerprint=fingerprint or "unknown", graph=data
+        )
+        print(
+            f"[cortex] full graph snapshot persisted: {res['node_count']} nodes"
+            f" / {res['edge_count']} edges ({res['bytes']} gzip bytes)",
+            file=sys.stderr,
+        )
+    except Exception as _exc:  # pragma: no cover - defensive
+        print(f"[cortex] snapshot persist skipped: {_exc}", file=sys.stderr)

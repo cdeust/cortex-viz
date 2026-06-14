@@ -23,14 +23,14 @@
       });
     });
 
-    // Graph (galaxy) is the default landing view — restored 2026-06-10
-    // (user: the TRACE-only landing dropped the L1-L6 legend, filters,
-    // memories/discussions and 21 of 27 domains; df691fd had replaced
-    // the GRAPH tab instead of coexisting). TRACE stays one click away.
-    // Honour the view declared in state.js (default 'graph') rather
-    // than hard-forcing.
+    // TRACE is the default landing view (user request 2026-06-15). The
+    // earlier graph-default (2026-06-10) was because a TRACE-ONLY build had
+    // REPLACED the graph tab, dropping the L1-L6 legend/filters/domains;
+    // graph + trace now COEXIST as tabs, so landing on trace just picks the
+    // first-active tab — GRAPH stays one click away with all its chrome.
+    // Honour the view declared in state.js (default 'trace').
     setTimeout(function() {
-      var landing = (JUG.state && JUG.state.activeView) || 'graph';
+      var landing = (JUG.state && JUG.state.activeView) || 'trace';
       JUG.state.activeView = '_init';
       JUG.state.activeView = landing;
       toggleFilterBarVisibility(landing);

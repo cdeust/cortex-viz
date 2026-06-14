@@ -45,18 +45,6 @@ def _feature_moved(handler, feature: str, use_instead: str) -> None:
     handler.wfile.write(body)
 
 
-_WIKI_DB_OPS = {
-    "/api/wiki/page_meta": "page_meta",
-    "/api/wiki/concepts": "concepts",
-    "/api/wiki/drafts": "drafts",
-    "/api/wiki/memos": "memos",
-    "/api/wiki/views": "views",
-    "/api/wiki/view": "view",
-    "/api/wiki/bibliography": "bibliography",
-    "/api/wiki/bibliography/read": "bibliography_read",
-}
-
-
 def _route_unified_get(
     handler,
     store,
@@ -121,6 +109,25 @@ def _route_unified_get(
 
         serve_graph_slice(handler)
         return
+    if path_no_qs == "/api/prd":
+        # Third bridge: PRD document/section nodes from on-disk artifacts.
+        from cortex_viz.server.http_standalone_endpoints import serve_prd
+
+        serve_prd(handler, store)
+        return
+    if path_no_qs == "/api/activity/stream":
+        # Live SSE of session-activity nodes/edges (replay-then-tail).
+        from cortex_viz.server.http_standalone_endpoints import serve_activity_stream
+
+        serve_activity_stream(handler, store)
+        return
+    if path_no_qs == "/api/graph/full":
+        # Durable full graph from the PG snapshot — stable across the build
+        # rebuild loop, no lazy-kick. Must stay BEFORE the bare ``/api/graph``.
+        from cortex_viz.server.http_standalone_endpoints import serve_graph_full
+
+        serve_graph_full(handler, store)
+        return
     if path_no_qs == "/api/graph":
         # Lazy-kicks the background build on first hit with an empty
         # cache (see http_standalone_graph.py). Must stay AFTER the more
@@ -129,18 +136,26 @@ def _route_unified_get(
 
         serve_graph(handler, store)
         return
-    if path_no_qs == "/api/memories":
-        _feature_moved(handler, "memory-browser", "recall / memory_stats")
-        return
     if path_no_qs == "/api/memories/facets":
-        _feature_moved(handler, "memory-facets", "recall / memory_stats")
+        from cortex_viz.server.http_standalone_memories import serve_memory_facets
+
+        serve_memory_facets(handler, store)
+        return
+    if path_no_qs == "/api/memories":
+        # Keyset-paged memory browser (Knowledge + Board views), read straight
+        # from the shared Cortex PG — cortex-viz is the live bridge.
+        from cortex_viz.server.http_standalone_memories import serve_memories
+
+        serve_memories(handler, store)
         return
     if path == "/api/discussions" or path.startswith("/api/discussions?"):
         serve_discussions(handler)
     elif path_no_qs.startswith("/api/discussion/"):
         serve_discussion_detail(handler, path_no_qs)
-    elif path_no_qs in _WIKI_DB_OPS or path_no_qs.startswith("/api/wiki/"):
-        _feature_moved(handler, "wiki", "wiki_read / wiki_list")
+    elif path_no_qs.startswith("/api/wiki/"):
+        from cortex_viz.server.http_standalone_wiki import serve_wiki
+
+        serve_wiki(handler, store, path_no_qs)
     elif path_no_qs == "/api/stats":
         serve_stats(handler, store)
     elif path == "/api/sankey" or path.startswith("/api/sankey?"):
@@ -191,14 +206,19 @@ def _route_unified_get(
 
         cb = str(int(_time.time()))
         text = raw.decode("utf-8", errors="replace")
-        # Only add ?v= to paths that don't already have a query string.
+        # REPLACE any existing ?v=… (and add one where missing) with a fresh
+        # per-load timestamp. The HTML ships many tags pinned to a build SHA
+        # (?v=117ece5); the old regex skipped those (it stopped at the `?`), so
+        # the browser cached them forever and never saw edited JS — the user
+        # ended up testing stale code across reloads. Matching the `.js`/`.css`
+        # path and swallowing any trailing query fixes both cases.
         text = _re.sub(
-            r'(<script\s+[^>]*src="/js/[^"?]+?)(")',
+            r'(<script\s+[^>]*src="/js/[^"?]+\.js)(?:\?[^"]*)?(")',
             r"\1?v=" + cb + r"\2",
             text,
         )
         text = _re.sub(
-            r'(<link\s+[^>]*href="/css/[^"?]+?)(")',
+            r'(<link\s+[^>]*href="/css/[^"?]+\.css)(?:\?[^"]*)?(")',
             r"\1?v=" + cb + r"\2",
             text,
         )

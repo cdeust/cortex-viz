@@ -38,14 +38,10 @@ from cortex_viz.server.http_standalone_state import (
     touch,
 )
 
-# The GET route table + the 410-Gone helper were split into
-# ``http_standalone_routes`` (500-line limit). Re-imported here: the
-# handler factory dispatches GET through ``_route_unified_get`` and POST
-# /api/wiki/save through ``_feature_moved``.
-from cortex_viz.server.http_standalone_routes import (
-    _feature_moved,
-    _route_unified_get,
-)
+# The GET route table was split into ``http_standalone_routes`` (500-line
+# limit). The handler factory dispatches GET through ``_route_unified_get``;
+# POST /api/wiki/save is served by ``http_standalone_wiki.serve_wiki_save``.
+from cortex_viz.server.http_standalone_routes import _route_unified_get
 
 
 class _ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
@@ -145,13 +141,26 @@ def _build_unified_handler(ui_root: Path, store) -> type:
         def do_POST(self):
             if not self._guard_host():
                 return
+            touch()
+            path = self.path.split("?")[0]
+            # Activity ingest is produced by a Claude Code hook (a CLI process
+            # on 127.0.0.1), NOT a browser — host-guarded above, but exempt
+            # from the same-origin check that browser writes must pass.
+            if path == "/api/activity":
+                from cortex_viz.server.http_standalone_endpoints import (
+                    serve_activity_ingest,
+                )
+
+                serve_activity_ingest(self, store)
+                return
             if not enforce_same_origin_write(self):
                 self.send_response(403)
                 self.end_headers()
                 return
-            touch()
-            if self.path.split("?")[0] == "/api/wiki/save":
-                _feature_moved(self, "wiki", "wiki_write")
+            if path == "/api/wiki/save":
+                from cortex_viz.server.http_standalone_wiki import serve_wiki_save
+
+                serve_wiki_save(self)
             else:
                 self.send_response(404)
                 self.end_headers()

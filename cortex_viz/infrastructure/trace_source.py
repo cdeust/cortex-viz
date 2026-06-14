@@ -64,6 +64,23 @@ _ACTION_TOOLS = frozenset(
 )
 
 
+def _memory_op(name: str) -> str | None:
+    """Classify a Cortex memory MCP tool name → ``'remember'`` | ``'recall'``.
+
+    MCP tool names are namespaced (``mcp__plugin_cortex_cortex__remember``,
+    ``cortex:recall``, …), so match on the operation substring scoped to a
+    cortex tool. Returns None for anything that isn't a memory write/read.
+    """
+    n = (name or "").lower()
+    if "cortex" not in n:
+        return None
+    if "remember" in n:
+        return "remember"
+    if "recall" in n:
+        return "recall"
+    return None
+
+
 def _projects_dir() -> Path:
     return CLAUDE_DIR / "projects"
 
@@ -303,9 +320,45 @@ def iter_session_events(session_id: str) -> list[dict[str, Any]]:
                         for b in content:
                             if not isinstance(b, dict):
                                 continue
-                            if b.get("type") != "tool_use":
+                            btype = b.get("type")
+                            # Assistant TEXT turn → a discussion node (the
+                            # conversation/reasoning between actions). Skip
+                            # trivial fragments so the spine isn't flooded.
+                            if btype == "text":
+                                txt = (b.get("text") or "").strip()
+                                if len(txt) >= 80:
+                                    events.append(
+                                        {
+                                            "kind": "discussion",
+                                            "text": txt,
+                                            "ts": ts,
+                                            "line": line_no,
+                                        }
+                                    )
+                                continue
+                            if btype != "tool_use":
                                 continue
                             name = b.get("name") or ""
+                            # Cortex memory op (remember/recall, however the MCP
+                            # tool is namespaced) → a memory node carrying the
+                            # remembered content / recalled query.
+                            mop = _memory_op(name)
+                            if mop:
+                                inp = b.get("input") or {}
+                                events.append(
+                                    {
+                                        "kind": "memory",
+                                        "op": mop,
+                                        "text": str(
+                                            inp.get("content")
+                                            or inp.get("query")
+                                            or ""
+                                        ),
+                                        "ts": ts,
+                                        "line": line_no,
+                                    }
+                                )
+                                continue
                             if name not in _ACTION_TOOLS:
                                 continue
                             events.append(

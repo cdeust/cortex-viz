@@ -494,6 +494,10 @@
 <!-- Trace view: a live, domain-split execution-trace
      (domain -> session -> chain -> file) fetched per level on demand. -->
 <script src="/js/trace.js"></script>
+<!-- Live session-activity spine: streams every captured Claude action
+     (tool / MCP call / file / terminal / skill / subagent / prompt) into the
+     graph in real time via /api/activity/stream. -->
+<script src="/js/activity_stream.js"></script>
 <!-- Galaxy (GRAPH tab) phase-driven loader — restored 2026-06-10.
      df691fd replaced GRAPH with TRACE and removed the galaxy loaders
      (phase_loader.js / graph_snapshot.js / the SSE startup); the GRAPH
@@ -523,6 +527,62 @@
   var applied = {};   // phaseKey -> true once appended
   var inflight = {};  // phaseKey -> true while fetching
   var deferred = {};  // L6 phaseKey -> true: ready on the server, NOT auto-loaded
+  var _fullLoaded = false; // true once the complete /api/graph has been pulled
+
+  // On full_ready, replace the progressive phase SUBSET with the COMPLETE
+  // graph from /api/graph — every entity (~48k), AST symbol (~4.7k), memory,
+  // file, command, plus all ~96k edges. The phased L0–L5 loader paints only
+  // ~11k for a fast first view; the full set is what the README hero shows
+  // (dense per-project clouds whose bulk IS the entities + AST symbols).
+  //
+  // This is NOT a live 64k-node force simulation: /api/graph nodes carry
+  // precomputed DrL x/y and the renderer pins them on arrival
+  // (workflow_graph.js: `if (n.fx == null) { n.fx = n.x; n.fy = n.y; }`),
+  // so it is a STATIC paint at the server-computed layout — the same coords
+  // the scatterplot/tile path used, now drawn as the readable, clickable
+  // force-graph with edges and labels. appendGraphDelta dedups by id, so the
+  // ~11k already painted are skipped and only the ~53k new nodes land.
+  var _fullInflight = false;  // a /api/graph/full fetch is in progress
+  var _triedSnapshot = false; // the one-shot optimistic snapshot try happened
+
+  function _applyFullGraph(g) {
+    if (!g || !g.nodes || !g.nodes.length) return false;
+    if (typeof JUG.appendGraphDelta === 'function') {
+      _seedLastData();
+      JUG.appendGraphDelta(g.nodes || [], g.edges || g.links || []);
+      console.log('[phase] FULL graph loaded',
+        g.nodes.length + 'N', ((g.edges || g.links) || []).length + 'E');
+    }
+    _symbolHint('');
+    return true;
+  }
+
+  // Load the COMPLETE graph from the durable PG snapshot (/api/graph/full).
+  // Snapshot-ONLY by design: it is stable across the build's rebuild loop and
+  // never lazy-kicks a build, so the hero view (entities + AST symbols) loads
+  // instantly once any build has completed once. We deliberately do NOT fall
+  // back to /api/graph here — that volatile cache can return a PARTIAL graph
+  // mid-build, which must never latch as "full". 503 (no snapshot yet, first
+  // install) just resolves false; the progressive L0–L5 path keeps the view
+  // useful until the first build finishes and writes the snapshot. Returns a
+  // Promise<bool> — true once the full graph is applied (latched).
+  function _loadFullGraph() {
+    if (_fullLoaded || _fullInflight) return Promise.resolve(_fullLoaded);
+    _fullInflight = true;
+    return fetch('/api/graph/full')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (g) {
+        var ok = _applyFullGraph(g);
+        if (ok) _fullLoaded = true;   // latch only on real, complete data
+        _fullInflight = false;
+        return ok;
+      })
+      .catch(function (err) {
+        _fullInflight = false;
+        console.warn('[phase] full graph load failed:', err && err.message);
+        return false;
+      });
+  }
 
   // ── L5/L6 auto-load partition (2026-06-10) ──
   // Auto-load through L5 (domains, setup, tools, files, discussions,
@@ -581,6 +641,27 @@
     // Only do galaxy-build work while the user is on the Graph tab —
     // Knowledge / Board / Wiki / Trace users don't pay the cost.
     if (!_activeViewIsGraph()) { setTimeout(poll, 1500); return; }
+    // Fast path: try the durable full-graph snapshot ONCE on entry. If it
+    // exists (any prior build completed), load the complete hero view
+    // (entities + AST symbols) immediately and STOP — no build wait, no
+    // polling. If there is no snapshot yet (first install), this single try
+    // 503s and we fall through to the progressive L0–L5 build below, which
+    // keeps the view useful AND kicks the build (via /api/graph/progress) so
+    // the first snapshot gets written; _pollProgress then loads it on
+    // full_ready. One-shot — NOT retried every tick — so the console isn't
+    // flooded with premature 503s while the first build runs.
+    if (_fullLoaded) return;
+    if (!_triedSnapshot) {
+      _triedSnapshot = true;
+      _loadFullGraph().then(function (ok) {
+        if (!ok) _pollProgress();   // no snapshot yet → progressive + kick
+      });
+      return;
+    }
+    _pollProgress();
+  }
+
+  function _pollProgress() {
     fetch('/api/graph/progress')
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (p) {
@@ -607,12 +688,13 @@
           }
         });
         if (p.full_ready) {
-          // "Drained" once every NON-L6 phase is applied — L6 phases are
-          // intentionally left deferred, so they do not block teardown.
-          var nonL6Done = keys.every(function (k) {
-            return _isL6(k) || applied[k] || !p.phases[k];
-          });
-          if (nonL6Done) return;  // stop polling — L0–L5 loaded, L6 on demand
+          // The build is complete on the server. The progressive L0–L5
+          // phases have painted the fast subset; now pull the COMPLETE
+          // graph (entities + AST symbols + every edge) in one shot — the
+          // hero view — and stop polling. Nodes carry precomputed coords,
+          // so the renderer pins them: a static paint, not a 64k force sim.
+          _loadFullGraph();
+          return;
         }
         setTimeout(poll, POLL_MS);
       })
@@ -675,6 +757,11 @@
     JUG.loadSymbolPhasesForDomain = _loadDomainSymbolPhases;
     JUG.hasDeferredSymbols = _hasDeferredSymbols;
     setTimeout(poll, FIRST_KICK_MS);
+    // Open the live session-activity stream so captured Claude actions paint
+    // into the graph in real time (idempotent; auto-reconnects).
+    if (typeof JUG.startActivityStream === 'function') {
+      try { JUG.startActivityStream(); } catch (_) {}
+    }
     // Kick immediately when the user switches TO the graph tab, in case
     // they landed on Trace/Knowledge first.
     JUG.on('state:activeView', function (ev) {

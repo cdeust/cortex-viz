@@ -13,6 +13,15 @@
   var _handle = null;
   var _wrapperId = 'wfg-container';
   var _lastPayload = null;
+  // Graph and Trace share ONE wrapper/handle but hold DIFFERENT payloads.
+  // Cache the last payload PER view so switching tabs re-renders the target
+  // view's OWN graph instead of reflowing whatever was last drawn (which left
+  // the other tab's content on screen). Keyed by view id ('graph' | 'trace').
+  var _byView = {};
+  function _viewOf(data) {
+    var s = data && data.meta && data.meta.schema;
+    return s === 'trace.v1' ? 'trace' : 'graph';
+  }
 
   function isWorkflowGraph(data) {
     if (!data || !Array.isArray(data.nodes) || data.nodes.length === 0) return false;
@@ -93,6 +102,7 @@
       }
       _handle = JUG.renderWorkflowGraph(wrapper, data);
       _lastPayload = data;
+      _byView[_viewOf(data)] = data;          // remember this view's payload
       watchLegacy();
       console.log(LOG, 'rendered', (data.nodes || []).length, 'nodes /',
                   (data.edges || data.links || []).length, 'edges');
@@ -120,16 +130,21 @@
       if (!isWorkflowGraph(data)) return;
       _pendingRender = data;
       if (_renderTimer) clearTimeout(_renderTimer);
-      // 400 ms first render, 500 ms between per-project L6 appends.
-      // Low enough that each project visibly pops onto the graph.
-      var wait = _firstRenderDone ? 500 : 400;
+      // 400 ms first render, then adaptive. A re-render re-mounts and
+      // re-lays-out the WHOLE graph, so on the large galaxy (≥15k) — where the
+      // live activity stream appends a few nodes per captured Claude action —
+      // coalesce those into an INFREQUENT rebuild (8 s) so the galaxy stays
+      // fluid instead of re-shuffling on every streamed tool call. Small
+      // graphs keep the snappy 500 ms cadence.
+      var bigGraph = !!(data && data.nodes && data.nodes.length > 15000);
+      var wait = !_firstRenderDone ? 400 : (bigGraph ? 8000 : 500);
       _renderTimer = setTimeout(function(){
         _renderTimer = null;
         var d = _pendingRender; _pendingRender = null;
         if (d) { render(d); _firstRenderDone = true; }
       }, wait);
-      // Safety net: if appends keep coming faster than the debounce
-      // interval, force a render every 5 s so the user sees progress.
+      // Safety net: force a render if appends keep coming faster than the
+      // debounce — longer on the big galaxy to match the rebuild cadence.
       if (!_firstDeadline) {
         _firstDeadline = setTimeout(function(){
           _firstDeadline = null;
@@ -138,7 +153,7 @@
             if (_renderTimer) { clearTimeout(_renderTimer); _renderTimer = null; }
             render(d); _firstRenderDone = true;
           }
-        }, 5000);
+        }, bigGraph ? 12000 : 5000);
       }
     });
     if (JUG.state && isWorkflowGraph(JUG.state.lastData)) render(JUG.state.lastData);
@@ -148,13 +163,30 @@
       // wrapper as the legacy Graph view did, so it must show the wrapper
       // + reflow exactly the same way. Without this the bridge renders
       // into a hidden div and the user sees only the base node.
-      if (ev && (ev.value === 'graph' || ev.value === 'trace')) {
+      var v = ev && ev.value;
+      var isGraphic = (v === 'graph' || v === 'trace');
+      // CRITICAL: #wfg-container carries z-index:5 but #graph-container is
+      // z-index:auto, so it does NOT contain that stacking context — the wrapper
+      // therefore paints OVER the Knowledge / Wiki / Board / Pipeline containers
+      // (z-index:auto siblings), and they render but stay hidden behind the
+      // galaxy ("not loading anything"). Hide the whole #graph-container on those
+      // views so the selected view is visible; restore it for graph + trace,
+      // which render INTO it.
+      var host = document.getElementById('graph-container');
+      if (host) host.style.display = isGraphic ? '' : 'none';
+      if (isGraphic) {
         var w = document.getElementById(_wrapperId);
         if (w) w.style.display = 'block';
         hideLegacyRenderer();
-        if (_lastPayload == null && JUG.state && isWorkflowGraph(JUG.state.lastData)) {
-          render(JUG.state.lastData);
-        } else if (_handle && typeof _handle.reflow === 'function') {
+        // Re-render the TARGET view's OWN payload so switching graph<->trace
+        // refreshes to the right graph instead of leaving the other tab on
+        // screen. Only reflow when the handle ALREADY holds this view's data;
+        // if neither is true the view's own loader (the galaxy phase-poller for
+        // graph, trace.js _boot for trace) will fetch + render it fresh.
+        if (_byView[v]) {
+          render(_byView[v]);
+        } else if (_lastPayload && _viewOf(_lastPayload) === v
+                   && _handle && typeof _handle.reflow === 'function') {
           setTimeout(function () { _handle.reflow(); }, 60);
         }
       }

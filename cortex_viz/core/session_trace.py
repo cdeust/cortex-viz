@@ -13,7 +13,11 @@ Pure logic — no I/O. The infrastructure layer feeds it an ordered event
 list (see ``infrastructure.trace_source.iter_session_events``); this
 module owns the node/edge vocabulary the frontend renders.
 
-Node kinds emitted: ``prompt``, ``action``, ``file``.
+Node kinds emitted: ``prompt``, ``action``, ``file``, ``discussion``
+(assistant text turns) and ``memory`` (Cortex remember/recall ops, carrying
+the remembered content / recalled query). discussion + memory events are
+woven into the same chronological spine so the trace reads as the full
+narrative — what was said, what was done, and what was remembered.
 Edge kinds emitted: ``step`` (session -> first event), ``next`` (time
 order along the spine), and the file verbs ``read`` / ``edit`` /
 ``write`` / ``run``.
@@ -215,6 +219,50 @@ def build_chain(
                         "type": verb,
                     }
                 )
+        elif kind in ("discussion", "memory"):
+            # BRANCH nodes: discussions (assistant turns) and memories
+            # (remember/recall) hang OFF the spine — they attach to the
+            # current spine node with their own edge verb and do NOT advance
+            # ``prev_id``/the spine. This keeps the prompt->action->file
+            # work-spine readable instead of being flooded by hundreds of
+            # inline discussion nodes. ``step`` still advances (id + cursor).
+            nid = f"{session_id}:e{step}"
+            if kind == "discussion":
+                text = ev.get("text") or ""
+                if not text.strip():
+                    continue
+                if emit:
+                    nodes.append(
+                        {
+                            "id": nid, "kind": "discussion", "type": "discussion",
+                            "label": _short(text, 60), "full": text[:4000],
+                            "ts": ts, "seq": step, "session_id": session_id,
+                            "domain_id": session_node,
+                        }
+                    )
+                verb = "discusses"
+            else:
+                text = ev.get("text") or ""
+                op = ev.get("op") or "remember"
+                if emit:
+                    nodes.append(
+                        {
+                            "id": nid, "kind": "memory", "type": "memory",
+                            "label": op + " · " + _short(text, 50),
+                            "full": text[:4000], "ts": ts, "seq": step,
+                            "session_id": session_id, "domain_id": session_node,
+                        }
+                    )
+                verb = "remembers"
+            if emit and prev_id is not None:
+                edges.append(
+                    {
+                        "id": f"{prev_id}->{nid}", "source": prev_id,
+                        "target": nid, "kind": verb, "type": verb,
+                    }
+                )
+            step += 1
+            continue
         else:
             continue
 

@@ -76,8 +76,25 @@
     // drawn. Count the actual rendered graph (JUG.state.lastData) when it
     // exists; fall back to meta only before the first paint. (lod.js is not
     // loaded by unified-viz.html, so polling.js owns the legend here.)
+    // PREFER the renderer's own count of what it actually drew (set by
+    // workflow_graph.js mount as JUG.__wfgRendered). JUG.state.lastData
+    // accumulates every node ever appended and never prunes, so on the
+    // graph/trace canvas it goes stale across view switches and over-counts
+    // filtered edges — the legend then disagrees with the visible node count.
+    var rc = (window.JUG && JUG.__wfgRendered) || null;
+    var _view = (window.JUG && JUG.state && JUG.state.activeView) || '';
     var d = (window.JUG && JUG.state && JUG.state.lastData) || null;
-    if (d && d.nodes && d.nodes.length) {
+    if (rc && (_view === 'graph' || _view === 'trace')) {
+      setText('s-dom', rc.domain);
+      setText('s-mem', rc.memory);
+      if (meta && meta.memory_count != null && meta.memory_count > rc.memory) {
+        setTitle('s-mem', meta.memory_count + ' in store (' + rc.memory + ' shown)');
+      }
+      setText('s-ent', rc.nodes - rc.domain - rc.memory - rc.discussion);
+      setText('s-disc', rc.discussion);
+      setText('s-nodes', rc.nodes);
+      setText('s-edge', rc.edges);
+    } else if (d && d.nodes && d.nodes.length) {
       var c = { domain: 0, memory: 0, discussion: 0 };
       for (var i = 0; i < d.nodes.length; i++) {
         var k = d.nodes[i].kind || d.nodes[i].type || '';

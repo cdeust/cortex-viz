@@ -160,28 +160,25 @@
     container.innerHTML = '';
     var handle = { destroy: function () {}, select: function () {},
                    data: data, append: function () { return { addedNodes: 0, addedEdges: 0 }; } };
-    // Renderer selection (genuine-scaling decision, Mandelbrot+Thompson
-    // 2026-06-14). The datashader tile-pyramid is O(pixels-on-screen) ≈ O(1)
-    // in node count, so it is the DEFAULT for any graph the D3 force-graph
-    // cannot render honestly. The D3 force-graph pins ~11.8k nodes before it
-    // chokes and starts truncating, so it is used only when:
-    //   * the caller explicitly asks for it (``?viz=force``), OR
-    //   * the loaded graph is small (< D3_FORCE_NODE_MAX) — at that scale the
-    //     force layout is still honest and gives richer edge inspection.
-    // ``?viz=tilemap`` remains an explicit override that forces the pyramid.
-    // The tilemap module handles its own data fetching (/api/quadtree,
-    // /api/tile/*) so we don't pass it the cached graph.
-    // T2/T3 threshold note: above ~200k nodes a single global DrL layout
-    // exceeds the 5-min budget — switch to a hierarchical multilevel layout
-    // (coarsen via fractal_clustering, per-community DrL, persist by zoom
-    // band). Not implemented at T1 (today's N≈150k).
-    var D3_FORCE_NODE_MAX = 11000;
+    // Renderer selection. The D3 force-graph is the DEFAULT: it shows the
+    // information that makes the view useful — node labels, edges, and the
+    // methodology structure — and it is the renderer users actually read.
+    // The deck.gl GPU scatterplot (``?viz=tilemap``) is an EXPLICIT opt-in
+    // for raw-scale point-cloud inspection: it renders 1M+ pickable points
+    // but carries no labels/edges, so it is never auto-selected — a slightly
+    // truncated-but-legible force graph beats a complete-but-unreadable dot
+    // field. The scatterplot module fetches its own data (/api/quadtree).
+    // T2/T3 scale note: a genuinely huge corpus (≫200k) needs a hierarchical
+    // multilevel force layout (coarsen via fractal_clustering, per-community
+    // layout, persist by zoom band) so the force-graph stays both legible
+    // AND complete — that is the real path to the full ecosystem view, not
+    // the label-less scatterplot. Not implemented yet.
     var qs = (window.location && window.location.search) || '';
-    var nodeCount = (data && data.nodes && data.nodes.length) || 0;
     var wantForce = qs.indexOf('viz=force') !== -1;
     var wantTilemap = qs.indexOf('viz=tilemap') !== -1;
-    var smallGraph = nodeCount > 0 && nodeCount < D3_FORCE_NODE_MAX;
-    var useTilemap = !wantForce && (wantTilemap || !smallGraph);
+    // Force-graph by default; scatterplot ONLY on explicit ?viz=tilemap
+    // (and ?viz=force always wins if both are somehow present).
+    var useTilemap = wantTilemap && !wantForce;
     if (useTilemap
         && window.JUG && typeof window.JUG.mountTilemap === 'function') {
       var p = window.JUG.mountTilemap(container);
@@ -199,10 +196,32 @@
     return handle;
   }
 
+  // Deterministic string → [0,1) hash (FNV-1a). Used for stable per-node
+  // jitter so re-mounts reproduce the identical layout (no re-shuffle).
+  function _hash01(s) {
+    var h = 2166136261;
+    for (var i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = (h * 16777619) >>> 0;
+    }
+    return (h >>> 0) / 4294967296;
+  }
+
   function mount(container, data) {
     var d3 = window.d3;
     var wfg = window.JUG._wfg;
-    var nodes = (data.nodes || []).map(function (n) { return Object.assign({}, n); });
+    var nodes = (data.nodes || []).map(function (n) {
+      var c = Object.assign({}, n);
+      // Strip server-provided world coords. /api/graph/full ships x/y in
+      // [-1,1] world space (domain hubs at 0,0), which clones EVERY node onto
+      // a ~2px pile at the screen origin — the force sim then cannot fan 64k+
+      // nodes out and collapses into an unreadable ball. v3.14.1 had NO server
+      // coords: d3 seeds a phyllotaxis spread and slotForce fans nodes to
+      // their deterministic radial-shell slots, which scaled cleanly to 338k+
+      // nodes. The client slot layout owns positioning, not the server.
+      delete c.x; delete c.y; delete c.vx; delete c.vy; delete c.fx; delete c.fy;
+      return c;
+    });
     // For very large graphs (>15k nodes) skip the simulation-visible
     // edges entirely — symbol→file/symbol→symbol edges number in the
     // tens of thousands and d3.forceLink on that many pairs freezes
@@ -243,6 +262,23 @@
     var width  = container.clientWidth  || window.innerWidth;
     var height = container.clientHeight || window.innerHeight;
 
+    // Report the ACTUAL rendered topology so the HUD legend matches the canvas.
+    // The legend used to read JUG.state.lastData, which accumulates every node
+    // ever appended and is never pruned — so after a view switch it shows the
+    // prior view's count (galaxy canvas, trace count) and over-reports edges the
+    // renderer filtered (EXTREME `calls` + dangling). These are the exact node
+    // and edge arrays this render draws, with the same kind breakdown polling.js
+    // needs (entities = nodes − domain − memory − discussion).
+    var _rc = { nodes: nodes.length, edges: edges.length,
+                domain: 0, memory: 0, discussion: 0 };
+    for (var _rci = 0; _rci < nodes.length; _rci++) {
+      var _rk = nodes[_rci].kind || nodes[_rci].type || '';
+      if (_rk === 'domain') _rc.domain++;
+      else if (_rk === 'memory') _rc.memory++;
+      else if (_rk === 'discussion') _rc.discussion++;
+    }
+    if (window.JUG) window.JUG.__wfgRendered = _rc;
+
     // Topology prep uses the FULL edge set (parent-file map needs
     // `defined_in` edges) but the simulation only sees the rendered set.
     var ctx = prepareTopology(nodes, data.edges || [], width, height);
@@ -277,8 +313,13 @@
       } else {
         ox = dx / d; oy = dy / d;
       }
-      var pastFile = 30 + Math.random() * 120;  // 30..150 px past file
-      var angJitter = (Math.random() - 0.5) * 0.15;  // ±4° lateral spread
+      // DETERMINISTIC jitter keyed on the symbol id (not Math.random): a
+      // re-mount (every live activity append re-runs mount()) must reproduce
+      // the IDENTICAL layout, or the whole galaxy re-shuffles on every
+      // streamed action. Two independent hashes → distance + angle.
+      var _h1 = _hash01(pn.id), _h2 = _hash01(pn.id + '~a');
+      var pastFile = 30 + _h1 * 120;  // 30..150 px past file
+      var angJitter = (_h2 - 0.5) * 0.15;  // ±4° lateral spread
       var cs = Math.cos(angJitter), sn = Math.sin(angJitter);
       var rx = ox * cs - oy * sn;
       var ry = ox * sn + oy * cs;
@@ -316,6 +357,23 @@
       // doesn't create long-range feedback with the multi-centroid
       // attraction; domains still repel each other via interdomain.
       sim.force('charge', d3.forceManyBody().strength(chargeStrength).distanceMax(180));
+    }
+
+    // LARGE galaxy: place every node AT its deterministic slot before the sim
+    // runs, so it STARTS at the target radial-shell layout (the v3.14.1 look)
+    // instead of cold-starting from a phyllotaxis spread and easing 65k nodes
+    // in over ~3.5 s while redrawing all of them each tick. Then decay fast —
+    // the sim only does a brief collide de-overlap and stops. Net effect: the
+    // initial paint AND every live-activity re-mount render the structured
+    // galaxy almost immediately, so the graph stays FLUID. Symbols keep the
+    // outward-ray pre-seed assigned above; everything else snaps to slotOf.
+    if (nodes.length > 15000) {
+      for (var sp = 0; sp < nodes.length; sp++) {
+        var spn = nodes[sp];
+        var sps = ctx.slotOf[spn.id];
+        if (sps) { spn.x = sps.x; spn.y = sps.y; }
+      }
+      sim.alphaDecay(0.12);  // ~50 ticks to a brief de-overlap, then halt
     }
 
     var useCanvas = nodes.length > CANVAS_THRESHOLD;
@@ -575,8 +633,12 @@
     // (has_session), session→event + event→event (step / next), and
     // action→file (read/edit/write/run). Iterate to a fixed point so a
     // file reached only via action→file still resolves to its domain.
+    // `discusses`/`remembers` attach discussion + memory BRANCH nodes to the
+    // spine (they hang off a prompt/action without advancing it); they MUST be
+    // here too, or those branch nodes never inherit a domain, fail the
+    // anchored-domain gate in computeSlots, and pile at the origin as a fan.
     var _traceEdgeKinds = { has_session: 1, step: 1, next: 1,
-      read: 1, edit: 1, write: 1, run: 1 };
+      read: 1, edit: 1, write: 1, run: 1, discusses: 1, remembers: 1 };
     for (var _pass = 0; _pass < 6; _pass++) {
       var _changed = false;
       for (var _ei = 0; _ei < edges.length; _ei++) {
@@ -648,7 +710,7 @@
       adj[e.source][e.target] = true; adj[e.target][e.source] = true;
     });
 
-    var slotOf = computeSlots(nodes, domains, anchors, domainOf, primaryHub, parentFile, cx, cy, edges, byId);
+    var slotOf = computeSlots(nodes, domains, anchors, domainOf, primaryHub, parentFile, cx, cy, edges, byId, isTrace);
 
     return { byId: byId, nodes: nodes, edges: edges, domains: domains,
       anchors: anchors, domainOf: domainOf, primaryHub: primaryHub,
@@ -667,7 +729,7 @@
 
   // Assign each non-domain node a target (x,y) slot expressing the hierarchy:
   //   domain → L1 (setup) → L2 (tools) → L3 (files);  discussions lane;  memories lane.
-  function computeSlots(nodes, domains, anchors, domainOf, primaryHub, parentFile, cx, cy, edges, byId) {
+  function computeSlots(nodes, domains, anchors, domainOf, primaryHub, parentFile, cx, cy, edges, byId, isTrace) {
     // Group non-domain nodes by (domain, kind).
     var groups = {};
     for (var i = 0; i < nodes.length; i++) {
@@ -707,6 +769,31 @@
       }
     }
 
+    // ── Trace file → session map ──────────────────────────────────────────
+    // Trace file nodes carry no session_id (session_trace._file_node emits only
+    // id/kind/label/path), so they can't self-identify a session disk. But each
+    // file is linked to the ACTION that touched it via a read/edit/write/run
+    // verb edge, and actions DO carry session_id. Resolve each file to the
+    // session of the first action that touched it, so the bySession grouping
+    // below can pack the file into that session's disk (outer band) instead of
+    // flinging it to the orphan ring. Galaxy files use tool_used_file edges (not
+    // these verbs) so this map stays empty for them — they fall through to L3.
+    var fileSession = {};
+    if (edges && edges.length) {
+      var _verbKinds = { read: 1, edit: 1, write: 1, run: 1 };
+      for (var vfi = 0; vfi < edges.length; vfi++) {
+        var ve = edges[vfi];
+        if (!_verbKinds[ve.kind]) continue;
+        var vaId = typeof ve.source === 'object' ? ve.source.id : ve.source;
+        var vbId = typeof ve.target === 'object' ? ve.target.id : ve.target;
+        var vaN = byId[vaId], vbN = byId[vbId];
+        var vAct = vaN && vaN.kind === 'action' ? vaN : (vbN && vbN.kind === 'action' ? vbN : null);
+        var vFil = vaN && vaN.kind === 'file' ? vaN : (vbN && vbN.kind === 'file' ? vbN : null);
+        if (!vAct || !vFil || !vAct.session_id) continue;
+        if (!fileSession[vFil.id]) fileSession[vFil.id] = 'session:' + vAct.session_id;
+      }
+    }
+
     Object.keys(groups).forEach(function (domId) {
       var a = anchors[domId];
       var outward = Math.atan2(a.y - cy, a.x - cx);  // radially outward from graph center
@@ -730,10 +817,30 @@
       // so one disk forms per scope with ZERO trace-path changes —
       // trace nodes have no `cluster` and fall back to session:<id>.
       var bySession = {};   // clusterKey -> [nodes]
-      ['prompt', 'action', 'file',
-       'wiki_page', 'entity', 'symbol', 'memory', 'prd'].forEach(function (kind) {
+      // Kinds eligible for a session/lens disk. The guard below admits a node
+      // ONLY if it carries a `cluster` (cross-lens) or `session_id` (trace) —
+      // galaxy entity/symbol/file/memory have neither, so they're skipped here
+      // and placed by their dedicated kind-lane (L3/L5/memories) downstream.
+      //
+      // ``discussion`` is TRACE-ONLY: trace discussions (assistant turns) carry
+      // a session_id and MUST pack into their session disk (otherwise they fall
+      // to the origin as a radiating fan — the "trace breaks as we add nodes"
+      // report). But galaxy discussion-SUMMARY nodes ALSO carry a session_id,
+      // and in the galaxy they belong in the discussions LANE, not a disklet —
+      // so only admit discussions when this is a trace layout.
+      var clusterKinds = ['prompt', 'action', 'file',
+                          'wiki_page', 'entity', 'symbol', 'memory', 'prd'];
+      if (isTrace) clusterKinds.push('discussion');
+      clusterKinds.forEach(function (kind) {
         (g[kind] || []).forEach(function (n) {
-          var sid = n.cluster || ('session:' + (n.session_id || ''));
+          // cluster (cross-lens) → session_id (trace prompt/action/discussion/
+          // memory) → fileSession (trace files, resolved via their action's
+          // verb edge). A node matching none belongs to no disk (galaxy
+          // entity/symbol/file) and is left to its kind-lane downstream.
+          var sid = n.cluster
+            || (n.session_id ? 'session:' + n.session_id : null)
+            || fileSession[n.id];
+          if (!sid) return;
           (bySession[sid] = bySession[sid] || []).push(n);
         });
       });
@@ -773,37 +880,45 @@
         });
         return { node: sessNodeBySid[sid] || null, items: items, rad: clusterRadius(items.length) };
       });
-      // Largest disks first → stable packing, big clusters anchor the ring.
-      clusters.sort(function (a2, b2) { return b2.rad - a2.rad; });
-      var maxRad = clusters.length ? clusters[0].rad : 0;
-
-      // Total angular width of all disks at ring radius R (a disk of radius
-      // r at distance R subtends 2·asin((r+gap)/R)). Infinity if any disk is
-      // wider than the ring (forces a grow). Grow R until the run fits 2π.
-      function totalAngle(R) {
-        var sum = 0;
-        for (var ci = 0; ci < clusters.length; ci++) {
-          var ratio = (clusters[ci].rad + GAP) / R;
-          if (ratio >= 1) return Infinity;
-          sum += 2 * Math.asin(ratio);
-        }
-        return sum;
-      }
-      var ringR = Math.max(SETUP_R + 60 + maxRad * 1.15, maxRad + GAP + 10);
-      for (var grow = 0; grow < 48 && totalAngle(ringR) > Math.PI * 2; grow++) {
-        ringR *= 1.18;
-      }
-
-      // Place each disk at a cumulative angle, the whole run centered on the
-      // domain's outward axis. Each disk consumes exactly its angular width.
-      var totA = totalAngle(ringR);
-      if (!isFinite(totA)) totA = Math.PI * 2;
-      var ang = outward - totA / 2;
+      // ── Collapse UNEXPANDED session hubs into ONE compact blob ──────────────
+      // A domain holds dozens of sessions but only a few are expanded (chain
+      // loaded). An unexpanded session is an items-less hub of identical tiny
+      // radius; left as individual disks they all share the same ring and, being
+      // small + numerous, smear into a single-file circle at a large radius (the
+      // "circle mapping" that appears the moment a session is selected and the
+      // re-mount re-runs this layout). Instead gather every empty hub into one
+      // dense phyllotaxis blob — a single cluster whose ITEMS are the hub nodes —
+      // so they pack as a tight satellite instead of a ring. Expanded sessions
+      // keep their own content disks; selecting one no longer reshuffles the rest
+      // into a circle.
+      var contentClusters = [];
+      var emptyHubNodes = [];
       clusters.forEach(function (c) {
-        var half = Math.asin(Math.min((c.rad + GAP) / ringR, 0.999));
-        ang += half;
-        var scx = a.x + ringR * Math.cos(ang);
-        var scy = a.y + ringR * Math.sin(ang);
+        if (c.items.length === 0 && c.node) emptyHubNodes.push(c.node);
+        else contentClusters.push(c);
+      });
+      if (emptyHubNodes.length) {
+        contentClusters.push({
+          node: null, items: emptyHubNodes, rad: clusterRadius(emptyHubNodes.length),
+        });
+      }
+      clusters = contentClusters;
+      // Largest disks first → each ring's thickness is set by its biggest disk,
+      // and big disks land in the inner rings (stable, dense packing).
+      clusters.sort(function (a2, b2) { return b2.rad - a2.rad; });
+
+      // ── GRAVITY-PACK session disks tight around the domain hub ──────────────
+      // Concentric rings (the prior fix) placed disks at INCREASING radii, so a
+      // domain with many expanded sessions pushed the bulk into outer rings — a
+      // big circle with a hollow centre, the domain hub stranded in the middle
+      // (repeated report: "circle placement, should gravitate near the domain").
+      // Instead pack like gravity: each disk (largest first) takes the position
+      // CLOSEST to the hub that overlaps neither an already-placed disk nor the
+      // hub's clearance. The cluster fills OUTWARD from the domain anchor — dense,
+      // centred ON the domain, no ring and no hollow centre. The galaxy never
+      // reaches this path (its `clusters` are empty), so this is trace/lens-only.
+      var HUB_CLEARANCE = 48;                    // px, kept clear around the domain hub
+      function placeDisk(c, scx, scy) {
         if (c.node) slotOf[c.node.id] = { x: scx, y: scy };  // session hub = disk center
         c.items.forEach(function (n, k) {
           // phyllotaxis: r = c·√k, angle = k·goldenAngle → even packing;
@@ -812,16 +927,37 @@
           var aa = (k + 1) * GOLDEN;
           slotOf[n.id] = { x: scx + rr * Math.cos(aa), y: scy + rr * Math.sin(aa) };
         });
-        ang += half;
-      });
-      // Files with no resolvable session: small ring just past the
-      // session band; verb links draw the connection to their action.
-      var orphanI = 0;
-      (g.file || []).forEach(function (n) {
-        if (slotOf[n.id]) return;
-        var t = outward + (orphanI++) * GOLDEN;
-        var r = ringR + maxRad + 30 + (orphanI % 5) * 12;
-        slotOf[n.id] = { x: a.x + r * Math.cos(t), y: a.y + r * Math.sin(t) };
+      }
+      // The hub itself is a central obstacle so disks ring it without burying it.
+      var placed = [{ x: a.x, y: a.y, r: HUB_CLEARANCE }];
+      function gravitySlot(rad) {
+        // Archimedean spiral out from the anchor; the spiral grows ~one disk
+        // width per turn and is sampled at a near-uniform arc step. The first
+        // sample that clears every placed disk (by GAP) is the closest free spot.
+        var theta = 0;
+        for (var iter = 0; iter < 20000; iter++) {
+          var rr = (rad + GAP) * theta / (2 * Math.PI);
+          var x = a.x + rr * Math.cos(theta);
+          var y = a.y + rr * Math.sin(theta);
+          var ok = true;
+          for (var p = 0; p < placed.length; p++) {
+            var dx = x - placed[p].x, dy = y - placed[p].y;
+            var minD = rad + placed[p].r + GAP;
+            if (dx * dx + dy * dy < minD * minD) { ok = false; break; }
+          }
+          if (ok) return { x: x, y: y };
+          // arc-length step ≈ 0.6·rad, clamped so we always sample ≥12 pts/turn.
+          theta += Math.min(0.5, Math.max(0.08, (rad * 0.6) / Math.max(rr, 1)));
+        }
+        return { x: a.x, y: a.y };
+      }
+      var outerRingR = HUB_CLEARANCE;            // outermost extent — used by the orphan fallback
+      clusters.forEach(function (c) {
+        var pos = gravitySlot(c.rad);
+        placed.push({ x: pos.x, y: pos.y, r: c.rad });
+        placeDisk(c, pos.x, pos.y);
+        var reach = Math.hypot(pos.x - a.x, pos.y - a.y) + c.rad;
+        if (reach > outerRingR) outerRingR = reach;
       });
 
       // L2: tool_hubs at fixed per-tool angles within the setup sector.
@@ -836,8 +972,12 @@
       });
 
       // L3: files orbit their primary tool_hub (same angle + small jitter).
+      // bySession placement wins: a file already slotted into a session/lens
+      // disk above is skipped here (mirrors the orphan-files guard) so the
+      // galaxy hub-orbit lane never clobbers a trace file's session-disk slot.
       var filesByHub = {};
       (g.file || []).forEach(function (f) {
+        if (slotOf[f.id]) return;
         var hid = primaryHub[f.id];
         if (!filesByHub[hid]) filesByHub[hid] = [];
         filesByHub[hid].push(f);
@@ -854,6 +994,19 @@
         });
       });
 
+      // True last-resort: a file in NO session disk (bySession) and NO tool-hub
+      // orbit (L3) — e.g. a trace file whose action lacked a session_id. Runs
+      // AFTER L3 so it never pre-empts the galaxy hub-orbit lane (that ordering
+      // bug flung every galaxy file to this ring). Skips anything already
+      // placed, so it only catches genuine orphans.
+      var orphanI = 0;
+      (g.file || []).forEach(function (n) {
+        if (slotOf[n.id]) return;
+        var t = outward + (orphanI++) * GOLDEN;
+        var r = outerRingR + 30 + (orphanI % 5) * 12;
+        slotOf[n.id] = { x: a.x + r * Math.cos(t), y: a.y + r * Math.sin(t) };
+      });
+
       // L1: skills, hooks, commands, agents — fanned inner ring.
       var setup = [];
       setupKinds.forEach(function (k) { (g[k] || []).forEach(function (x) { setup.push(x); }); });
@@ -866,24 +1019,32 @@
         });
       }
 
-      // Discussions lane (opposite side from setup, one side).
+      // Discussions lane (opposite side from setup, one side). Galaxy-only in
+      // practice: trace discussions are pre-placed into their session disk
+      // above (clusterKinds includes 'discussion' when isTrace), so the guard
+      // makes this lane a no-op for them — bySession placement wins.
       var disc = g.discussion || [];
       if (disc.length) {
         var center = outward + SECTOR_SIDE_ANGLE;
         var arc2 = SECTOR_SIDE_HALF * 2 + Math.min(Math.PI / 3, disc.length * 0.04);
         disc.forEach(function (n, i) {
+          if (slotOf[n.id]) return;
           var t = center + ((i + 0.5) / disc.length - 0.5) * arc2;
           var r = DISC_R + (i % 3) * 6;
           slotOf[n.id] = { x: a.x + r * Math.cos(t), y: a.y + r * Math.sin(t) };
         });
       }
 
-      // Memories lane (opposite side from setup, other side).
+      // Memories lane (opposite side from setup, other side). Like discussions:
+      // trace memory nodes carry a session_id and are pre-placed into their
+      // session disk above, so the guard skips them here; galaxy memories have
+      // no session_id and are placed by this lane as before.
       var mem = g.memory || [];
       if (mem.length) {
         var center2 = outward - SECTOR_SIDE_ANGLE;
         var arc3 = SECTOR_SIDE_HALF * 2 + Math.min(Math.PI / 2.5, mem.length * 0.03);
         mem.forEach(function (n, i) {
+          if (slotOf[n.id]) return;
           var t = center2 + ((i + 0.5) / mem.length - 0.5) * arc3;
           var r = MEM_R + (i % 4) * 8;
           slotOf[n.id] = { x: a.x + r * Math.cos(t), y: a.y + r * Math.sin(t) };

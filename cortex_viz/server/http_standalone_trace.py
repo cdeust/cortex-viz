@@ -28,8 +28,8 @@ from cortex_viz.server.trace_impact import (  # noqa: F401
     _ast_and_impact,
     _basename,
     _get_ast_source,
-    _impact_for_graph,
     _to_repo_relative,
+    impact_for_path,
 )
 
 
@@ -101,28 +101,75 @@ def serve_trace_chain(handler) -> None:
         send_json_error(handler, e)
 
 
-def _git_history(path: str) -> dict:
-    """Working-tree/last-commit diff + when-changed for one file."""
-    try:
-        from cortex_viz.infrastructure.git_diff import (
-            find_git_root,
-            get_file_diff,
-            resolve_file,
-        )
-        from cortex_viz.server.http_file_diff import _git_root_for_name
+def _file_git_root_rel(path: str) -> tuple[str | None, str]:
+    """``(git_root, repo_relative_path)`` for a file — self-contained.
 
-        # Resolve the repo from the FILE's own path (graph nodes carry
-        # absolute paths), not the server CWD — which is never a repo.
-        root = _git_root_for_name(path, find_git_root)
+    The ``git_diff`` / ``http_file_diff`` helpers were never ported in the
+    extraction, which broke the file panel's git sections. This resolves the
+    repo from the FILE's own directory (graph nodes carry absolute paths; the
+    server CWD is never the repo). Returns ``(None, cleaned_path)`` outside a
+    repo so callers report "no git data" rather than erroring.
+    """
+    import os
+    import subprocess
+    from pathlib import Path
+
+    p = (path or "").replace("\\", "/")
+    if not p.startswith("/"):
+        return None, p.lstrip("./")
+    try:
+        real = os.path.realpath(p)
+        res = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True,
+            cwd=str(Path(real).parent), timeout=5,
+        )
+        root = res.stdout.strip() if res.returncode == 0 else ""
+        if root:
+            return root, str(Path(real).relative_to(root))
+    except Exception:
+        pass
+    return None, p.lstrip("/")
+
+
+def _git_history(path: str) -> dict:
+    """Working-tree (or last-commit) diff for one file — self-contained git."""
+    try:
+        import subprocess
+
+        root, rel = _file_git_root_rel(path)
         if root is None:
             return {"available": False}
-        rel = resolve_file(path, root) or path
-        diff = get_file_diff(rel, root)
+        out = subprocess.run(
+            ["git", "-C", root, "diff", "--unified=3", "--", rel],
+            capture_output=True, text=True, timeout=8,
+        )
+        diff = out.stdout
+        diff_type = "working"
+        if not diff.strip():
+            # No unstaged change — show how the last commit touched the file.
+            out = subprocess.run(
+                ["git", "-C", root, "show", "--format=", "--unified=3", "HEAD",
+                 "--", rel],
+                capture_output=True, text=True, timeout=8,
+            )
+            diff = out.stdout
+            diff_type = "last-commit"
+        if not diff.strip():
+            return {"available": True, "diff_type": "none", "lines": []}
+        lines = []
+        for ln in diff.splitlines():
+            t = "ctx"
+            if ln.startswith("+") and not ln.startswith("+++"):
+                t = "add"
+            elif ln.startswith("-") and not ln.startswith("---"):
+                t = "del"
+            lines.append({"type": t, "text": ln})
         return {
             "available": True,
-            "diff_type": diff.get("diff_type"),
-            "lines": diff.get("lines", []),
-            "truncated": diff.get("truncated", False),
+            "diff_type": diff_type,
+            "lines": lines[:400],
+            "truncated": len(lines) > 400,
         }
     except Exception as exc:  # pragma: no cover - defensive
         return {"available": False, "error": str(exc)}
@@ -139,14 +186,12 @@ def _git_versions(path: str, limit: int = 25) -> dict:
     try:
         import subprocess
 
-        from cortex_viz.infrastructure.git_diff import find_git_root, resolve_file
-        from cortex_viz.server.http_file_diff import _git_root_for_name
-
-        # Resolve the repo from the file's own path, not the server CWD.
-        root = _git_root_for_name(path, find_git_root)
+        # Self-contained (the git_diff helpers were never ported). Resolve the
+        # repo from the file's own path, not the server CWD.
+        root, rel = _file_git_root_rel(path)
         if root is None:
             return {"available": False}
-        rel = (resolve_file(path, root) or path or "").replace("\\", "/")
+        rel = (rel or path or "").replace("\\", "/")
         # %x1f = unit separator (safe field delim); %x1e = record separator.
         fmt = "%h%x1f%aI%x1f%an%x1f%s%x1e"
         out = subprocess.run(
@@ -240,33 +285,11 @@ def serve_trace_impact(handler) -> None:
         # "/Users/.../mcp_server/x.py" into "Users/.../mcp_server/x.py",
         # matching no File.id → every diagram returned "not_indexed". Strip
         # the git root so the exact ``f.id =`` match lands.
-        rel = _to_repo_relative(path)
         # Several graphs may contain the same relative path (a stale legacy
-        # index AND the fresh Cortex code-graph). The first hit can be the
-        # stale one with members-only and no edges, so pick the RICHEST
-        # result (most call/import edges) across all graphs that have it.
-        result = None
-        best_edges = -1
-        for gp in ap_bridge.resolve_graph_paths():
-            try:
-                r = _impact_for_graph(gp, rel)
-            except Exception:
-                r = None
-            if r is None:
-                continue
-            n = (
-                len(r.get("downstream", []))
-                + len(r.get("upstream", []))
-                + len(r.get("members", []))
-                + len(r.get("processes", []))
-                + len(r.get("references", []))
-                + len(r.get("referenced_by", []))
-                + len(r.get("depends_on", []))
-                + len(r.get("depended_on_by", []))
-            )
-            if n > best_edges:
-                best_edges = n
-                result = r
+        # index AND the fresh Cortex code-graph). impact_for_path picks the
+        # RICHEST result (most call/import edges) across all graphs — the same
+        # lookup the live activity-impact pass (P3) uses.
+        result = impact_for_path(path)
 
         if result is None:
             send_json_ok(

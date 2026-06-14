@@ -175,6 +175,7 @@ def read_positions_in_bbox(
     min_y: float,
     max_x: float,
     max_y: float,
+    limit: int | None = None,
 ) -> list[tuple[str, float, float, str]]:
     """Return positions intersecting the world-space bbox.
 
@@ -182,13 +183,23 @@ def read_positions_in_bbox(
     nodes whose coordinates fall inside the tile's world-space cell.
     The B-tree on (x, y) (see ``INDEXES_DDL`` in pg_schema.py) keeps
     this query under 5 ms even for 10M-row tables.
+
+    ``limit`` bounds the read so the tile handler can PROBE whether a
+    tile is too dense to render raw without paying for a full read of a
+    pathologically large bbox: pass ``cap + 1`` and, if exactly that many
+    rows come back, the true count exceeds ``cap`` (switch to the LOD
+    band). ``None`` reads the whole bbox (the common, bounded case).
     """
     sql = (
         "SELECT node_id, x, y, kind FROM workflow_graph_layout "
         "WHERE x BETWEEN %s AND %s AND y BETWEEN %s AND %s"
     )
+    params: tuple = (min_x, max_x, min_y, max_y)
+    if limit is not None:
+        sql += " LIMIT %s"
+        params = params + (int(limit),)
     with _conn(store) as conn, conn.cursor() as cur:
-        cur.execute(sql, (min_x, max_x, min_y, max_y))
+        cur.execute(sql, params)
         return [
             (r["node_id"], float(r["x"]), float(r["y"]), r["kind"])
             for r in cur.fetchall()

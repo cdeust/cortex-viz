@@ -45,6 +45,265 @@ def serve_graph(handler, store) -> None:
         send_json_error(handler, e)
 
 
+def serve_graph_full(handler, store) -> None:
+    """GET /api/graph/full — the COMPLETE graph from the durable PG snapshot.
+
+    Serves the persisted full graph (every entity, AST symbol, memory, file,
+    command + all edges — the README-hero view) directly from
+    ``workflow_graph_snapshot``. Unlike ``/api/graph`` this does NOT read the
+    volatile in-process build cache and never lazy-kicks a build, so it is
+    stable across the build's rebuild loop: once a build has completed once,
+    the snapshot is always available and identical.
+
+    The stored payload is already gzip(JSON); it is streamed verbatim with
+    ``Content-Encoding: gzip`` (the browser inflates transparently) — no
+    server-side decode/re-encode. When no snapshot exists yet (no build has
+    finished since install) returns 503 ``{"reason":"no_snapshot"}`` so the
+    client falls back to the progressive ``/api/graph`` path.
+    """
+    try:
+        from cortex_viz.infrastructure import snapshot_pg_store
+
+        snap = snapshot_pg_store.read_latest_snapshot(store)
+    except Exception as e:  # pragma: no cover - defensive
+        send_json_error(handler, e)
+        return
+    if snap is None:
+        body = b'{"status":"warming","reason":"no_snapshot"}'
+        handler.send_response(503)
+        handler.send_header("Content-Type", "application/json")
+        handler.send_header("Content-Length", str(len(body)))
+        handler.end_headers()
+        handler.wfile.write(body)
+        return
+    payload = snap["payload_gzip"]
+    handler.send_response(200)
+    handler.send_header("Content-Type", "application/json")
+    handler.send_header("Content-Encoding", "gzip")
+    handler.send_header("Content-Length", str(len(payload)))
+    handler.send_header("Cache-Control", "max-age=30")
+    handler.send_header("X-Graph-Node-Count", str(snap["node_count"]))
+    handler.send_header("X-Graph-Edge-Count", str(snap["edge_count"]))
+    handler.end_headers()
+    handler.wfile.write(payload)
+
+
+import threading as _threading
+
+# Serializes the live blast-radius passes — the AP bridge shares ONE event
+# loop, so concurrent impact lookups would collide (relationship queries
+# silently return 0). One pass at a time; a skipped edit re-triggers on the
+# next save.
+_impact_lock = _threading.Lock()
+
+
+def _trigger_impact(store, file_path: str) -> None:
+    """P3 — spawn a NON-BLOCKING blast-radius pass for an edited file.
+
+    Asks AP for the file's impact (``impact_for_path``), maps it to directional
+    nodes/edges (``impact_graph.impact_to_graph``) hung off the same
+    ``file:<path>`` node the edit action points to, and emits them onto the
+    live activity stream — so the graph shows what the change affects within a
+    second of the save. Runs in a daemon thread so the ingest POST returns
+    immediately; best-effort, never raises into the hook path.
+    """
+    if not file_path:
+        return
+
+    def _run() -> None:
+        import sys
+
+        if not _impact_lock.acquire(blocking=False):
+            return  # a pass is already running; the next edit re-triggers
+        try:
+            from cortex_viz.core.impact_graph import impact_to_graph
+            from cortex_viz.server.activity_stream import stream as _astream
+            from cortex_viz.server.trace_impact import impact_for_path
+
+            imp = impact_for_path(file_path)
+            if not imp:
+                return
+            frag = impact_to_graph(file_path, imp)
+            if frag["nodes"] or frag["edges"]:
+                _astream().emit("activity", frag["nodes"], frag["edges"])
+                print(
+                    f"[cortex] live impact: {len(frag['nodes'])}N {len(frag['edges'])}E "
+                    f"for {file_path}",
+                    file=sys.stderr,
+                )
+        except Exception as exc:  # pragma: no cover - defensive
+            print(f"[cortex] live impact pass failed: {exc}", file=sys.stderr)
+        finally:
+            _impact_lock.release()
+
+    _threading.Thread(
+        target=_run, name="cortex-impact-pass", daemon=True
+    ).start()
+
+
+def serve_activity_ingest(handler, store) -> None:
+    """POST /api/activity — ingest ONE captured Claude action (hook event).
+
+    The producer is a Claude Code hook (``activity_capture.py``), not a
+    browser — host-guarded to 127.0.0.1 but not same-origin. Body is the raw
+    hook payload ``{tool_name, tool_input, tool_response, cwd, session_id,
+    ts, event_type}``. We normalize it to the activity taxonomy, append it to
+    the durable ``session_activity`` log, and emit its directional nodes/edges
+    onto the live activity stream so every open ``/api/activity/stream``
+    subscriber paints it within ~1 s. Fire-and-forget: a malformed or
+    actionless event returns 204 and never errors the hook.
+    """
+    import json as _json
+
+    from cortex_viz.core.activity_graph import event_to_graph, normalize_event
+    from cortex_viz.infrastructure import activity_store
+    from cortex_viz.server.activity_stream import stream as _activity_stream
+
+    try:
+        length = int(handler.headers.get("Content-Length") or 0)
+        raw = handler.rfile.read(length) if length else b""
+        event = _json.loads(raw or b"{}")
+    except (ValueError, OSError):
+        handler.send_response(400)
+        handler.end_headers()
+        return
+    row = normalize_event(event)
+    if row is None:
+        handler.send_response(204)
+        handler.end_headers()
+        return
+    try:
+        new_id = activity_store.record_activity(store, row)
+        row["seq"] = new_id
+        frag = event_to_graph(row)
+        _activity_stream().emit("activity", frag["nodes"], frag["edges"])
+        # P3 — a file edit/write fires a live blast-radius pass (AP impact →
+        # directional edges into the same file node), non-blocking.
+        if row.get("action") in ("edit", "write") and row.get("target_kind") == "file":
+            _trigger_impact(store, (row.get("target_id") or "")[len("file:"):])
+    except Exception as exc:  # pragma: no cover - defensive; never error the hook
+        body = _json.dumps({"ok": False, "error": str(exc)}).encode("utf-8")
+        handler.send_response(200)
+        handler.send_header("Content-Type", "application/json")
+        handler.send_header("Content-Length", str(len(body)))
+        handler.end_headers()
+        handler.wfile.write(body)
+        return
+    body = _json.dumps({"ok": True, "id": new_id, "action": row["action"]}).encode(
+        "utf-8"
+    )
+    handler.send_response(200)
+    handler.send_header("Content-Type", "application/json")
+    handler.send_header("Content-Length", str(len(body)))
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
+def serve_activity_stream(handler, store) -> None:
+    """GET /api/activity/stream — live SSE of session activity nodes/edges.
+
+    Replay-then-tail: on connect, replays the durable ``session_activity`` log
+    (``id > ?since``, default 0) so a fresh page paints the actions that
+    already happened, then blocks tailing the in-process activity stream for
+    new actions. Same wire format + client consumer (``appendGraphDelta``,
+    dedup-by-id) as ``/api/graph/events``, so the live spine merges into the
+    same graph. The stream is never server-closed (a session is open-ended);
+    the loop exits only on client disconnect.
+    """
+    from urllib.parse import parse_qs, urlparse
+
+    from cortex_viz.core.activity_graph import event_to_graph
+    from cortex_viz.infrastructure import activity_store
+    from cortex_viz.server.activity_stream import stream as _activity_stream
+    from cortex_viz.server.graph_event_stream import (
+        format_event,
+        format_heartbeat,
+    )
+    from cortex_viz.server.http_standalone_state import (
+        stream_closed,
+        stream_opened,
+    )
+
+    qs = parse_qs(urlparse(handler.path).query)
+    since = 0
+    if "since" in qs:
+        try:
+            since = int(qs["since"][0])
+        except (ValueError, IndexError):
+            since = 0
+
+    stream_opened()
+    try:
+        handler.send_response(200)
+        handler.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        handler.send_header("Cache-Control", "no-cache")
+        handler.send_header("Connection", "keep-alive")
+        handler.send_header("X-Accel-Buffering", "no")
+        handler.end_headers()
+
+        # Replay the durable log (id-keyed; node ids embed the id as seq, so
+        # any overlap with the live tail dedups on the client).
+        try:
+            for row in activity_store.read_recent(store, since_id=since):
+                frag = event_to_graph(row)
+                handler.wfile.write(format_event(int(row["id"]), {
+                    "label": "activity", "nodes": frag["nodes"],
+                    "edges": frag["edges"],
+                }))
+            handler.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            return
+
+        # Tail new emits from the in-process stream (start past its current
+        # end so we only deliver actions captured AFTER connect).
+        astream = _activity_stream()
+        cursor = astream.stats().get("count", 0)
+        while True:
+            saw_any = False
+            for idx, event in astream.subscribe(since=cursor, timeout=15.0):
+                try:
+                    handler.wfile.write(format_event(idx, event))
+                    handler.wfile.flush()
+                except (BrokenPipeError, ConnectionResetError):
+                    return
+                cursor = idx + 1
+                saw_any = True
+            if not saw_any:
+                try:
+                    handler.wfile.write(format_heartbeat())
+                    handler.wfile.flush()
+                except (BrokenPipeError, ConnectionResetError):
+                    return
+    finally:
+        stream_closed()
+
+
+def serve_prd(handler, store=None) -> None:
+    """GET /api/prd — PRD document/section nodes from discovered artifacts.
+
+    The third bridge's view (prd-spec-generator). Returns
+    ``{nodes, edges, available}`` from any ``prd-output/<run>/`` PRDs found on
+    disk. ``available`` is False with an empty graph when no PRD has been
+    generated yet (the stateless pipeline keeps no standing store) — the UI
+    simply shows nothing, no error.
+    """
+    try:
+        from cortex_viz.infrastructure import prd_bridge
+
+        frag = prd_bridge.read_prd_graph()
+        send_json_ok(
+            handler,
+            {
+                "available": bool(frag["nodes"]),
+                "nodes": frag["nodes"],
+                "edges": frag["edges"],
+                "meta": {"schema": "prd.v1", "source": "prd-spec-generator"},
+            },
+        )
+    except Exception as e:
+        send_json_error(handler, e)
+
+
 def serve_graph_events(handler, store=None) -> None:
     """GET /api/graph/events — Server-Sent Events stream of build batches.
 

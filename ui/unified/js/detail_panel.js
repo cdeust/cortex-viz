@@ -140,9 +140,15 @@
 
     // Trace nodes get their own renderer (header + expandable sections),
     // in THIS one panel. Galaxy-memory rendering below is bypassed.
+    // discussion/memory exist in BOTH views — in the galaxy they're rich
+    // session-summary / PG-memory cards (handled below); in trace they're
+    // single chain events whose `full` text the trace renderer shows. Gate
+    // those two kinds on the active view so neither path steals the other's.
     var _k = data.kind || data.type;
+    var _trace = !!(window.JUG && JUG.state && JUG.state.activeView === 'trace');
     if (_k === 'domain' || _k === 'session' || _k === 'action' ||
-        _k === 'prompt' || _k === 'file') {
+        _k === 'prompt' || _k === 'file' ||
+        ((_k === 'discussion' || _k === 'memory') && _trace)) {
       content.innerHTML = JUG._traceDetail.build(data);
       panel.classList.add('open');
       panel.classList.remove('minimized');
@@ -250,12 +256,15 @@
   var _enrichCache = {};
   var _lastSelectedId = null;     // closure-tracked; avoids depending on JUG state field name
   JUG.on('graph:selectNode', function(node) {
-    // Trace nodes (domain/session/action/prompt/file) render in this SAME
-    // panel via the trace-aware openDetailPanel branch — no second panel,
-    // no galaxy-memory PG enrichment.
+    // Trace nodes render in this SAME panel via the trace-aware
+    // openDetailPanel branch — no second panel, no galaxy-memory PG
+    // enrichment. discussion/memory are trace nodes ONLY while the trace view
+    // is active (in the galaxy they fall through to the rich PG-enriched path).
     var _k = node && (node.kind || node.type);
+    var _trace = !!(window.JUG && JUG.state && JUG.state.activeView === 'trace');
     if (_k === 'domain' || _k === 'session' || _k === 'action' ||
-        _k === 'prompt' || _k === 'file') {
+        _k === 'prompt' || _k === 'file' ||
+        ((_k === 'discussion' || _k === 'memory') && _trace)) {
       openDetailPanel(node);
       _lastSelectedId = node && node.id;
       return;

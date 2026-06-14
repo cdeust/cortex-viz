@@ -153,6 +153,19 @@ class MemoryReader:
         with pool.connection() as conn:
             return _MaterializedCursor(conn.execute(query, params))
 
+    def query(
+        self, sql: str, params: Any = None, *, batch: bool = False
+    ) -> list[dict[str, Any]]:
+        """Public read primitive: run ``sql`` and return all rows as dicts.
+
+        A thin, read-only wrapper over the pooled cursor so sibling
+        infrastructure modules (memory_browse, wiki_read) can own their own
+        SQL without reaching into ``_execute`` or duplicating pool handling.
+        Reads only — there is no commit; DML would be rolled back when the
+        pooled connection is returned.
+        """
+        return self._execute(sql, params, batch=batch).fetchall()
+
     def close(self) -> None:
         for pool in (self._interactive_pool, self._batch_pool):
             if pool is not None:

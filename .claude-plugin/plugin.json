@@ -1,0 +1,64 @@
+{
+  "name": "cortex-viz",
+  "description": "Standalone visualization MCP for Cortex — a live neural-graph galaxy of every project, file, symbol, memory, discussion and wiki page, plus a per-session execution trace. Read-only bridge over Cortex's shared PostgreSQL and the ~/.claude artifacts.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Clement Deust",
+    "email": "admin@ai-architect.tools"
+  },
+  "homepage": "https://github.com/cdeust/cortex-viz",
+  "repository": "https://github.com/cdeust/cortex-viz",
+  "license": "MIT",
+  "keywords": [
+    "visualization",
+    "graph",
+    "mcp",
+    "claude-code",
+    "cortex",
+    "knowledge-graph"
+  ],
+  "userConfig": {
+    "database_url": {
+      "type": "string",
+      "title": "Cortex database URL",
+      "description": "PostgreSQL connection string for the SHARED Cortex store this viz reads (postgresql://[user[:pass]@]host[:port]/dbname). Use the same value as the Cortex plugin. Leave as the default for a local install; your value persists across plugin updates.",
+      "default": "postgresql://127.0.0.1:5432/cortex"
+    }
+  },
+  "mcpServers": {
+    "cortex-viz": {
+      "command": "python3",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/scripts/launcher.py",
+        "cortex_viz"
+      ],
+      "env": {
+        "DATABASE_URL": "${user_config.database_url}"
+      }
+    }
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/cortex_viz/hooks/activity_capture.py PostToolUse"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/cortex_viz/hooks/activity_capture.py UserPromptSubmit"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -12,6 +12,9 @@
     var g = canvas.getContext('2d');
     var transform = d3.zoomIdentity;
     var hoverId = null, selectedId = null;
+    // Viewport cull bounds (world space), recomputed each draw(). Default to
+    // "everything visible" so the first frame before any zoom draws fully.
+    var _vMinX = -Infinity, _vMaxX = Infinity, _vMinY = -Infinity, _vMaxY = Infinity;
 
     var sel = d3.select(canvas);
     sel.call(d3.zoom().scaleExtent([0.15, 6]).on('zoom', function (ev) {
@@ -141,6 +144,10 @@
       var hideStructural = k < 0.9 && !focusId;
       for (var i = 0; i < ctx.edges.length; i++) {
         var e = ctx.edges[i];
+        // Cull: skip if the edge's bounding box is entirely off-screen.
+        var esx = e.source.x, etx = e.target.x, esy = e.source.y, ety = e.target.y;
+        if ((esx < _vMinX && etx < _vMinX) || (esx > _vMaxX && etx > _vMaxX) ||
+            (esy < _vMinY && ety < _vMinY) || (esy > _vMaxY && ety > _vMaxY)) continue;
         var dim = focusId && e.source.id !== focusId && e.target.id !== focusId;
         var act = focusId && (e.source.id === focusId || e.target.id === focusId);
         // When zoomed out and nothing is selected, skip the structural fan.
@@ -170,6 +177,8 @@
       for (var j = 0; j < ctx.nodes.length; j++) {
         var n = ctx.nodes[j];
         if (skipSymbols && n.kind === 'symbol' && !focusId) continue;
+        // Cull: skip nodes outside the viewport (the dominant cost at 64k).
+        if (n.x < _vMinX || n.x > _vMaxX || n.y < _vMinY || n.y > _vMaxY) continue;
         var r = wfg.nodeRadius(n);
         var isFocus = focusId === n.id;
         var isDim = focusId && n.id !== focusId && !adj[n.id];
@@ -241,6 +250,16 @@
       g.save();
       g.clearRect(0, 0, canvas.width, canvas.height);
       g.translate(transform.x, transform.y); g.scale(transform.k, transform.k);
+      // Viewport culling bounds (world space). Drawing all 64k nodes + 96k
+      // edges every frame made pan/zoom laggy; with these bounds drawNodes /
+      // drawEdges skip everything off-screen, so a frame costs O(visible),
+      // not O(N). Margin covers node radius + partially-visible edges.
+      var _ck = transform.k || 1;
+      var _m = 60 / _ck;
+      _vMinX = (0 - transform.x) / _ck - _m;
+      _vMaxX = (canvas.width - transform.x) / _ck + _m;
+      _vMinY = (0 - transform.y) / _ck - _m;
+      _vMaxY = (canvas.height - transform.y) / _ck + _m;
       var focusId = hoverId || selectedId;
       var adj = focusId ? ctx.adj[focusId] || {} : {};
       drawShells();

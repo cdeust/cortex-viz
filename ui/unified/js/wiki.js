@@ -63,7 +63,7 @@
   // ── Data ──
   function fetchPages() {
     container.innerHTML = '<div class="wiki-loading"><div class="wiki-loading-spinner"></div>Loading wiki index\u2026</div>';
-    fetch('/api/wiki/list')
+    fetch('/api/wiki/list', { cache: 'no-store' })
       .then(function(r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
@@ -531,7 +531,7 @@
 
     // Fire and forget — the grid populates async without blocking the
     // rest of the welcome render.
-    fetch('/api/wiki/projects')
+    fetch('/api/wiki/projects', { cache: 'no-store' })
       .then(function(r) { return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)); })
       .then(function(data) {
         var grid = document.getElementById('wiki-projects-grid');
@@ -722,7 +722,7 @@
     main.scrollTop = 0;
 
     Promise.all([
-      fetch('/api/wiki/page?path=' + encodeURIComponent(path)).then(function(r) {
+      fetch('/api/wiki/page?path=' + encodeURIComponent(path), { cache: 'no-store' }).then(function(r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
       }),

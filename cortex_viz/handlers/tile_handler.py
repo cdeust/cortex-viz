@@ -22,6 +22,14 @@ import re
 _LOD_REFINEMENT = 3
 # Pyramid max level == existing tile-pyramid max (z=10). source: same.
 _LOD_MAX_LEVEL = 10
+# Raw-render budget: render the ACTUAL points via datashader (its purpose
+# is rasterizing dense point clouds) up to this many points per tile; only
+# above it does the LOD coarse band kick in, so the overview stays a dense
+# field instead of ~64 representative dots. source: measured 2026-06-14 —
+# 64,658 rows read from workflow_graph_layout in 35 ms (psql, local PG);
+# datashader aggregation of that set ≈ 30-50 ms. Linear extrapolation:
+# 250,000 rows ≈ 135 ms read + ~50 ms render < the 200 ms tile budget.
+_RAW_RENDER_MAX = 250_000
 
 _PATH_RE = re.compile(r"^/api/tile/(\d+)/(\d+)/(\d+)\.png$")
 
@@ -37,13 +45,38 @@ def _read_rows(store, layout_pg_store, lod_pg_store, *, z, bbox):
     """Return the ``(id, x, y, kind)`` rows to render for tile zoom ``z``.
 
     Pre: ``bbox`` is ``(min_x, min_y, max_x, max_y)`` in world coords. Post:
-    when the coarse band applies (``L = z + 3 <= 10`` and a layout fingerprint
-    exists) returns ≤ ~64 LOD representatives in the bbox; otherwise returns the
-    RAW positions in the bbox (the z>=8 path, viewport-bounded by definition).
-    Falls back to RAW if the LOD read yields nothing (pyramid not yet built) so
-    a missing pyramid degrades gracefully instead of rendering an empty tile.
+    renders the ACTUAL points via a raw bbox read whenever the tile holds
+    ≤ ``_RAW_RENDER_MAX`` of them — datashader rasterizes a dense cloud, which
+    is the whole point of a datashader tile pyramid and keeps the overview a
+    real field rather than ~64 LOD dots. Only a genuinely over-dense tile
+    (raw count > the budget) falls back to the LOD coarse band, which is
+    bounded in N. The decision is made with a single bounded PROBE read
+    (``LIMIT _RAW_RENDER_MAX + 1``) so a pathological bbox never triggers a
+    full multi-million-row read.
+
+    Why raw-first (was LOD-first): the LOD band returns ~64 representatives
+    per tile, so the z=0 overview painted ~64 scattered dots instead of the
+    point cloud. datashader is designed to aggregate large point sets into a
+    fixed raster; at real corpus scale (tens of thousands of nodes) the raw
+    read is ~35 ms (measured). source: cortex-viz-scaling.md + 2026-06-14
+    measurement noted on ``_RAW_RENDER_MAX``.
     """
     min_x, min_y, max_x, max_y = bbox
+    raw = layout_pg_store.read_positions_in_bbox(
+        store,
+        min_x=min_x,
+        min_y=min_y,
+        max_x=max_x,
+        max_y=max_y,
+        limit=_RAW_RENDER_MAX + 1,
+    )
+    if len(raw) <= _RAW_RENDER_MAX:
+        # Common case: the tile fits the raw-render budget — datashader the
+        # real points into a dense field.
+        return raw
+
+    # Over-dense tile: fall back to the LOD coarse band (≤ ~64 reps/tile),
+    # bounded in N. Requires the pyramid for the live layout fingerprint.
     level = z + _LOD_REFINEMENT
     if level <= _LOD_MAX_LEVEL:
         version = layout_pg_store.read_layout_version(store)
@@ -60,11 +93,9 @@ def _read_rows(store, layout_pg_store, lod_pg_store, *, z, bbox):
             )
             if rows:
                 return rows
-            # Empty LOD read: pyramid absent for this fingerprint. Fall through
-            # to RAW so the tile still renders (graceful degradation).
-    return layout_pg_store.read_positions_in_bbox(
-        store, min_x=min_x, min_y=min_y, max_x=max_x, max_y=max_y
-    )
+    # Pyramid absent or level out of range: render the bounded probe set
+    # rather than nothing (graceful degradation — still a populated tile).
+    return raw
 
 
 def serve(handler, store) -> None:

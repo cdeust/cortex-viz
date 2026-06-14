@@ -97,7 +97,7 @@
   }
 
   function _boardFetchFacets() {
-    return fetch('/api/memories/facets')
+    return fetch('/api/memories/facets', { cache: 'no-store' })
       .then(function(r) { return r.ok ? r.json() : null; })
       .then(function(d) { if (d) boardFacets = d; })
       .catch(function(err) { console.warn('[board] facets fetch failed:', err); });
@@ -141,7 +141,7 @@
     if (boardFilterMinHeat != null) qs += '&min_heat=' + encodeURIComponent(boardFilterMinHeat);
     if (boardFilterProtected) qs += '&protected=1';
     if (boardSearchQuery) qs += '&search=' + encodeURIComponent(boardSearchQuery);
-    fetch('/api/memories' + qs)
+    fetch('/api/memories' + qs, { cache: 'no-store' })
       .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function(data) {
         if (token !== boardFetchToken) return;

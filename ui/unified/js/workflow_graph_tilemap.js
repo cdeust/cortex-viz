@@ -1,9 +1,14 @@
-// Cortex — Tilemap viewer (deck.gl + Datashader server tiles).
+// Cortex — Galaxy viewer (deck.gl GPU scatterplot).
 //
-// Engages when the URL has ``?viz=tilemap``. Renders /api/tile/{z}/{x}/{y}.png
-// via deck.gl's TileLayer over an OrthographicView in the Cartesian
-// coordinate system, plus a quadtree-backed hover layer that resolves
-// hit-tests locally from a single /api/quadtree fetch.
+// Engages for large graphs (and on the ``?viz=tilemap`` override). Fetches
+// every node's position/id/kind once from /api/quadtree, then renders the
+// whole set as a deck.gl ScatterplotLayer over an OrthographicView in the
+// Cartesian coordinate system. The GPU draws millions of points in one call
+// and resolves per-point hover/click via the GPU picking buffer — so the
+// field scales to the full Cortex + ecosystem corpus (500k–1M+ nodes) while
+// every node stays individually clickable and readable. (A datashader
+// raster path once lived here; it scaled but produced an image with no
+// pickable nodes, so it was replaced by the GPU scatterplot.)
 //
 // Public API:
 //   window.JUG.mountTilemap(container)
@@ -23,10 +28,8 @@
   // environments the local path resolves first.
   var DECKGL_URL = '/vendor/deck.gl.min.js';
   var ARROW_URL  = '/vendor/apache-arrow.min.js';
-  var FLATBUSH_URL = '/vendor/flatbush.min.js';
   var DECKGL_FALLBACK = 'https://unpkg.com/deck.gl@9.0.27/dist.min.js';
   var ARROW_FALLBACK  = 'https://unpkg.com/apache-arrow@17.0.0/Arrow.es2015.min.js';
-  var FLATBUSH_FALLBACK = 'https://unpkg.com/flatbush@4.4.0/flatbush.js';
 
   var KIND_COLOR = {
     domain:    [252, 211,  77, 230],
@@ -107,35 +110,6 @@
     return { ids: ids, kinds: kinds, xs: xs, ys: ys, count: n };
   }
 
-  // Build a flatbush index over the quadtree positions. Hover queries
-  // use bbox search around the cursor's world coordinates; the screen
-  // → world projection is provided by deck.gl at hover time.
-  function buildIndex(qt) {
-    if (!window.Flatbush) throw new Error('Flatbush not loaded');
-    var idx = new window.Flatbush(qt.count);
-    for (var i = 0; i < qt.count; i++) {
-      idx.add(qt.xs[i], qt.ys[i], qt.xs[i], qt.ys[i]);
-    }
-    idx.finish();
-    return idx;
-  }
-
-  function pickAt(idx, qt, wx, wy, worldRadius) {
-    var hits = idx.search(
-      wx - worldRadius, wy - worldRadius,
-      wx + worldRadius, wy + worldRadius,
-    );
-    if (!hits.length) return -1;
-    var bestI = -1, bestD = Infinity;
-    for (var k = 0; k < hits.length; k++) {
-      var h = hits[k];
-      var dx = qt.xs[h] - wx, dy = qt.ys[h] - wy;
-      var d2 = dx * dx + dy * dy;
-      if (d2 < bestD) { bestD = d2; bestI = h; }
-    }
-    return bestI;
-  }
-
   async function mount(container) {
     container.innerHTML = '';
     var status = document.createElement('div');
@@ -147,10 +121,12 @@
     container.appendChild(status);
 
     try {
+      // deck.gl renders + GPU-picks the nodes; Arrow decodes the quadtree
+      // position payload. (Flatbush is gone — GPU picking replaced the
+      // CPU spatial index.)
       await Promise.all([
         loadScript(DECKGL_URL, DECKGL_FALLBACK),
         loadScript(ARROW_URL, ARROW_FALLBACK),
-        loadScript(FLATBUSH_URL, FLATBUSH_FALLBACK),
       ]);
     } catch (err) {
       status.textContent = 'Failed to load tilemap deps: ' + err.message;
@@ -217,8 +193,6 @@
       status.style.color = '#ffb86b';
       return;
     }
-    var idx = buildIndex(qt);
-
     status.remove();
 
     var canvasHost = document.createElement('div');
@@ -234,10 +208,39 @@
       return;
     }
 
-    var TileLayer = deck.TileLayer;
-    var BitmapLayer = deck.BitmapLayer;
+    var ScatterplotLayer = deck.ScatterplotLayer;
     var OrthographicView = deck.OrthographicView;
     var COORDINATE_SYSTEM = deck.COORDINATE_SYSTEM;
+
+    // --- GPU scatterplot of EVERY node -----------------------------------
+    //
+    // deck.gl renders the whole point set in a single GPU draw call and
+    // resolves per-point hover/click on the GPU picking buffer. That makes
+    // the field BOTH scalable (Cortex + every ingested project — 500k–1M+
+    // nodes at 60 fps) AND individually clickable/readable. The previous
+    // datashader TileLayer rasterised the points into an IMAGE: fast, but
+    // an image has no pickable nodes and no legible structure — the wrong
+    // tool for an interactive graph. (The /api/tile + /api/quadtree server
+    // path stays; this renderer consumes the quadtree's full position set,
+    // which we already fetched above.)
+    //
+    // Positions and colours are packed ONCE into typed arrays and handed to
+    // deck as binary attributes, so there is no per-point JS in the hot
+    // path — deck uploads them straight to GPU vertex attributes. This is
+    // the standard deck.gl pattern for million-point layers.
+    var count = qt.count;
+    var positions = new Float32Array(count * 2);
+    var colors = new Uint8Array(count * 4);
+    var DEFAULT_COLOR = [148, 163, 184, 220]; // slate — unknown kind
+    for (var i = 0; i < count; i++) {
+      positions[i * 2] = qt.xs[i];
+      positions[i * 2 + 1] = qt.ys[i];
+      var c = KIND_COLOR[qt.kinds[i]] || DEFAULT_COLOR;
+      colors[i * 4] = c[0];
+      colors[i * 4 + 1] = c[1];
+      colors[i * 4 + 2] = c[2];
+      colors[i * 4 + 3] = c.length > 3 ? c[3] : 230;
+    }
 
     var hoverLabel = document.createElement('div');
     hoverLabel.style.cssText = 'position:absolute;pointer-events:none;background:rgba(8,8,16,0.92);'
@@ -248,74 +251,58 @@
     var deckInstance = new deck.Deck({
       parent: canvasHost,
       style: { position: 'absolute', inset: 0 },
-      views: [new OrthographicView({
-        id: 'ortho',
-        controller: { dragRotate: false, scrollZoom: { speed: 0.01, smooth: true } },
-      })],
-      initialViewState: { target: [0, 0, 0], zoom: 0 },
+      views: [new OrthographicView({ id: 'ortho', controller: { dragRotate: false } })],
+      // Start at the zoom where the 2-unit world [-1,1] fills the smaller
+      // viewport axis: Z0 = log2(minDim / 2). At zoom=0 an OrthographicView
+      // renders 1 px per world-unit, so the whole galaxy would be a 2-pixel
+      // dot at screen centre. minDim falls back to a sane default if the
+      // host is not yet laid out.
+      initialViewState: (function () {
+        var w = canvasHost.clientWidth || container.clientWidth || 1000;
+        var h = canvasHost.clientHeight || container.clientHeight || 800;
+        var minDim = Math.max(1, Math.min(w, h));
+        return { target: [0, 0, 0], zoom: Math.log2(minDim / 2) };
+      })(),
       onHover: function (info) {
-        if (!info || info.coordinate == null) {
-          hoverLabel.style.display = 'none';
-          return;
-        }
-        // World ↔ screen — info.viewport.unproject is provided by deck.gl
-        var wx = info.coordinate[0];
-        var wy = info.coordinate[1];
-        var worldRadius = 12 / Math.pow(2, info.viewport.zoom);
-        var hit = pickAt(idx, qt, wx, wy, worldRadius);
-        if (hit < 0) {
+        // GPU picking: info.index is the node under the cursor (or -1).
+        if (!info || info.index == null || info.index < 0) {
           hoverLabel.style.display = 'none';
           return;
         }
         hoverLabel.style.display = 'block';
         hoverLabel.style.left = (info.x + 12) + 'px';
         hoverLabel.style.top = (info.y + 12) + 'px';
-        hoverLabel.textContent = qt.kinds[hit] + ' · ' + qt.ids[hit];
+        hoverLabel.textContent = qt.kinds[info.index] + ' · ' + qt.ids[info.index];
       },
       onClick: function (info) {
-        if (!info || info.coordinate == null) return;
-        var wx = info.coordinate[0];
-        var wy = info.coordinate[1];
-        var worldRadius = 18 / Math.pow(2, info.viewport.zoom);
-        var hit = pickAt(idx, qt, wx, wy, worldRadius);
-        if (hit < 0) return;
+        if (!info || info.index == null || info.index < 0) return;
         // Emit on the global bus — #detail-panel (detail_panel.js) is the
-        // SOLE owner of the node-detail panel. The tilemap path joins the
-        // same single-panel contract as the canvas/svg renderers.
+        // SOLE owner of the node-detail panel. The scatterplot path joins
+        // the same single-panel contract as the canvas/svg renderers.
         if (window.JUG && typeof JUG.emit === 'function') {
-          var datum = { id: qt.ids[hit], kind: qt.kinds[hit] };
+          var datum = { id: qt.ids[info.index], kind: qt.kinds[info.index] };
           try { JUG.emit('graph:selectNode', datum); } catch (_) {}
         }
       },
       layers: [
-        new TileLayer({
-          id: 'graph-tiles',
+        new ScatterplotLayer({
+          id: 'graph-nodes',
           coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
-          getTileData: function (tile) {
-            var z = tile.index.z, x = tile.index.x, y = tile.index.y;
-            return fetch('/api/tile/' + z + '/' + x + '/' + y + '.png')
-              .then(function (r) { return r.blob(); })
-              .then(function (b) { return createImageBitmap(b); });
+          // Binary attributes: zero per-point JS, straight to GPU.
+          data: {
+            length: count,
+            attributes: {
+              getPosition: { value: positions, size: 2 },
+              getFillColor: { value: colors, size: 4 },
+            },
           },
-          tileSize: 512,
-          minZoom: 0,
-          maxZoom: 10,
-          // World ↔ tile mapping. World extent is [-1, 1] on each axis;
-          // z=0 has one tile spanning that range.
-          extent: [-1, -1, 1, 1],
-          renderSubLayers: function (props) {
-            var t = props.tile;
-            var span = 2 / Math.pow(2, t.index.z);
-            var minX = -1 + t.index.x * span;
-            var maxX = minX + span;
-            var maxY = 1 - t.index.y * span;
-            var minY = maxY - span;
-            return new BitmapLayer(props, {
-              data: null,
-              image: props.data,
-              bounds: [minX, minY, maxX, maxY],
-            });
-          },
+          getRadius: 2,
+          radiusUnits: 'pixels',
+          radiusMinPixels: 1.2,
+          radiusMaxPixels: 7,
+          pickable: true,
+          autoHighlight: true,
+          highlightColor: [255, 255, 255, 200],
         }),
       ],
     });

@@ -113,6 +113,35 @@
         { path: path });
       return h;
     }
+    if (k === 'discussion') {
+      // The assistant turn between actions. `full` is the verbatim message
+      // (up to 4000 chars from session_trace.build_chain); show it in full,
+      // plus a jump to the whole conversation — parity with how the galaxy
+      // surfaces a node's primary content.
+      h += section('Discussion', 'td-disc',
+        '<div class="detail-text">' + esc(node.full || node.label || '') + '</div>',
+        { open: true });
+      if (node.ts) h += '<div class="conn-item" style="color:var(--text-dim)">' + esc(node.ts) + '</div>';
+      var dsid = node.session_id || '';
+      if (dsid) h += '<button class="disc-view-btn" data-session-id="' + esc(dsid)
+        + '">View Full Conversation</button>';
+      return h;
+    }
+    if (k === 'memory') {
+      // A Cortex remember/recall op fired during the session. `full` carries
+      // the remembered content / recalled query; `label` is prefixed with the
+      // op ("remember · …" / "recall · …"). Show the op + the full content.
+      var mop = /^recall/i.test(node.label || '') ? 'recall' : 'remember';
+      h += '<div class="conn-item">Operation: ' + esc(mop) + '</div>';
+      h += section(mop === 'recall' ? 'Recalled query' : 'Remembered content', 'td-mem',
+        '<div class="detail-text">' + esc(node.full || node.label || '') + '</div>',
+        { open: true });
+      if (node.ts) h += '<div class="conn-item" style="color:var(--text-dim)">' + esc(node.ts) + '</div>';
+      var msid = node.session_id || '';
+      if (msid) h += '<button class="disc-view-btn" data-session-id="' + esc(msid)
+        + '">View Full Conversation</button>';
+      return h;
+    }
     return h;
   }
 
@@ -138,6 +167,14 @@
         if (window.TraceView && TraceView.showImpact) TraceView.showImpact(path);
       });
       impact.style.cursor = 'pointer';
+    }
+    // Discussion / memory: "View Full Conversation" opens the transcript modal
+    // (shared with the galaxy discussion card via JUG._disc).
+    var convoBtn = content.querySelector('.disc-view-btn');
+    if (convoBtn && window.JUG && JUG._disc && JUG._disc.openConversationModal) {
+      convoBtn.addEventListener('click', function () {
+        JUG._disc.openConversationModal(convoBtn.getAttribute('data-session-id'));
+      });
     }
   }
 

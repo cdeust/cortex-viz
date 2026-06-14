@@ -126,7 +126,7 @@
   }
 
   function _fetchFacets() {
-    return fetch('/api/memories/facets')
+    return fetch('/api/memories/facets', { cache: 'no-store' })
       .then(function(r) { return r.ok ? r.json() : null; })
       .then(function(d) { if (d) facets = d; })
       .catch(function(err) { console.warn('[knowledge] facets fetch failed:', err); });
@@ -181,7 +181,7 @@
     if (filterEmotion) qs += '&emotion=' + encodeURIComponent(filterEmotion);
     if (filterMinHeat != null) qs += '&min_heat=' + encodeURIComponent(filterMinHeat);
     if (filterProtected) qs += '&protected=1';
-    fetch('/api/memories' + qs)
+    fetch('/api/memories' + qs, { cache: 'no-store' })
       .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function(data) {
         if (token !== lastFetchToken) return; // superseded by newer fetch

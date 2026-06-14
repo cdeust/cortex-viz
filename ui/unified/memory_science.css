@@ -239,6 +239,11 @@
   margin-top: 18px;
   padding-top: 14px;
   border-top: 1px solid var(--line, rgba(255,255,255,0.10));
+  /* Establish a query container so the measurement grid below responds to
+     the ACTUAL block width (narrow detail panel vs wide Knowledge card),
+     not the viewport. A viewport media query forced 2 columns even in the
+     ~280px detail panel, overflowing each value into its neighbour. */
+  container-type: inline-size;
 }
 .ms-explain-header {
   font-family: var(--sans, 'Inter Tight', sans-serif);
@@ -259,7 +264,11 @@
   grid-template-columns: 1fr;
   gap: 10px;
 }
-@media (min-width: 720px) {
+/* Two columns ONLY when the measurement block itself is wide enough for two
+   ``minmax(0,160px) 1fr`` rows side by side (~460px) — the Knowledge card.
+   The narrow detail panel stays single-column, so labels/values never
+   overlap. Container query, not viewport. */
+@container (min-width: 460px) {
   .ms-explain-list { grid-template-columns: 1fr 1fr; column-gap: 20px; }
 }
 

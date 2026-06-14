@@ -323,6 +323,37 @@ def _symbol_type_from_label(label: str) -> str:
     return low
 
 
+def _repo_relative_for_match(p: str) -> str:
+    """Resolve an absolute file path to its git-repo-relative form — the exact
+    prefix AP stores in ``qualified_name`` (``<repo-rel>::<name>``) and in
+    ``File.id``. A bare relative path is returned cleaned; on any failure
+    returns "" so the caller falls back to the basename. Mirrors
+    ``server.trace_impact._to_repo_relative`` so the file-detail AST resolves
+    the SAME symbols the impact view already does."""
+    p = (p or "").replace("\\", "/")
+    if not p.startswith("/"):
+        return p.lstrip("./")
+    import os
+    import subprocess
+    from pathlib import Path
+
+    try:
+        real = os.path.realpath(p)
+        res = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            cwd=str(Path(real).parent),
+            timeout=5,
+        )
+        root = res.stdout.strip() if res.returncode == 0 else ""
+        if root:
+            return str(Path(real).relative_to(root))
+    except Exception:
+        return ""
+    return ""
+
+
 async def _symbol_batches_async(
     bridge: "APBridge",
     graph_path: str,
@@ -355,11 +386,19 @@ async def _symbol_batches_async(
     for p in paths:
         if not p:
             continue
-        path_tails.add(p)
-        # e.g. /abs/root/pkg/mod.py → pkg/mod.py, mod.py
-        parts = p.split("/")
-        for i in range(1, len(parts)):
-            path_tails.add("/".join(parts[i:]))
+        # AP keys symbols by REPO-RELATIVE ``qualified_name`` (``<rel>::<name>``).
+        # The absolute path is NEVER a valid STARTS WITH prefix — and, being
+        # the longest candidate, it used to win the longest-first dedup below
+        # and crowd out the real tail, so every file returned 0 symbols even
+        # though the impact view (which resolves repo-relative first) found
+        # them. Resolve to the git-repo-relative form here too; add the
+        # basename as a fallback for non-git files. NEVER add the abs path.
+        rel = _repo_relative_for_match(p)
+        if rel:
+            path_tails.add(rel)
+        base = p.rsplit("/", 1)[-1]
+        if base:
+            path_tails.add(base)
 
     # Build a Cypher WHERE predicate that filters at the Kuzu level.
     # Each tail produces one STARTS WITH predicate on qualified_name

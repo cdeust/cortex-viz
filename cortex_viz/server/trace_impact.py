@@ -467,27 +467,86 @@ def _to_repo_relative(path: str) -> str:
     p = (path or "").replace("\\", "/")
     if not p.startswith("/"):
         # Relative input — reject ``..`` traversal, return cleaned.
-        if ".." in [seg for seg in p.split("/")]:
+        if ".." in p.split("/"):
             return ""
         return p.lstrip("./")
+    import os
+    import subprocess
+    import tempfile
     from pathlib import Path
 
-    from cortex_viz.infrastructure.git_diff import find_git_root
-    from cortex_viz.server.http_file_diff import _contained_resolved
-
-    # Sanitise-and-return (CWE-22): ``ap`` is None unless ``p`` resolves
-    # inside an allowed root (HOME / cwd / temp). ``is_relative_to`` is the
-    # canonical path-traversal barrier, applied inline before ``ap`` reaches
-    # any filesystem op — a crafted ``?path=`` cannot reach ``/etc`` /
-    # ``/root``. ``?path=`` is loopback-only and normally carries the user's
-    # own file node path; this just bounds the surface.
-    ap = _contained_resolved(p)
-    if ap is None:
-        return p.lstrip("/")
+    # Self-contained (the original git_diff / http_file_diff helpers were never
+    # ported in the extraction — their absence broke /api/trace/impact AND the
+    # live P3 impact pass). CWE-22 containment: resolve symlinks and require
+    # the path under an allowed root (HOME / cwd / temp); a crafted absolute
+    # path outside these is never made relative and never reaches a filesystem
+    # op against an arbitrary location.
     try:
-        root = find_git_root(ap.parent)
-        if root is not None:
-            return str(ap.relative_to(Path(root).resolve(strict=False)))
+        real = os.path.realpath(p)
     except (OSError, ValueError):
+        return p.lstrip("/")
+    roots: list[str] = []
+    for base in (Path.home(), Path.cwd(), Path(tempfile.gettempdir())):
+        try:
+            roots.append(os.path.realpath(base))
+        except (OSError, ValueError):
+            pass
+    if not any(real == r or real.startswith(r + os.sep) for r in roots):
+        return p.lstrip("/")
+    # git root via rev-parse from the file's directory → relative to it.
+    try:
+        res = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True,
+            cwd=str(Path(real).parent), timeout=5, shell=False,
+        )
+        root = res.stdout.strip() if res.returncode == 0 else ""
+        if root:
+            try:
+                return str(Path(real).relative_to(root))
+            except ValueError:
+                pass
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
         pass
     return p.lstrip("/")
+
+
+# Edge-bearing keys whose totals rank a per-graph impact result; the richest
+# (most edges) wins when several code-graphs contain the same file.
+_IMPACT_EDGE_KEYS = (
+    "downstream", "upstream", "members", "processes",
+    "references", "referenced_by", "depends_on", "depended_on_by",
+)
+
+
+def impact_for_path(path: str) -> dict | None:
+    """Richest AP blast-radius dict for ``path`` across every code-graph.
+
+    The shared impact lookup behind BOTH ``/api/trace/impact`` (the HTTP L4
+    view) and the live session-activity impact pass (P3): when an edit/write
+    is captured, the ingest path calls this to draw the blast radius live.
+    Returns the impact dict (``downstream/upstream/members/...``) for the
+    graph with the most edges, or None when AP is off or the file is in no
+    graph. Never raises.
+    """
+    from cortex_viz.infrastructure import ap_bridge
+
+    if not ap_bridge.is_enabled():
+        return None
+    rel = _to_repo_relative(path)
+    if not rel:
+        return None
+    result = None
+    best_edges = -1
+    for gp in ap_bridge.resolve_graph_paths():
+        try:
+            r = _impact_for_graph(gp, rel)
+        except Exception:
+            r = None
+        if r is None:
+            continue
+        n = sum(len(r.get(k, [])) for k in _IMPACT_EDGE_KEYS)
+        if n > best_edges:
+            best_edges = n
+            result = r
+    return result
