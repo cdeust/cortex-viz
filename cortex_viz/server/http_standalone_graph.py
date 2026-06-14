@@ -890,6 +890,46 @@ def _mark_phase_ready(phase_key: str) -> None:
     _forward(("phase_ready", phase_key, phase_seq))
 
 
+def _persist_full_layout(store) -> dict:
+    """Compute + persist the FULL DrL layout over the finalised graph.
+
+    Pre-conditions:
+        * ``_graph_cache["data"]`` holds the complete post-build graph
+          (every node + edge — backbone, memories, symbols, entities).
+        * ``store`` is a PgMemoryStore-shaped reader exposing ``batch_pool``
+          (the build child's own MemoryReader — its own pools, own GIL).
+    Post-conditions:
+        * ``workflow_graph_layout`` holds one (id, x, y, kind) row per node id
+          in the finalised graph — NO cap, NO ray-placement substitution.
+        * Idempotent: if the topology fingerprint already matches the persisted
+          layout, no recompute runs (skip-if-fresh, via run_recompute).
+
+    This is the AUTHORITATIVE layout for the tile-pyramid + quadtree path
+    (the genuine-scaling default renderer). It runs in the build CHILD process
+    after the full graph is assembled, so the O(N^1.3) DrL pass never holds the
+    HTTP server's GIL. We reuse ``handlers.recompute_layout.run_recompute``,
+    which owns the full extract→fingerprint→layout→persist orchestration, so
+    this module stays a thin composition root with no duplicated layout logic.
+
+    Returns the run_recompute status dict (never raises — defensive: a layout
+    failure must not abort the build, the legacy baked coords still render).
+    """
+    try:
+        from cortex_viz.handlers.recompute_layout import run_recompute
+
+        result = run_recompute(store)
+        print(
+            f"[cortex] full layout persisted: {result.get('node_count')} nodes"
+            f" in {result.get('elapsed_ms')}ms"
+            f" (cached={result.get('cached')}, status={result.get('status')})",
+            file=sys.stderr,
+        )
+        return result
+    except Exception as _exc:  # pragma: no cover - defensive
+        print(f"[cortex] full layout persist skipped: {_exc}", file=sys.stderr)
+        return {"status": "error", "reason": "exception", "detail": str(_exc)}
+
+
 def _kick_background_build(store, domain_filter: str | None) -> None:
     """Spawn the two-stage background builder at most once. Stage 1
     (baseline, no AST) finishes in ~5 s and becomes the cached graph
@@ -1271,27 +1311,21 @@ def _kick_background_build(store, domain_filter: str | None) -> None:
 
                 _bl_nodes = baseline.get("nodes", [])
                 _bl_edges = baseline.get("edges", [])
-                # DrL over the STRUCTURAL BACKBONE only. DrL (OpenOrd) is
-                # superlinear in node count (measured: 15k nodes ≈ 12s, 58k
-                # nodes ≈ 58s — and it holds the GIL the whole time). Feeding
-                # it every non-memory node (~58k) is what froze the build.
-                # The backbone — domains, tool hubs, files — is the skeleton
-                # that actually needs a force-directed layout (~10-15k nodes,
-                # ≈12s). Everything else (memories AND the other non-backbone
-                # nodes: symbols, discussions, commands, agents, skills, …)
-                # gets deterministic O(1) ray placement around its anchor,
-                # exactly like the L6 symbols. source: superlinear DrL cost,
-                # OpenOrd (Martin et al., SPIE 2011); cap measured 2026-06-14.
-                _BACKBONE_KINDS = {"domain", "tool_hub", "file"}
-
-                def _node_kind(_n: dict) -> str:
-                    return _n.get("kind") or _n.get("type") or ""
-
-                _ids = [
-                    n["id"]
-                    for n in _bl_nodes
-                    if n.get("id") and _node_kind(n) in _BACKBONE_KINDS
-                ]
+                # FULL DrL layout over ALL baseline nodes (genuine-scaling
+                # decision, Mandelbrot+Thompson 2026-06-14). The previous
+                # _BACKBONE_KINDS cap laid out only {domain,tool_hub,file}
+                # (~15k) with DrL and ray-placed every other node by formula —
+                # that cap is exactly the "fakes scaling" the user reported.
+                # We now feed EVERY node + its edges to DrL. DrL (OpenOrd) is
+                # ~O(N^1.3); this baseline bake runs in the build CHILD's own
+                # process (own GIL), so even a multi-second pass does not freeze
+                # the HTTP server. This bake covers the legacy/force view; the
+                # AUTHORITATIVE full layout persisted to layout_pg_store (used
+                # by the tile + quadtree path) is recomputed once at full_ready
+                # over the complete post-AST graph (see _persist_full_layout).
+                # source: superlinear DrL cost — OpenOrd (Martin et al.,
+                # SPIE 2011); _BACKBONE_KINDS cap removed 2026-06-14.
+                _ids = [n["id"] for n in _bl_nodes if n.get("id")]
                 _id_set = set(_ids)
                 _edge_pairs = []
                 for _e in _bl_edges:
@@ -1303,37 +1337,27 @@ def _kick_background_build(store, domain_filter: str | None) -> None:
                         _t = _t.get("id")
                     if _s and _t and _s != _t and _s in _id_set and _t in _id_set:
                         _edge_pairs.append((_s, _t))
-                _coords = layout_engine.layout(_ids, _edge_pairs)
+                _coords = layout_engine.layout(_ids, _edge_pairs) if _ids else []
                 _pos = {nid: (x, y) for nid, x, y in _coords}
-                # Backbone nodes get their baked DrL coordinate.
+                # Bake the real DrL coordinate onto every node. Any node the
+                # layout could not place (should be none) falls back to a
+                # deterministic ray so the slim wire never emits a null coord.
+                _ray_fallback = 0
                 for _n in _bl_nodes:
                     _xy = _pos.get(_n.get("id"))
                     if _xy is not None:
                         _n["x"], _n["y"] = _xy[0], _xy[1]
-                # Everything else (memories + non-backbone structural nodes:
-                # symbols, discussions, commands, agents, skills, …) gets
-                # deterministic O(1) ray placement around its domain hub's
-                # baked coord — same path as the L6 symbols. Nodes whose
-                # domain hub didn't get a coord fall back to a ray around the
-                # origin so EVERY node still carries a server-side position.
-                _placed_ray = 0
-                for _n in _bl_nodes:
-                    if _n.get("id") in _id_set:
-                        continue  # backbone — already baked
-                    _hub = _pos.get(_n.get("domain_id")) or (0.0, 0.0)
-                    _n["x"], _n["y"] = _place_around(
-                        _hub[0], _hub[1], str(_n.get("id"))
-                    )
-                    _placed_ray += 1
-                _placed_mem = _placed_ray
+                    else:
+                        _n["x"], _n["y"] = _place_around(0.0, 0.0, str(_n.get("id")))
+                        _ray_fallback += 1
                 print(
-                    f"[cortex] layout baked: {len(_coords)} structural coords"
-                    f" + {_placed_mem} memory rays for {len(_bl_nodes)} nodes",
+                    f"[cortex] baseline layout baked: {len(_coords)} DrL coords"
+                    f" ({_ray_fallback} ray fallbacks) for {len(_bl_nodes)} nodes",
                     file=sys.stderr,
                 )
             except Exception as _exc:  # pragma: no cover - defensive
                 print(
-                    f"[cortex] layout bake skipped: {_exc}",
+                    f"[cortex] baseline layout bake skipped: {_exc}",
                     file=sys.stderr,
                 )
 
@@ -1385,6 +1409,18 @@ def _kick_background_build(store, domain_filter: str | None) -> None:
             )
 
             if not _ap_enabled():
+                # Persist the authoritative full layout for the tile path
+                # (no L6/AST nodes when AP is disabled, so the baseline IS the
+                # full graph). Runs in this child process — own GIL.
+                _set_progress(
+                    phase="layout",
+                    pct=0.95,
+                    message=(
+                        f"laying out {len(baseline.get('nodes', []))} nodes "
+                        "(full DrL)"
+                    ),
+                )
+                _persist_full_layout(store)
                 _set_progress(
                     phase="full_ready",
                     pct=1.0,
@@ -1856,6 +1892,18 @@ def _kick_background_build(store, domain_filter: str | None) -> None:
                 1 for e in cur["edges"] if (e.get("kind") or "") == "about_entity"
             )
             cur["meta"]["counts"] = counts
+            # Persist the authoritative full layout over the COMPLETE post-AST
+            # graph (backbone + memories + symbols + entities). This is the
+            # source the tile-pyramid + quadtree default renderer reads. Runs
+            # in this child process — own GIL — so the O(N^1.3) DrL pass over
+            # all ~150k nodes does not freeze the HTTP server. Decoupled as its
+            # own progress phase so the client sees "layout" before "ready".
+            _set_progress(
+                phase="layout",
+                pct=0.97,
+                message=f"laying out {len(cur['nodes'])} nodes (full DrL)",
+            )
+            _persist_full_layout(store)
             _set_progress(
                 phase="full_ready",
                 pct=1.0,

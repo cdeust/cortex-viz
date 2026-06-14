@@ -160,13 +160,29 @@
     container.innerHTML = '';
     var handle = { destroy: function () {}, select: function () {},
                    data: data, append: function () { return { addedNodes: 0, addedEdges: 0 }; } };
-    // Tilemap gate — query string ``?viz=tilemap`` swaps the entire
-    // d3-force pipeline for the deck.gl + Datashader server-tile path.
-    // The legacy renderer stays as the default until the new path is
-    // hardened. The tilemap module handles its own data fetching
-    // (/api/quadtree, /api/tile/*) so we don't pass the cached graph.
+    // Renderer selection (genuine-scaling decision, Mandelbrot+Thompson
+    // 2026-06-14). The datashader tile-pyramid is O(pixels-on-screen) ≈ O(1)
+    // in node count, so it is the DEFAULT for any graph the D3 force-graph
+    // cannot render honestly. The D3 force-graph pins ~11.8k nodes before it
+    // chokes and starts truncating, so it is used only when:
+    //   * the caller explicitly asks for it (``?viz=force``), OR
+    //   * the loaded graph is small (< D3_FORCE_NODE_MAX) — at that scale the
+    //     force layout is still honest and gives richer edge inspection.
+    // ``?viz=tilemap`` remains an explicit override that forces the pyramid.
+    // The tilemap module handles its own data fetching (/api/quadtree,
+    // /api/tile/*) so we don't pass it the cached graph.
+    // T2/T3 threshold note: above ~200k nodes a single global DrL layout
+    // exceeds the 5-min budget — switch to a hierarchical multilevel layout
+    // (coarsen via fractal_clustering, per-community DrL, persist by zoom
+    // band). Not implemented at T1 (today's N≈150k).
+    var D3_FORCE_NODE_MAX = 11000;
     var qs = (window.location && window.location.search) || '';
-    if (qs.indexOf('viz=tilemap') !== -1
+    var nodeCount = (data && data.nodes && data.nodes.length) || 0;
+    var wantForce = qs.indexOf('viz=force') !== -1;
+    var wantTilemap = qs.indexOf('viz=tilemap') !== -1;
+    var smallGraph = nodeCount > 0 && nodeCount < D3_FORCE_NODE_MAX;
+    var useTilemap = !wantForce && (wantTilemap || !smallGraph);
+    if (useTilemap
         && window.JUG && typeof window.JUG.mountTilemap === 'function') {
       var p = window.JUG.mountTilemap(container);
       Promise.resolve(p).then(function (impl) {
