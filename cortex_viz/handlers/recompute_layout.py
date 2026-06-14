@@ -61,9 +61,12 @@ def run_recompute(store) -> dict[str, Any]:
         {"status": "error", "reason": "igraph_missing"}
     """
     # Pull the cached graph from the in-memory builder. Avoiding a
-    # core→server import: we reach into ``http_standalone_graph``
-    # directly because that module owns the cache lifecycle.
-    from cortex_viz.server import http_standalone_graph as _gb
+    # core→server import: we reach into ``graph_cache_state`` directly
+    # because that module is the single OWNER of the cache lifecycle.
+    # (Reading via the http_standalone_graph re-export shim would bind a
+    # stale ``_graph_cache`` value — the shim does not re-export the live
+    # mutable global; see graph_cache_state's module docstring.)
+    from cortex_viz.server import graph_cache_state as _gb
 
     if not _gb._graph_cache or not _gb._graph_cache.get("data"):
         return {"status": "error", "reason": "no_graph_cached"}

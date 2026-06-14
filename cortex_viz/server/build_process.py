@@ -72,7 +72,7 @@ def start_build(url: str, domain_filter: str | None) -> bool:
     currently-live child (its AST loop owns the build).
     """
     global _epoch, _proc
-    from cortex_viz.server import http_standalone_graph as g
+    from cortex_viz.server import graph_appliers
 
     with _proc_lock:
         if _is_alive():
@@ -81,7 +81,7 @@ def start_build(url: str, domain_filter: str | None) -> bool:
         epoch = _epoch
         # Single server-side reset point — publishes the empty cache + resets
         # phase/progress state BEFORE any delta of this epoch can arrive.
-        g.begin_epoch(epoch)
+        graph_appliers.begin_epoch(epoch)
         ctx = mp.get_context("spawn")
         q: mp.Queue = ctx.Queue(maxsize=4096)
         proc = ctx.Process(
@@ -136,7 +136,11 @@ def _worker(
     file."""
     try:
         from cortex_viz.infrastructure.memory_read import MemoryReader
-        from cortex_viz.server import http_standalone, http_standalone_graph as g
+        from cortex_viz.server import (
+            graph_build,
+            graph_cache_state as g_state,
+            http_standalone,
+        )
 
         # Resolve AP for THIS child: _auto_enable_ap() only sets CORTEX_AP_*
         # env vars (binary path discovery) — it runs in the parent main, but
@@ -144,14 +148,17 @@ def _worker(
         # re-run it or the AST (L6) phase has no bridge command and hangs.
         http_standalone._auto_enable_ap()
 
-        g._SINK_Q = q
-        g.set_build_epoch(epoch)
+        # Write to the OWNER module (graph_cache_state). Writing through a
+        # re-export alias would not update the owner's live global, forking
+        # the cross-process state.
+        g_state._SINK_Q = q
+        g_state.set_build_epoch(epoch)
         store = MemoryReader(url)
-        g._kick_background_build(store, domain_filter)
+        graph_build._kick_background_build(store, domain_filter)
         for t in threading.enumerate():
             if t.name == "cortex-graph-build":
                 t.join()
-        data = g.graph_cache_data()
+        data = g_state.graph_cache_data()
         if data is not None:
             fd, path = tempfile.mkstemp(prefix="cortex-galaxy-", suffix=".pkl")
             with os.fdopen(fd, "wb") as fh:
@@ -175,7 +182,7 @@ def _drain(q: "mp.Queue", proc, epoch: int) -> None:
     out-of-band graph_file unlinked) so a stale child cannot corrupt a
     newer build.
     """
-    from cortex_viz.server import http_standalone_graph as g
+    from cortex_viz.server import graph_appliers as g
 
     while True:
         try:
