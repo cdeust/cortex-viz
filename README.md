@@ -6,6 +6,7 @@
   <img src="https://img.shields.io/badge/mcp-claude--code-blue.svg" alt="MCP">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License">
   <img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+">
+  <img src="https://img.shields.io/badge/version-1.0.0-brightgreen.svg" alt="Version 1.0.0">
 </p>
 
 # cortex-viz
@@ -13,6 +14,39 @@
 **The visualization layer for [Cortex](https://github.com/cdeust/Cortex).** A standalone MCP that turns Cortex's memory store, your Claude Code session history, and your codebase graph into six live reading angles over the same data — a galaxy of every project, a per-session execution trace, a consolidation kanban, a curated knowledge browser, and a wiki. It reads Cortex's shared PostgreSQL store **read-only** plus the `~/.claude` artifacts; it renders, it never remembers.
 
 Launch with the `open_visualization` tool (or `/cortex-visualize`). One launcher opens six reading angles; the default landing view is **Trace**.
+
+---
+
+## Getting Started
+
+The plugin marketplace is the supported install path. cortex-viz ships in the same `cortex-plugins` marketplace as Cortex:
+
+```bash
+claude plugin marketplace add cdeust/Cortex
+claude plugin install cortex-viz
+```
+
+> **cortex-viz is a read-only companion to [Cortex](https://github.com/cdeust/Cortex).** Install Cortex first (`claude plugin install cortex`) — cortex-viz reads its shared PostgreSQL store and never writes to it. Point both at the same database: the `database_url` plugin setting defaults to `postgresql://127.0.0.1:5432/cortex`; set it to the same value you gave Cortex.
+
+Restart your Claude Code session, then launch the visualizer:
+
+```
+/cortex-visualize
+```
+
+One launcher opens all six reading angles (Graph · Trace · Board · Knowledge · Wiki · Pipeline) in the browser, served live from the Cortex store, your session JSONL, the code graph, and git.
+
+<details>
+<summary><strong>More options</strong> (Clone, manual run)</summary>
+
+**Clone + run from source:**
+```bash
+git clone https://github.com/cdeust/cortex-viz.git && cd cortex-viz
+pip install -e .
+DATABASE_URL=postgresql://127.0.0.1:5432/cortex python3 -m cortex_viz
+```
+
+</details>
 
 ---
 

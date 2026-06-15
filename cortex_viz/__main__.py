@@ -20,7 +20,7 @@ from cortex_viz.server import mcp_tools
 
 mcp = FastMCP(
     name="cortex-viz",
-    version="0.1.0",
+    version="1.0.0",
     instructions=(
         "Visualization MCP for Cortex. Call open_visualization to launch the "
         "neural-graph galaxy in the browser, or get_methodology_graph for the "
