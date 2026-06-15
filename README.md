@@ -47,6 +47,10 @@ Five columns by consolidation stage (`labile` · `early_ltp` · `late_ltp` · `c
 
 **Detail panel — every measurement explained.** Clicking any node opens a panel with the raw value *and* a one-line plain-language explanation. Consolidation stage, activity (heat), importance, surprise, emotional tone and intensity, confidence, plasticity, stability — each a labeled bar with a sentence like *"How unexpected this memory was when it arrived. Surprises stick better than routine events."*
 
+<p align="center">
+<img src="docs/assets/cortex-trace.png" width="100%" alt="Trace view — each Claude Code session is a tight phyllotaxis disk of its own prompt → action → file → discussion → memory chain, gravity-packed around the domain hub so the sessions of a domain cluster together; clicking a session hub expands its chain into the session's conversation, files, AST symbols, impact and git history" />
+</p>
+
 ### Trace · Knowledge · Wiki · Pipeline
 
 - **Trace** *(default)* — the live execution-trace drill: collapsed domain hubs → sessions → the ordered prompt → action → file chain of what actually happened → a file's AST symbols, impact neighbourhood, and git history. Discussions and Cortex `remember`/`recall` ops are woven into the chain. Served live from session JSONL, the code graph, and git on every request — no snapshots, always current.
