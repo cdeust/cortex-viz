@@ -1,6 +1,6 @@
 // Cortex Memory Dashboard — Graph Orchestrator
-// DNA double-helix layout: two interleaved helical strands with cross-rungs.
-// Entities form the backbone spheres, memories branch off as side chains.
+// Atom-shell layout: nodes spread over concentric spherical shells around a
+// nucleus, shell radius encoding thermodynamic heat (see atom.js).
 
 (function() {
   JMD.allNodes = [];
@@ -49,8 +49,8 @@
     // Build edges (needed for memory-entity connections)
     JMD.buildEdges(data);
 
-    // Apply DNA helix layout
-    JMD.layoutDNAHelix();
+    // Apply atom-shell layout
+    JMD.layoutAtomShells();
 
     // Ensure renderer is sized to actual container before fitting camera
     if (JMD.resizeToContainer) JMD.resizeToContainer();
@@ -58,7 +58,7 @@
     // Fit camera to show everything immediately
     JMD.fitCameraImmediate();
 
-    console.log('[cortex] Graph: ' + JMD.allNodes.length + ' nodes, DNA helix');
+    console.log('[cortex] Graph: ' + JMD.allNodes.length + ' nodes, atom shells');
 
     if (!JMD._animating) { JMD._animating = true; JMD.startAnimation(); }
   }
@@ -75,8 +75,8 @@
         }
       });
     }
-    // Clear backbone
-    JMD.clearHelixMeshes();
+    // Clear shell guides
+    JMD.clearShellGuides();
 
     JMD.allNodes = [];
     JMD.clearEdges();

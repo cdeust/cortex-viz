@@ -56,6 +56,13 @@ def _route_unified_get(
     """Resolve a GET request for the unified server."""
     path = handler.path
     path_no_qs = path.split("?")[0]
+    ui_root = html_path.parent
+    if path_no_qs == "/api/dashboard":
+        # Memory graph (entities + memories + heat) for the atom-shell 3D view.
+        from cortex_viz.server.http_standalone_endpoints import serve_dashboard
+
+        serve_dashboard(handler, store)
+        return
     if path_no_qs == "/api/trace/domains":
         from cortex_viz.server.http_standalone_trace import serve_trace_domains
 
@@ -177,6 +184,20 @@ def _route_unified_get(
         from cortex_viz.handlers.quadtree_handler import serve as serve_quadtree
 
         serve_quadtree(handler, store)
+    elif path_no_qs in ("/atom", "/atom-viz.html"):
+        # Atom-shell 3D memory view bootstrap (ui/atom-viz.html).
+        serve_static(handler, ui_root, "atom-viz.html", "text/html")
+    elif path.startswith("/dashboard/js/") and path_no_qs.endswith(".js"):
+        serve_static(
+            handler,
+            ui_root / "dashboard" / "js",
+            path_no_qs[len("/dashboard/js/") :],
+            "application/javascript",
+        )
+    elif path.startswith("/dashboard/") and path_no_qs.endswith(".css"):
+        serve_static(
+            handler, ui_root / "dashboard", path_no_qs[len("/dashboard/") :], "text/css"
+        )
     elif path.startswith("/js/") and path_no_qs.endswith(".js"):
         serve_static(handler, js_dir, path_no_qs[4:], "application/javascript")
     elif path.startswith("/css/") and path_no_qs.endswith(".css"):

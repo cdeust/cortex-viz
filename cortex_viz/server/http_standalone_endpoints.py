@@ -45,6 +45,22 @@ def serve_graph(handler, store) -> None:
         send_json_error(handler, e)
 
 
+def serve_dashboard(handler, store) -> None:
+    """GET /api/dashboard — memory graph for the atom-shell 3D view.
+
+    Read-only assembly of the entity + memory + heat data the atom-viz
+    front-end (``ui/atom-viz.html`` + ``ui/dashboard/js``) polls. Pure
+    formatting lives in ``http_dashboard_data``; this only shapes the HTTP
+    response.
+    """
+    try:
+        from cortex_viz.server.http_dashboard_data import build_dashboard_data
+
+        send_json_ok(handler, build_dashboard_data(store))
+    except Exception as e:
+        send_json_error(handler, e)
+
+
 def serve_graph_full(handler, store) -> None:
     """GET /api/graph/full — the COMPLETE graph from the durable PG snapshot.
 
