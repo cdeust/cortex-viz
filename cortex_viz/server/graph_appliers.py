@@ -110,40 +110,58 @@ def apply_delta(
         drops phase membership; the real phase_key rides as a field);
       * emits SLIM nodes to the SSE stream only.
 
-    Atomic publish: build the new node/edge lists privately, then swap the
-    _graph_cache reference under _apply_lock. /api/graph readers see either
-    the pre-delta dict or the post-delta dict, never a torn intermediate.
+    In-place publish (O(batch), not O(N)): append the fresh nodes/edges
+    directly into the SAME cache lists under _apply_lock — the dict reference
+    and its node/edge list objects stay stable; only their tails grow. The
+    prior implementation copied the WHOLE accumulated ``nodes``/``edges`` via
+    ``list(old[...])`` on every forwarded L6 delta and swapped the reference,
+    making the drain O(N²): at the ~200k-node / 480k-edge galaxy that is ~0.34
+    billion element-copies across ~1,000 L6 deltas, all in the server's drain
+    thread — under the GIL it starved every HTTP request while the build ran.
+    This mirrors the in-process ``graph_build_merge`` (which already appends in
+    place with persistent dedup sets, see its "pinned the GIL for hours"
+    note); apply_delta is that merge's server mirror and had never gotten the
+    same fix. source: galaxy-lag audit (tasks/galaxy-lag-and-ap-aggregation-audit.md).
+
+    Reader safety: ``get_graph_slice`` / ``/api/graph`` take a single atomic
+    reference read of ``state._graph_cache`` then slice the lists. list.append
+    and list slicing are individually atomic under the GIL, so a concurrent
+    reader observes a consistent list of whatever length it read at that
+    instant — never a torn element. This is the exact guarantee the in-process
+    merge already relies on; the copy-then-swap was stronger than the cache's
+    consumers require. The reset points (begin_epoch / apply_graph_replace)
+    keep swapping the reference — only the incremental append is in place.
     """
     if epoch != state._SERVER_EPOCH:
         return  # stale build — drop
     with state._apply_lock:
-        old = state._graph_cache["data"] if state._graph_cache else None
-        new_nodes = list(old["nodes"]) if old else []
-        new_edges = list(old["edges"]) if old else []
-        new_meta = dict(old["meta"]) if old and old.get("meta") else {}
+        cur = state._graph_cache["data"] if state._graph_cache else None
+        if cur is None:
+            # Defensive: begin_epoch normally seeds this before any delta.
+            cur = {"nodes": [], "edges": [], "links": [], "meta": {}}
+            state._graph_cache = {"data": cur, "domain_filter": None}
+        cur_nodes = cur["nodes"]
+        cur_edges = cur["edges"]
         fresh: list[dict] = []
         for n in nodes:
             nid = n.get("id")
             if nid and nid not in state._applied_node_ids:
-                new_nodes.append(n)
+                cur_nodes.append(n)
                 state._applied_node_ids.add(nid)
                 state._node_index[nid] = n
                 fresh.append(n)
         for e in edges:
-            new_edges.append(e)
+            cur_edges.append(e)
             s, t, ek = e.get("source"), e.get("target"), e.get("kind")
             if s and t:
                 state._adjacency.setdefault(s, []).append((t, ek, "out"))
                 state._adjacency.setdefault(t, []).append((s, ek, "in"))
-        new_meta["node_count"] = len(new_nodes)
-        new_meta["edge_count"] = len(new_edges)
-        cur = {
-            "nodes": new_nodes,
-            "edges": new_edges,
-            "links": new_edges,
-            "meta": new_meta,
-        }
-        state._graph_cache = {"data": cur, "domain_filter": None}
+        # ``links`` is the /api/graph alias of ``edges`` — keep it the SAME
+        # list object (begin_epoch seeds them as two separate empty lists).
+        cur["links"] = cur_edges
+        meta = cur.setdefault("meta", {})
+        meta["node_count"] = len(cur_nodes)
+        meta["edge_count"] = len(cur_edges)
         state._graph_cache_ts = time.monotonic()
         # Rebuild the server-side per-phase buffer from the delta stream.
         # _phase_payloads is authoritative for /api/graph/phase on the

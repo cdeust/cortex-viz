@@ -91,15 +91,23 @@
     var newEdges = batchData.edges || [];
     if (newNodes.length === 0) return;
 
-    // Merge into lastData
-    if (JUG.state.lastData) {
-      JUG.state.lastData.nodes = (JUG.state.lastData.nodes || []).concat(newNodes);
-      JUG.state.lastData.edges = (JUG.state.lastData.edges || []).concat(newEdges);
-    }
+    // Delegate to appendGraphDelta — the ONE correct merge path. The prior
+    // body here reimplemented the merge the wrong way: it `.concat`ed brand-new
+    // node/edge arrays (O(N_accumulated) per batch, and it REPLACED the array
+    // objects the canvas/bridge hold references to) and then called
+    // buildGraph() UNCONDITIONALLY — with no `__wfgActive` guard, so on the big
+    // galaxy every discussion batch rebuilt the hidden legacy force-graph on
+    // top of the active D3 renderer (double work that alone OOMed the tab).
+    // appendGraphDelta instead dedups by id/edge-key, pushes IN PLACE
+    // (O(batch), same arrays), maintains the running counters, guards the
+    // legacy rebuild on `!__wfgActive`, and emits the `state:lastData` delta
+    // that the workflow-graph bridge appends incrementally (no re-mount).
+    // source: galaxy-lag audit (tasks/galaxy-lag-and-ap-aggregation-audit.md),
+    // Finding C.
+    JUG.appendGraphDelta(newNodes, newEdges);
 
-    // Full rebuild with merged data
-    if (JUG.state.lastData) buildGraph(JUG.state.lastData);
-
+    // Preserve the monitor-log side effect the discussion loader relied on
+    // (buildGraph logged the full set; appendGraphDelta does not log).
     if (JUG.logNodes) JUG.logNodes(newNodes);
     console.log('[cortex] +' + newNodes.length + ' nodes');
   }

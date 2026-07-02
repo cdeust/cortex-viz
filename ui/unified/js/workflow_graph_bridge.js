@@ -128,6 +128,36 @@
     JUG.on('state:lastData', function (ev) {
       var data = ev && ev.value;
       if (!isWorkflowGraph(data)) return;
+      // ── Incremental fast-path (the streaming hot path) ──
+      // Every SSE batch and phase-load lands here via appendGraphDelta, which
+      // emits a `delta` of ONLY the newly-added nodes/edges (graph.js). If the
+      // live handle already renders THIS view, push that delta into the
+      // existing simulation (handle.append → workflow_graph.js:append mutates
+      // ctx.nodes/ctx.edges in place and gently reheats) instead of
+      // destroy()+re-mount, which re-seeds and re-simulates all N nodes and is
+      // what made the galaxy re-shuffle/freeze on every streamed action. A
+      // wholesale reference swap (trace clear, wiki) emits via the state
+      // setter with NO delta and falls through to the debounced remount below.
+      // source: galaxy-lag audit (tasks/galaxy-lag-and-ap-aggregation-audit.md).
+      var delta = ev && ev.delta;
+      var haveDelta = !!(delta && ((delta.nodes && delta.nodes.length) ||
+                                   (delta.edges && delta.edges.length)));
+      if (_firstRenderDone && _handle && typeof _handle.append === 'function'
+          && haveDelta && _lastPayload
+          && _viewOf(_lastPayload) === _viewOf(data)) {
+        try {
+          _handle.append(delta.nodes || [], delta.edges || []);
+          // The accumulated payload object is mutated in place (same ref), so
+          // _lastPayload / _byView already point at it — a later view switch
+          // re-renders the full accumulated graph, not a stale snapshot.
+          _lastPayload = data;
+          _byView[_viewOf(data)] = data;
+          return;
+        } catch (e) {
+          console.warn(LOG, 'incremental append failed — full remount', e);
+          // fall through to the debounced destroy+remount below
+        }
+      }
       _pendingRender = data;
       if (_renderTimer) clearTimeout(_renderTimer);
       // 400 ms first render, then adaptive. A re-render re-mounts and

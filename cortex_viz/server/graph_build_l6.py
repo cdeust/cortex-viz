@@ -82,9 +82,20 @@ def run_l6(
     # graph files, the second-query result is identical — so we
     # cache it to disk and short-circuit the AP round-trip entirely.
     #
-    # Key = SHA-256 of the graph directory's (path, size, mtime)
-    # triples for every file inside. The instant any AP file
-    # changes (re-index happened) the key differs and we refetch.
+    # Key = SHA-256 of the graph's (path, size, mtime) triples. The
+    # instant any AP file changes (re-index happened) the key differs
+    # and we refetch.
+    #
+    # CRITICAL: ``gp_`` is the LadybugDB ``graph`` FILE itself (see
+    # ap_bridge.resolve_graph_paths — "AP's LadybugDB is a single ``graph``
+    # file with a ``graph.wal`` sibling, NOT a directory"), so a plain
+    # ``root.rglob("*")`` yields [] and the digest collapses to the
+    # SHA-256-of-empty constant e3b0c44298fc1c14 for EVERY project — the
+    # cache then never invalidates and serves stale symbols/edges after a
+    # re-index. Hash the graph file AND its ``.wal`` sibling by
+    # (relpath, size, mtime); keep the rglob branch only for the defensive
+    # directory case the docstring still allows. source: galaxy-lag audit
+    # (tasks/galaxy-lag-and-ap-aggregation-audit.md), Finding D.
     _CACHE_DIR = _Path.home() / ".claude" / "methodology" / "ast_cache"
     _CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -93,18 +104,29 @@ def run_l6(
         if not root.exists():
             return ""
         h = hashlib.sha256()
-        # Walk deterministically so the signature is stable.
-        for f in sorted(root.rglob("*")):
-            if not f.is_file():
-                continue
+
+        def _mix(path: _Path, label: str) -> None:
             try:
-                st = f.stat()
+                st = path.stat()
             except OSError:
-                continue
-            rel = str(f.relative_to(root))
-            h.update(rel.encode())
+                return
+            h.update(label.encode())
             h.update(str(st.st_size).encode())
             h.update(str(int(st.st_mtime)).encode())
+
+        if root.is_dir():
+            # Defensive: a directory-layout graph — walk deterministically.
+            for f in sorted(root.rglob("*")):
+                if f.is_file():
+                    _mix(f, str(f.relative_to(root)))
+        else:
+            # Single-file LadybugDB: the ``graph`` file + its WAL sibling.
+            # The WAL rides the latest writes, so a re-index that has not yet
+            # checkpointed into ``graph`` still moves the signature.
+            _mix(root, root.name)
+            wal = root.with_name(root.name + ".wal")
+            if wal.exists():
+                _mix(wal, wal.name)
         return h.hexdigest()[:16]
 
     def _cache_path(proj_name_: str) -> _Path:

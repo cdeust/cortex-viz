@@ -2,7 +2,7 @@
 
 Split out of ``workflow_graph_source_ast.py`` (was 917 lines) to respect
 the 500-line file limit. Holds ``_edge_batches_async`` — the async
-generator that enumerates AP's typed rel tables (Calls_*, Imports_*,
+generator that queries AP's typed rel tables (Calls_*, Imports_*,
 HasMethod_*, Uses_*, Defines_File_Import) and yields one batch per
 rel-table query. Pure infrastructure — no core imports.
 
@@ -16,12 +16,84 @@ from typing import TYPE_CHECKING, Any
 
 from cortex_viz.infrastructure.workflow_graph_source_ast_async import (
     _NON_QUALIFIED_LABELS,
-    _SYMBOL_LABELS,
     _as_list,
 )
 
 if TYPE_CHECKING:
     from cortex_viz.infrastructure.ap_bridge import APBridge
+
+
+# The exact rel tables AP's schema creates, transcribed from
+# ``automatised-pipeline`` ``src/graph_store.rs`` ``REL_TABLES`` — the
+# authoritative, static list of every relationship table AP's LadybugDB graph
+# can contain. Each entry is (semantic_kind, table, src_label, dst_label,
+# has_provenance).
+#
+# Why an explicit list instead of a Cartesian product over label kinds:
+#   * AP's query_graph guard FORBIDS the ``CALL`` keyword
+#     (automatised-pipeline src/main.rs:FORBIDDEN_CYPHER_KEYWORDS), so the
+#     engine's catalog (``CALL show_tables()``) is unreachable — we cannot
+#     discover tables at runtime and must mirror the schema statically.
+#   * The prior code enumerated the full Cartesian product of label kinds
+#     (~89 queries). Only 24 of those pairs correspond to a table that AP's
+#     schema actually creates; the other 65 were queries against tables that
+#     can NEVER exist (e.g. ``HasMethod_Class_Field``, ``Uses_Method_Interface``,
+#     ``Calls_Macro_Macro`` — AP has no Class/Interface/Protocol node labels and
+#     no Macro-call table). AP returns empty for a missing table, so the extra
+#     65 round-trips were pure latency on the cold-L6 path, not a data change.
+#   * This list is EXACTLY the 24 pairs the prior enumeration returned rows for,
+#     so trimming to it is behaviour-preserving for loaded edges while cutting
+#     the query count by ~73%.
+#
+# ``has_provenance`` gates fetching ``r.confidence`` + ``r.resolution_method``.
+# In AP both is_resolution_rel (Calls/Imports/Uses/References/Implements/
+# Extends) AND is_structural_provenance_rel (Defines/HasMethod/HasField/
+# HasVariant) carry those columns (graph_store.rs rel_table_ddl), so requesting
+# them never binds against a missing column. We keep HasMethod_*/Defines_* at
+# False (confidence defaults to 1.0 for ground-truth AST facts) to preserve the
+# prior behaviour exactly.
+#
+# NOTE (follow-up, tracked in the galaxy-lag audit): AP's schema also defines
+# ~29 more real edge tables the viz does not yet load — Imports_File_File,
+# References_File_File, HasField_*, HasVariant_*, Defines_File_<symbol>,
+# Imports_Module_*, Uses_Struct_*/Uses_Field_*, Calls_*_StdlibSymbol,
+# Calls_CallSite_*. Adding them widens the graph but each has an endpoint/column
+# subtlety (File/Module carry ``id`` not ``qualified_name``; Variant/StdlibSymbol
+# aren't in _SYMBOL_LABELS yet), so they need their own load-path handling
+# rather than being folded into this trim. source: galaxy-lag audit Finding E.
+_AP_REL_TABLES: tuple[tuple[str, str, str, str, bool], ...] = (
+    # Calls — Function/Method call edges (resolution rels: provenance).
+    ("calls", "Calls_Function_Function", "Function", "Function", True),
+    ("calls", "Calls_Function_Method", "Function", "Method", True),
+    ("calls", "Calls_Method_Function", "Method", "Function", True),
+    ("calls", "Calls_Method_Method", "Method", "Method", True),
+    # Imports — File → imported in-graph symbol (resolution rels: provenance).
+    ("imports", "Imports_File_Function", "File", "Function", True),
+    ("imports", "Imports_File_Method", "File", "Method", True),
+    ("imports", "Imports_File_Struct", "File", "Struct", True),
+    ("imports", "Imports_File_Enum", "File", "Enum", True),
+    ("imports", "Imports_File_Trait", "File", "Trait", True),
+    ("imports", "Imports_File_Constant", "File", "Constant", True),
+    ("imports", "Imports_File_TypeAlias", "File", "TypeAlias", True),
+    ("imports", "Imports_File_Module", "File", "Module", True),
+    # HasMethod — container → method (structural: confidence defaults to 1.0).
+    ("member_of", "HasMethod_Struct_Method", "Struct", "Method", False),
+    ("member_of", "HasMethod_Enum_Method", "Enum", "Method", False),
+    ("member_of", "HasMethod_Trait_Method", "Trait", "Method", False),
+    # Defines_File_Import — File → Import node. AP wires every ``import``
+    # statement to its file here; counts in the tens of thousands per project.
+    # This is the edge set that lifted the viz from ~5k to ~36k imports.
+    ("imports", "Defines_File_Import", "File", "Import", False),
+    # Uses — Function/Method uses a type (resolution rels: provenance).
+    ("uses", "Uses_Function_Struct", "Function", "Struct", True),
+    ("uses", "Uses_Function_Enum", "Function", "Enum", True),
+    ("uses", "Uses_Function_Trait", "Function", "Trait", True),
+    ("uses", "Uses_Function_TypeAlias", "Function", "TypeAlias", True),
+    ("uses", "Uses_Method_Struct", "Method", "Struct", True),
+    ("uses", "Uses_Method_Enum", "Method", "Enum", True),
+    ("uses", "Uses_Method_Trait", "Method", "Trait", True),
+    ("uses", "Uses_Method_TypeAlias", "Method", "TypeAlias", True),
+)
 
 
 async def _edge_batches_async(
@@ -36,11 +108,11 @@ async def _edge_batches_async(
       * Imports_File_<Lbl>  for File → imported symbol
       * HasMethod_<Parent>_Method for struct/enum/trait → method
 
-    We enumerate the known rel tables (~89 queries) and collapse them to
-    the semantic kinds the builder understands. Each rel-table's rows are
-    yielded as its own batch the moment its query returns, so peak rows
-    retained inside the source is one rel-table's result — not the union
-    across all 89 queries.
+    We query exactly the rel tables AP's schema defines (``_AP_REL_TABLES``,
+    transcribed from AP's ``REL_TABLES``) and collapse them to the semantic
+    kinds the builder understands. Each rel-table's rows are yielded as its own
+    batch the moment its query returns, so peak rows retained inside the source
+    is one rel-table's result — not the union across all the queries.
     """
     # Same path-matching strategy as ``_symbol_batches_async``.
     path_tails: set[str] = set()
@@ -51,31 +123,6 @@ async def _edge_batches_async(
         parts = p.split("/")
         for i in range(1, len(parts)):
             path_tails.add("/".join(parts[i:]))
-    # Enumerate the full Cartesian product of label kinds AP could
-    # have produced rel tables for. AP rejects queries against rel
-    # tables that don't exist by returning empty rows, so the over-
-    # enumeration is safe — it just costs extra round-trips against
-    # missing tables. The narrower prior lists were the reason the
-    # cortex viz showed ~4k imports instead of the tens of thousands
-    # the codebase actually contains: every File→Class / File→
-    # Interface / File→TypeAlias / File→Macro etc. edge was being
-    # silently dropped because its rel table was never queried.
-    _CALL_LABELS = ("Function", "Method", "Macro")
-    _IMPORT_TARGETS = _SYMBOL_LABELS  # File can import any symbol kind
-    _CONTAINER_LBLS = (
-        "Struct",
-        "Enum",
-        "Trait",
-        "Class",
-        "Interface",
-        "Protocol",
-        "Extension",
-        "Union",
-    )
-    _MEMBER_LBLS = ("Method", "Field", "Property", "Constant", "TypeAlias")
-    calls_rels = [(s, d) for s in _CALL_LABELS for d in _CALL_LABELS]
-    imports_rels = [("File", t) for t in _IMPORT_TARGETS]
-    member_rels = [(s, d) for s in _CONTAINER_LBLS for d in _MEMBER_LBLS]
 
     def _match(file_part: str) -> bool:
         if not path_tails:
@@ -182,44 +229,5 @@ async def _edge_batches_async(
             )
         return batch
 
-    for s, d in calls_rels:
-        yield await _run_edge("calls", f"Calls_{s}_{d}", s, d, has_provenance=True)
-    for s, d in imports_rels:
-        yield await _run_edge(
-            "imports", f"Imports_{s}_{d}", s, d, has_provenance=True
-        )
-    for s, d in member_rels:
-        yield await _run_edge(
-            "member_of", f"HasMethod_{s}_{d}", s, d, has_provenance=False
-        )
-    # File → Import node. AP wires every ``import`` statement to its
-    # file via this rel table; counts in the tens of thousands per
-    # project. Without this, the cortex viz captures only the small
-    # subset that AP managed to RESOLVE to in-graph symbols (the
-    # ``Imports_File_*`` tables, totalling ~5k vs ~36k actual).
-    yield await _run_edge(
-        "imports",
-        "Defines_File_Import",
-        "File",
-        "Import",
-        has_provenance=False,
-    )
-    # Type-usage edges (Method/Function uses Struct/Class/etc).
-    # Captured by AP's resolver and exposed as ``Uses_<src>_<dst>``.
-    _USES_SRC = ("Method", "Function")
-    _USES_DST = (
-        "Struct",
-        "Enum",
-        "Trait",
-        "Class",
-        "Interface",
-        "Protocol",
-        "Extension",
-        "Union",
-        "TypeAlias",
-    )
-    for s in _USES_SRC:
-        for d in _USES_DST:
-            yield await _run_edge(
-                "uses", f"Uses_{s}_{d}", s, d, has_provenance=True
-            )
+    for kind, table, src_lbl, dst_lbl, has_prov in _AP_REL_TABLES:
+        yield await _run_edge(kind, table, src_lbl, dst_lbl, has_provenance=has_prov)
