@@ -105,7 +105,7 @@
       {
         id: 'emotion', label: 'EMOTIONAL TAG',
         sub: 'Priority encoding',
-        ref: 'Wang & Bhatt 2024',
+        ref: 'Qasim et al. 2023',
         test: function(m) { return m._emotional; }
       },
       {

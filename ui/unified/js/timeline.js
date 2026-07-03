@@ -46,7 +46,7 @@
   var STAGE_BIO = {
     labile: { decay: '2.0x', vuln: '90%', plast: '100%', advance: 'DA\u22651 or imp>0.3' },
     early_ltp: { decay: '1.2x', vuln: '50%', plast: '70%', advance: 'replay\u22651 or imp>0.4' },
-    late_ltp: { decay: '0.8x', vuln: '20%', plast: '30%', advance: 'replay\u22653' },
+    late_ltp: { decay: '0.8x', vuln: '20%', plast: '30%', advance: 'replay\u22653 (\u22651 if schema>0.5)' },
     consolidated: { decay: '0.5x', vuln: '5%', plast: '10%', advance: 'Stable' },
     reconsolidating: { decay: '1.5x', vuln: '80%', plast: '90%', advance: 'Re-stabilizes' },
   };

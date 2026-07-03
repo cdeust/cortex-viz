@@ -112,6 +112,56 @@ def build_stats(
         "entities": store.count_entities(),
         "relationships": store.count_relationships(),
         "triggers": store.count_active_triggers(),
+        "procedural_skills": _safe_call(store, "count_procedural_skills", 0),
+        "provenance": _safe_call(
+            store,
+            "count_provenance",
+            {"perceived": 0, "told": 0, "inferred": 0, "unknown": 0},
+        ),
+        "crystallized_confabulations": _safe_call(
+            store, "count_crystallized_confabulations", 0
+        ),
+        "habituated_repeats": _safe_call(store, "count_habituated_repeats", 0),
+        "extinguished": _safe_call(store, "count_extinguished", 0),
+        "conflicting_claim_pairs": _safe_call(
+            store, "count_conflicting_claim_pairs", 0
+        ),
+        "familiarity_resolvable": _safe_call(
+            store,
+            "count_familiarity_resolvable",
+            {"sampled": 0, "resolvable": 0, "share": 0.0, "mean_top_sim": 0.0},
+        ),
+        "sleep_phase_outputs": _safe_call(
+            store, "count_sleep_phase_outputs", {"nrem": 0, "rem": 0}
+        ),
+        "targeted_reactivation": _safe_call(
+            store, "count_targeted_reactivation", {"cue": None, "cued_replayed": 0}
+        ),
+        "stress_modulation": _safe_call(
+            store,
+            "count_stress_modulation",
+            {"stress": 0.0, "gain": 1.0, "is_impairing": False},
+        ),
+        "active_goal": _safe_call(
+            store,
+            "count_active_goal",
+            {"active": False, "triggers": 0, "keywords": 0, "label": None},
+        ),
+        "attentional_salience": _safe_call(
+            store,
+            "count_attentional_salience",
+            {
+                "sampled": 0,
+                "focus_share": 0.0,
+                "mean_salience": 0.0,
+                "max_salience": 0.0,
+            },
+        ),
+        "forward_model": _safe_call(
+            store,
+            "count_forward_model",
+            {"sampled": 0, "mean_error": 0.0},
+        ),
         "last_consolidation": store.get_last_consolidation(),
         "engram_total_slots": total_slots,
         "engram_occupied_slots": active_slots,

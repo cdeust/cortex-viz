@@ -93,12 +93,16 @@
 </div>
 
 <!-- ── Three.js r137 + UMD addons (global THREE.*) ───────────── -->
+<!-- Load order is load-bearing: EffectComposer.js defines THREE.Pass, so it
+     must precede every pass that `extends THREE.Pass` (ShaderPass, MaskPass,
+     RenderPass, UnrealBloomPass). source: three r137 examples/js —
+     postprocessing/EffectComposer.js:282 `THREE.Pass = Pass`. -->
 <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
 <script src="https://unpkg.com/three@0.137.0/examples/js/shaders/CopyShader.js"></script>
 <script src="https://unpkg.com/three@0.137.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://unpkg.com/three@0.137.0/examples/js/postprocessing/EffectComposer.js"></script>
 <script src="https://unpkg.com/three@0.137.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://unpkg.com/three@0.137.0/examples/js/postprocessing/MaskPass.js"></script>
-<script src="https://unpkg.com/three@0.137.0/examples/js/postprocessing/EffectComposer.js"></script>
 <script src="https://unpkg.com/three@0.137.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://unpkg.com/three@0.137.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
 <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>

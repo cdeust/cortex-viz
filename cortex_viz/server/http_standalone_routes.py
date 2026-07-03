@@ -128,6 +128,16 @@ def _route_unified_get(
 
         serve_activity_stream(handler, store)
         return
+    if path_no_qs == "/api/graph/full/stream":
+        # Same snapshot as /api/graph/full, delivered as NDJSON frames a
+        # browser can ingest through a bounded queue (the single-document
+        # form is ~1.17 GB decompressed — response.json() cannot hold it).
+        from cortex_viz.server.http_standalone_fullstream import (
+            serve_graph_full_stream,
+        )
+
+        serve_graph_full_stream(handler, store)
+        return
     if path_no_qs == "/api/graph/full":
         # Durable full graph from the PG snapshot — stable across the build
         # rebuild loop, no lazy-kick. Must stay BEFORE the bare ``/api/graph``.
@@ -154,6 +164,13 @@ def _route_unified_get(
         from cortex_viz.server.http_standalone_memories import serve_memories
 
         serve_memories(handler, store)
+        return
+    if path_no_qs == "/api/skills":
+        # Procedural skills (B1): learned action-sequence habits, ranked by
+        # proficiency. Empty on stores predating procedural memory.
+        from cortex_viz.server.http_standalone_skills import serve_skills
+
+        serve_skills(handler, store)
         return
     if path == "/api/discussions" or path.startswith("/api/discussions?"):
         serve_discussions(handler)
@@ -187,6 +204,26 @@ def _route_unified_get(
     elif path_no_qs in ("/atom", "/atom-viz.html"):
         # Atom-shell 3D memory view bootstrap (ui/atom-viz.html).
         serve_static(handler, ui_root, "atom-viz.html", "text/html")
+    elif path_no_qs in ("/brain", "/brain-viz.html"):
+        # 3D anatomical-brain view: the full galaxy graph (/api/graph/full)
+        # rendered as glowing nodes inside a translucent brain mesh.
+        serve_static(handler, ui_root, "brain-viz.html", "text/html")
+    elif path.startswith("/brain/js/") and path_no_qs.endswith(".js"):
+        serve_static(
+            handler,
+            ui_root / "brain" / "js",
+            path_no_qs[len("/brain/js/") :],
+            "application/javascript",
+        )
+    elif path.startswith("/brain/models/") and path_no_qs.endswith(".glb"):
+        # Vendored anatomical brain mesh (CC-BY-4.0 — see
+        # ui/brain/models/ATTRIBUTION.md). Served as binary glTF.
+        serve_static(
+            handler,
+            ui_root / "brain" / "models",
+            path_no_qs[len("/brain/models/") :],
+            "model/gltf-binary",
+        )
     elif path.startswith("/dashboard/js/") and path_no_qs.endswith(".js"):
         serve_static(
             handler,
