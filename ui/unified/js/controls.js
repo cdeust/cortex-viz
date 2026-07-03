@@ -8,6 +8,16 @@
     document.querySelectorAll('.view-toggle .view-btn[data-nav]').forEach(function (btn) {
       btn.addEventListener('click', function () { window.location.href = btn.dataset.nav; });
     });
+
+    // The legend now docks bottom-RIGHT (so it no longer collides with the
+    // top-left info panel). The detail panel also docks right, so hide the
+    // legend while it's open and restore on close — same behaviour as the
+    // brain view. source: legend overlap report 2026-07-03.
+    var legendEl = document.getElementById('legend');
+    if (window.JUG && JUG.on && legendEl) {
+      JUG.on('graph:selectNode', function () { legendEl.style.display = 'none'; });
+      JUG.on('graph:deselectNode', function () { legendEl.style.display = ''; });
+    }
     function _toggleGraphWarn(view) {
       var w = document.getElementById('cortex-graph-warn');
       if (!w) return;
