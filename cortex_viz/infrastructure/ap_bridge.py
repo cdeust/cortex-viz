@@ -105,7 +105,21 @@ def resolve_graph_paths() -> list[str]:
 
     def _add(p) -> None:
         s = str(p)
-        if s in seen or not p.exists():
+        if s in seen:
+            return
+        # Graph-path discovery is best-effort and runs on the server's
+        # pre-bind startup path (ensure_build_started -> _roster_fingerprint).
+        # ``Path.exists()`` RAISES on a stat failure (PermissionError / OSError)
+        # rather than returning False, so an unstattable candidate would abort
+        # the whole server before it binds its socket — presenting to the user
+        # as "the visualization won't start". A path we cannot stat is, for
+        # discovery purposes, not a usable graph: treat any OSError as absent.
+        # source: reproduced 2026-07-02 (PermissionError on
+        # ~/.cortex/ap_graph/graph aborted http_standalone.main before bind).
+        try:
+            if not p.exists():
+                return
+        except OSError:
             return
         paths.append(s)
         seen.add(s)
@@ -125,9 +139,18 @@ def resolve_graph_paths() -> list[str]:
         Path.home() / ".cortex" / "ap_graphs",
         Path.home() / ".cache" / "cortex" / "code-graphs",
     ):
-        if roster.is_dir():
-            for project_dir in sorted(roster.iterdir()):
-                _add(project_dir / "graph")
+        # ``is_dir()`` / ``iterdir()`` also raise on a stat failure — same
+        # pre-bind fragility as ``_add`` above. An un-listable roster
+        # contributes no graphs; it must not abort server startup. source:
+        # reproduced 2026-07-02 (PermissionError on ~/.cortex/ap_graphs).
+        try:
+            if not roster.is_dir():
+                continue
+            project_dirs = sorted(roster.iterdir())
+        except OSError:
+            continue
+        for project_dir in project_dirs:
+            _add(project_dir / "graph")
     return paths
 
 

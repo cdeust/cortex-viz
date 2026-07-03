@@ -59,9 +59,14 @@ def _find_dev_source() -> Path | None:
         v = os.environ.get("CORTEX_DEV_ROOT")
         if v and _is_cortex_root(Path(v)):
             return Path(v)
-    default = Path.home() / "Developments" / "Cortex"
-    if _is_cortex_root(default):
-        return default
+    # New ecosystem layout (anthropic-partnership/, 2026-06) first, then
+    # the legacy top-level ``~/Developments/Cortex`` checkout.
+    for default in (
+        Path.home() / "Developments" / "anthropic-partnership" / "Cortex",
+        Path.home() / "Developments" / "Cortex",
+    ):
+        if _is_cortex_root(default):
+            return default
     return None
 
 

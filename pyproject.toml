@@ -25,6 +25,19 @@ dependencies = [
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
     "numpy>=1.24.0",
+    # PostgreSQL read-path drivers. NOT optional: the standalone HTTP
+    # server's only store is MemoryReader, which imports psycopg at module
+    # top (no SQLite fallback), and main() calls _get_store() BEFORE it
+    # binds the socket. Without these the server crashes at startup — before
+    # it can serve even the UI skeleton — which presents to the user as "the
+    # visualization won't open / isn't running". They were previously under
+    # the optional [data] extra, so any install that didn't request the extra
+    # produced a server that could never start. source: reproduced 2026-07-02
+    # (ModuleNotFoundError: No module named 'psycopg' at memory_read.py:41,
+    # raised from _get_store() in http_standalone.py:main before _bind_server).
+    "psycopg[binary]>=3.1",
+    "psycopg-pool>=3.2",
+    "pgvector>=0.3",
 ]
 
 [project.urls]
@@ -48,7 +61,10 @@ viz-tile = [
     "Pillow>=10.0",
 ]
 # The viz read contract: cortex-viz reads Cortex's PG store + ~/.claude
-# artifacts directly. These are the read-path drivers (no write path).
+# artifacts directly. These read-path drivers were PROMOTED to core
+# ``dependencies`` (see the note there) because the server cannot start
+# without them. This extra is kept as a back-compat alias so existing
+# ``cortex-viz[data]`` install commands / lockfiles still resolve.
 data = [
     "psycopg[binary]>=3.1",
     "psycopg-pool>=3.2",

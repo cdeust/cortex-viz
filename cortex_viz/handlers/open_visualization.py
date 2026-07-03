@@ -125,7 +125,9 @@ def _find_dev_source() -> Path | None:
         v = os.environ.get("CORTEX_DEV_ROOT")
         if v:
             candidates.append(Path(v))
-    # Conventional home-directory checkout — user-controlled, safe.
+    # Conventional home-directory checkouts — user-controlled, safe.
+    # New ecosystem layout (anthropic-partnership/, 2026-06) first, then legacy.
+    candidates.append(Path.home() / "Developments" / "anthropic-partnership" / "Cortex")
     candidates.append(Path.home() / "Developments" / "Cortex")
     for c in candidates:
         if _is_cortex_root(c):
