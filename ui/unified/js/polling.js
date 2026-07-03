@@ -142,6 +142,136 @@
       setText('sv-lltp', cp.late_ltp || 0);
       setText('sv-cons', cp.consolidated || 0);
       setText('sv-recon', cp.reconsolidating || 0);
+      // Procedural skills (B1): total, with habitual count in parentheses.
+      var skillN = sv.procedural_skills || 0;
+      var habitN = sv.habitual_skills || 0;
+      setText('sv-skills', habitN > 0 ? (skillN + ' (' + habitN + ')') : skillN);
+      // Source monitoring (C1): inferred count out of total — the
+      // confabulation-risk cohort. Shows "N / total" so it's read as a ratio.
+      var prov = sv.provenance || {};
+      var inferN = sv.inferred_memories || prov.inferred || 0;
+      var provTotal = (prov.perceived || 0) + (prov.told || 0) +
+                      (prov.inferred || 0) + (prov.unknown || 0);
+      setText('sv-inferred', provTotal > 0 ? (inferN + ' / ' + provTotal) : inferN);
+      // Source monitoring (C1) read-side enforcement: semantic memories flagged
+      // at the promotion point as a confabulation crystallized as fact (an
+      // inferred, ungrounded cluster promoted to knowledge). Distinct from the
+      // Inferred cohort above (inferred memories at rest) — this is the subset
+      // that crossed the crystallization gate (Johnson & Raye 1981).
+      setText('sv-confab', sv.crystallized_confabulations || 0);
+      // Habituation (E1): surplus repeated presentations the write gate's
+      // response decrement is damping (Rankin 2009) — the memory-bloat signal.
+      setText('sv-habituated', sv.habituated_repeats || 0);
+      // Extinction (E2): memories carrying a reversible inhibitory tag —
+      // deprecated-but-retained (suppressed WITHOUT deletion), so they can
+      // spontaneously recover or be reinstated (Bouton 2004; Milad & Quirk
+      // 2012). Distinct from the Stale/archived soft-delete count.
+      setText('sv-extinguished', sv.extinguished || 0);
+      // Conflict monitoring (A2): pairs of persisted claims that disagree
+      // (shared entity, opposing claim_type) — the standing counterpart of the
+      // recall-time conflict monitor that routes to the claim resolver
+      // (Botvinick 2001; Miller & Cohen 2001).
+      setText('sv-conflict', sv.conflicting_claim_pairs || 0);
+      // Dual-process retrieval (C2): share of a recent sample resolvable by
+      // familiarity alone (a near-duplicate neighbour above the familiarity
+      // threshold), the standing counterpart of the recall-time familiarity
+      // triage (Yonelinas 2002; Diana et al 2007). Shown as a percentage with
+      // the resolvable/sampled counts in parentheses.
+      var fam = sv.familiarity_resolvable || {};
+      if (fam.sampled) {
+        var pct = Math.round((fam.share || 0) * 100);
+        setText('sv-familiarity', pct + '% (' + (fam.resolvable || 0) +
+                '/' + fam.sampled + ')');
+      } else {
+        setText('sv-familiarity', '--');
+      }
+      // Two-phase consolidation (F1): standing footprint of the NREM/REM split
+      // (mcp_server/core/sleep_phases.py). NREM = auto-narration semantic
+      // memories the exact-replay phase stored; REM = abstract schemas the
+      // recombination/abstraction phase formed — the abstraction the single
+      // pre-split pass never produced (Diekelmann & Born 2010; van de Ven 2020).
+      // Shown as "NREM / REM".
+      var slp = sv.sleep_phase_outputs || {};
+      setText('sv-sleepphase', (slp.nrem || 0) + ' / ' + (slp.rem || 0));
+      // Targeted memory reactivation (F2): the cue that biased the LAST offline
+      // consolidation's NREM replay (mcp_server/core/targeted_reactivation.py).
+      // Cueing biases which memories preferentially reconsolidate (Rasch et al
+      // 2007; Oudiette & Paller 2013). Shows the cue string + how many replayed
+      // memories matched it; '--' when the last cycle ran cue-free / TMR ablated
+      // / the store predates cue logging. A deterministic lexical re-weight of
+      // the replay set, not a spindle model.
+      var tmr = sv.targeted_reactivation || {};
+      if (tmr.cue) {
+        setText('sv-tmr', tmr.cue + ' (' + (tmr.cued_replayed || 0) + ')');
+      } else {
+        setText('sv-tmr', '--');
+      }
+      // Stress-hormone (glucocorticoid) modulation (D1): the inverted-U
+      // consolidation gain of the LAST offline cycle, with the session-stress
+      // scalar in parentheses. Moderate stress enhances (gain>1), extreme
+      // impairs (gain<1) consolidation (Roozendaal & McGaugh 2011; McGaugh
+      // 2000). A red-tinted down-arrow marks the impairing arm; a neutral
+      // 1.00x means the last cycle was calm / the mechanism was ablated / the
+      // store predates stress logging. A lexical+valence proxy and a
+      // deterministic inverted-U (Hebb 1955 shape), not a glucocorticoid model.
+      var smod = sv.stress_modulation || {};
+      var smEl = document.getElementById('sv-stress');
+      if (smEl) {
+        var gain = (typeof smod.gain === 'number') ? smod.gain : 1.0;
+        var stress = (typeof smod.stress === 'number') ? smod.stress : 0.0;
+        var arrow = smod.is_impairing ? '\u2193' : '';
+        setText('sv-stress', arrow + gain.toFixed(2) + 'x (' + stress.toFixed(2) + ')');
+        smEl.style.color = smod.is_impairing ? '#E05050' : '#D08050';
+      }
+      // Goal / task-set maintenance (A3): the sustained goal vector promoted
+      // from the store's active prospective triggers (mcp_server/core/
+      // goal_maintenance.py) — the held task-set that biases the write gate and
+      // recall fusion toward goal-relevant information while active (Miller &
+      // Cohen 2001). Shows the goal's top keywords as a task label with the
+      // count of active triggers forming it in parentheses; '--' when no goal is
+      // active (an inactive goal is the write+recall identity — the no-goal
+      // case), TMR/goal ablated, or the store predates goal maintenance. A
+      // keyword/entity goal-match promoted from the trigger surface, NOT a
+      // learned PFC task-set controller.
+      var goal = sv.active_goal || {};
+      if (goal.active && goal.label) {
+        setText('sv-goal', goal.label + ' (' + (goal.triggers || 0) + ')');
+      } else {
+        setText('sv-goal', '--');
+      }
+      // Cerebellar forward model (B3): mean absolute one-step forward-model
+      // prediction error of the recent heat trajectory (mcp_server/core/
+      // forward_model.py) — the cerebellum predicts the next value of a signal
+      // and corrects its estimate from the residual (Wolpert, Miall & Kawato
+      // 1998; Ito 2008). High = jumpy activation the smooth dynamics fail to
+      // anticipate; ~0 = predictable. Shows the mean error with the sampled
+      // count in parentheses; '--' when no trajectory is available (< 2 rows or
+      // the store predates heat_base). A minimal deterministic predict→error→
+      // correct EMA (LOW AI PRIORITY), NOT a learned cerebellar circuit.
+      var fm = sv.forward_model || {};
+      if (fm.sampled && fm.sampled >= 2) {
+        setText('sv-prederr', (fm.mean_error || 0).toFixed(4) + ' (' + fm.sampled + ')');
+      } else {
+        setText('sv-prederr', '--');
+      }
+      // Attentional control / central executive (A1): concentration of the
+      // bottom-up salience (0.5*importance + 0.5*|valence|) that feeds the
+      // recall-time attentional re-weight (mcp_server/core/attentional_control
+      // .py, wired via recall_pipeline.attentional_focus_rerank). The top-down
+      // half is query-dependent and in-flight; the bottom-up half is persisted,
+      // so we show how CONCENTRATED it is — the share of recent salience mass
+      // held by the Cowan ~4 most-salient memories (Baddeley 2003; Posner &
+      // Petersen 1990; Cowan 2001). High = a few dominate stimulus-driven
+      // capture; low = spread evenly. Shows share% with the sample size; '--'
+      // when the store predates the affect columns. A descriptive concentration
+      // ratio, NOT the softmax spotlight (which needs a live query).
+      var attn = sv.attentional_salience || {};
+      if (attn.sampled) {
+        setText('sv-attn',
+          Math.round((attn.focus_share || 0) * 100) + '% (' + attn.sampled + ')');
+      } else {
+        setText('sv-attn', '--');
+      }
     }
 
     // Benchmark summary — R@10 + MRR side by side

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cortex — Atom Memory Graph</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/dashboard/theme.css">
+<link rel="stylesheet" href="/dashboard/panels.css">
+</head>
+<body>
+
+<div id="loading">
+  <div class="loader-ring"></div>
+  <div class="loader-title">CORTEX</div>
+  <div class="loader-sub">Spinning up the atom</div>
+</div>
+
+<!-- ── Sidebar ───────────────────────────────────────────────── -->
+<aside id="sidebar">
+  <div class="sidebar-header">
+    <div class="logo">CORTEX</div>
+    <div class="version">atom</div>
+  </div>
+  <nav class="nav">
+    <button class="nav-item active" data-view="graph">Atom Graph</button>
+    <button class="nav-item" data-view="timeline">Timeline</button>
+    <button class="nav-item" data-view="categories">Categories</button>
+  </nav>
+  <div class="sidebar-footer">
+    <button id="analytics-toggle" class="nav-item">Analytics</button>
+  </div>
+</aside>
+
+<!-- ── Main column ───────────────────────────────────────────── -->
+<div id="main">
+  <div id="topbar">
+    <div class="topbar-left">
+      <div id="type-filter-bar" class="filter-bar">
+        <button class="filter-btn active" data-type="all">All</button>
+        <button class="filter-btn" data-type="episodic">Episodic</button>
+        <button class="filter-btn" data-type="semantic">Semantic</button>
+        <button class="filter-btn" data-type="entity">Entity</button>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <input id="search-box" type="text" placeholder="Search memories…" />
+      <button id="reset-cam">Reset</button>
+    </div>
+  </div>
+
+  <div id="kpi-strip"></div>
+
+  <div id="graph-container"></div>
+
+  <div id="bottombar">
+    <div id="stats-bar"></div>
+    <div class="status">
+      <span id="status-dot" class="status-dot dead"></span>
+      <span id="status-text">Offline</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── Detail panel ──────────────────────────────────────────── -->
+<div id="panel">
+  <button id="panel-close" class="close-btn">&#x2715;</button>
+  <div id="panel-type" class="type-badge"></div>
+  <div id="panel-name" class="panel-name"></div>
+  <div id="panel-meta" class="meta-grid"></div>
+  <div id="panel-tags" class="tags"></div>
+  <div class="heat-track"><div id="panel-heat-bar" class="heat-fill"></div></div>
+  <div class="conn-header">Proximal Links</div>
+  <div id="panel-connections"></div>
+</div>
+
+<!-- ── Tooltip ───────────────────────────────────────────────── -->
+<div id="tooltip">
+  <div class="tt-label"></div>
+  <div class="tt-type"></div>
+  <div class="tt-meta"></div>
+</div>
+
+<!-- ── Overlay views ─────────────────────────────────────────── -->
+<div id="timeline-overlay" class="overlay-panel">
+  <div id="timeline-container"></div>
+</div>
+<div id="categories-overlay" class="overlay-panel">
+  <div id="categories-container"></div>
+</div>
+<div id="analytics-panel" class="overlay-panel">
+  <button id="analytics-close" class="close-btn">&#x2715;</button>
+</div>
+
+<!-- ── Three.js r137 + UMD addons (global THREE.*) ───────────── -->
+<!-- Load order is load-bearing: EffectComposer.js defines THREE.Pass, so it
+     must precede every pass that `extends THREE.Pass` (ShaderPass, MaskPass,
+     RenderPass, UnrealBloomPass). source: three r137 examples/js —
+     postprocessing/EffectComposer.js:282 `THREE.Pass = Pass`. -->
+<script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.137.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://unpkg.com/three@0.137.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://unpkg.com/three@0.137.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://unpkg.com/three@0.137.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://unpkg.com/three@0.137.0/examples/js/postprocessing/MaskPass.js"></script>
+<script src="https://unpkg.com/three@0.137.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://unpkg.com/three@0.137.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
+
+<!-- ── Dashboard modules (atom-shell layout) ─────────────────── -->
+<script src="/dashboard/js/config.js"></script>
+<script src="/dashboard/js/state.js"></script>
+<script src="/dashboard/js/scene.js"></script>
+<script src="/dashboard/js/camera.js"></script>
+<script src="/dashboard/js/nodes.js"></script>
+<script src="/dashboard/js/edges.js"></script>
+<script src="/dashboard/js/edge_fx.js"></script>
+<script src="/dashboard/js/effects.js"></script>
+<script src="/dashboard/js/atom.js"></script>
+<script src="/dashboard/js/raycast.js"></script>
+<script src="/dashboard/js/graph.js"></script>
+<script src="/dashboard/js/interaction.js"></script>
+<script src="/dashboard/js/timeline.js"></script>
+<script src="/dashboard/js/categories.js"></script>
+<script src="/dashboard/js/analytics.js"></script>
+<script src="/dashboard/js/controls.js"></script>
+<script src="/dashboard/js/stats.js"></script>
+<script src="/dashboard/js/polling.js"></script>
+
+</body>
+</html>

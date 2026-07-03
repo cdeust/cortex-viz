@@ -63,12 +63,28 @@
 
   <div id="system-vitals" style="margin-top:10px;border-top:1px solid #ffffff10;padding-top:8px;display:none">
     <div style="font-size:7px;text-transform:uppercase;letter-spacing:0.5px;color:var(--cyan-dim,#508090);margin-bottom:6px">System Vitals</div>
+    <!-- Stage colours = MEMORY_STAGE_COLORS (workflow_graph_palette.py), the
+         same greens the memory nodes are painted with — one canonical stage
+         palette across nodes, galaxy vitals, and the brain view. -->
     <div class="stat-row"><span>Mean Heat</span><span class="val" id="sv-heat">--</span></div>
-    <div class="stat-row"><span>New</span><span class="val" id="sv-labile" style="color:#00D2FF">--</span></div>
-    <div class="stat-row"><span>Growing</span><span class="val" id="sv-eltp" style="color:#60A0E0">--</span></div>
-    <div class="stat-row"><span>Strong</span><span class="val" id="sv-lltp" style="color:#40D870">--</span></div>
-    <div class="stat-row"><span>Stable</span><span class="val" id="sv-cons" style="color:#E8B840">--</span></div>
-    <div class="stat-row"><span>Updating</span><span class="val" id="sv-recon" style="color:#C070D0">--</span></div>
+    <div class="stat-row"><span>New</span><span class="val" id="sv-labile" style="color:#86EFAC">--</span></div>
+    <div class="stat-row"><span>Growing</span><span class="val" id="sv-eltp" style="color:#4ADE80">--</span></div>
+    <div class="stat-row"><span>Strong</span><span class="val" id="sv-lltp" style="color:#16A34A">--</span></div>
+    <div class="stat-row"><span>Stable</span><span class="val" id="sv-cons" style="color:#166534">--</span></div>
+    <div class="stat-row"><span>Updating</span><span class="val" id="sv-recon" style="color:#2DD4BF">--</span></div>
+    <div class="stat-row" title="Procedural skills (B1): recurring successful action-sequence habits, retrieved by situation. Value in parentheses = habitual (≥5 successful reps)."><span>Skills</span><span class="val" id="sv-skills" style="color:#F0803C">--</span></div>
+    <div class="stat-row" title="Source / reality monitoring (C1): epistemic origin of stored memories — perceived (externally grounded) / told (user-stated) / inferred (self-generated, no grounding). The highlighted count is inferred memories — the confabulation-risk cohort (Johnson 1993)."><span>Inferred</span><span class="val" id="sv-inferred" style="color:#E05050">--</span></div>
+    <div class="stat-row" title="Source / reality monitoring (C1) — read-side enforcement: semantic memories the confabulation gate flagged at the episodic→semantic promotion point — an internally generated (inferred), ungrounded cluster crystallized as a semantic FACT (Johnson & Raye 1981). Distinct from Inferred above (inferred memories at rest): this is the subset that was PROMOTED to knowledge — a confabulation that crossed the crystallization gate. Non-fatal: flagged, not dropped."><span>Confabulated</span><span class="val" id="sv-confab" style="color:#E05050">--</span></div>
+    <div class="stat-row" title="Habituation & sensitization (E1): surplus repeated presentations of identical content the write gate's response decrement is damping — the memory-bloat that habituation suppresses (Rankin 2009). Counts memories beyond the first in each repeated-signature group."><span>Habituated</span><span class="val" id="sv-habituated" style="color:#8060D0">--</span></div>
+    <div class="stat-row" title="Fear extinction / inhibitory learning (E2): memories carrying a reversible inhibitory extinction tag (extinction_strength >= 0.5) — deprecated-but-retained. Extinction is NEW inhibitory learning laid over a retained association, not erasure: the original trace is left fully intact and only its effective retrieval weight is suppressed, so it can spontaneously recover (the tag decays over time) or be reinstated (the tag is cleared). Distinct from Stale/archived (active_forgetting's soft-delete, which hides the whole memory). Bouton 2004 (Learn. Mem. 11:485-494); Milad & Quirk 2012 (Annu. Rev. Psychol. 63:129-151). A deterministic reversible masking scalar, not a learned inhibitory circuit."><span>Extinguished</span><span class="val" id="sv-extinguished" style="color:#B060C0">--</span></div>
+    <div class="stat-row" title="Conflict monitoring / cognitive control (A2): pairs of persisted claims that disagree — they share an entity but carry opposing claim types (decision↔limitation, method↔limitation, decision↔decision). The standing counterpart of the recall-time conflict monitor that routes such pairs to the claim resolver (Botvinick 2001; Miller & Cohen 2001)."><span>Conflicts</span><span class="val" id="sv-conflict" style="color:#E0A030">--</span></div>
+    <div class="stat-row" title="Recollection vs. familiarity / dual-process retrieval (C2): over a bounded recent sample, the share of memories resolvable by FAMILIARITY ALONE — a near-duplicate neighbour exists above the familiarity threshold (cosine >= 0.92), the regime where a fast a-contextual similarity gate suffices without slow contextual recollection. The standing counterpart of the recall-time familiarity triage (Yonelinas 2002; Diana, Yonelinas & Ranganath 2007). Familiarity here is a max-cosine-similarity heuristic, not a trained dual-process model."><span>Familiar</span><span class="val" id="sv-familiarity" style="color:#40C0C0">--</span></div>
+    <div class="stat-row" title="NREM/REM two-phase consolidation (F1): standing footprint of the offline consolidation split. NREM = auto-narration semantic memories the exact-replay phase stored (source='sleep-compute'); REM = abstract schemas the recombination/abstraction phase formed (schemas table) — the abstraction the single pre-split pass never produced. Shown as 'NREM / REM'. Active systems consolidation: NREM replay, REM integration/schema (Diekelmann & Born 2010; McClelland 1995; van de Ven 2020). 'NREM'/'REM' are functional analogies for two computations Cortex already contains, not a biophysical sleep model; the split is deterministic NREM-then-REM scheduling."><span>Sleep NREM/REM</span><span class="val" id="sv-sleepphase" style="color:#6C8CE0">--</span></div>
+    <div class="stat-row" title="Targeted memory reactivation (F2): the cue (topic / tag / entity) that biased the LAST offline consolidation's NREM replay — cueing biases which memories preferentially reconsolidate (Rasch, Büchel, Gais & Born 2007; Oudiette & Paller 2013). Shows the active cue and, in parentheses, how many replayed memories matched it. '--' means the last cycle ran cue-free (identity replay), TMR was ablated, or the store predates cue logging. This is a deterministic lexical cue re-weight of the replay set, not a spindle/oscillation biophysical model; 'TMR' is a functional analogy for the 2007 result that a cue biases which memories consolidate."><span>TMR cue</span><span class="val" id="sv-tmr" style="color:#50C878">--</span></div>
+    <div class="stat-row" title="Stress-hormone (glucocorticoid) modulation (D1): the session-stress scalar and inverted-U consolidation gain of the LAST offline consolidation cycle. Stress hormones modulate consolidation strength biphasically — moderate session stress ENHANCES consolidation (gain &gt; 1), extreme stress IMPAIRS it (gain &lt; 1) — the inverted-U (Roozendaal &amp; McGaugh 2011, Behav. Neurosci. 125:797-824; McGaugh 2000, Science 287:248-251). Session stress is a proxy from urgency/deadline + failure lexical markers (the emotional-tagging lexicons) and the negative-valence share of the consolidated batch; it scales the pattern-recurrence bar (lower bar = broader consolidation). Shown as the gain multiplier with the stress scalar in parentheses; ‘↓1.00×’ with a red tint marks the IMPAIRING arm (gain &lt; 1). ‘1.00×’ means the last cycle was calm, the mechanism was ablated, or the store predates stress logging. DESIGN INFERENCE: a lexical+valence stress proxy and a deterministic inverted-U (Hebb 1955 shape), NOT a measured cortisol level or a fitted glucocorticoid dose-response model."><span>Stress gain</span><span class="val" id="sv-stress" style="color:#D08050">--</span></div>
+    <div class="stat-row" title="Goal / task-set maintenance (A3): the sustained goal vector promoted from the store's currently-active prospective triggers — the held task-set that biases the write gate and recall fusion toward goal-relevant information while it is in play (Miller &amp; Cohen 2001, Annu. Rev. Neurosci. 24:167-202). Shows the active goal's top keywords as a task label, with the count of active triggers forming it in parentheses. '--' means no active trigger contributes a keyword/entity/directory signal — an inactive goal, which is the exact write+recall identity (no goal bias), the same as the no-goal case; or the mechanism was ablated / the store predates goal maintenance. DESIGN INFERENCE: a keyword/entity goal-match promoted from the prospective trigger surface, deterministic — NOT a learned prefrontal task-set controller."><span>Active goal</span><span class="val" id="sv-goal" style="color:#C0A040">--</span></div>
+    <div class="stat-row" title="Cerebellar forward model (B3): over a bounded recent sample, the mean absolute one-step forward-model prediction error of the heat trajectory (mcp_server/core/forward_model.py). The cerebellum learns forward models that predict the sensory consequences of actions and correct the estimate from the residual — the sensory prediction error (Wolpert, Miall &amp; Kawato 1998, Trends Cogn. Sci. 2:338-347; Ito 2008, Nat. Rev. Neurosci. 9:304-313). The tracked signal here is each recent memory's heat_base (oldest→newest); the forward model predicts each heat one step ahead from its corrected running estimate and this is the mean |residual|. A HIGH value means recent activation is jumpy — the smooth dynamics fail to anticipate it; ~0 means heat evolves predictably. The sampled count is in parentheses; '--' when no heat trajectory is available (fewer than two rows, or the store predates heat_base). LOW AI PRIORITY per the gap analysis. DESIGN INFERENCE: a minimal deterministic scalar predict→error→correct EMA over heat, NOT a learned cerebellar circuit and NOT the perceptual predictive-coding novelty scorer."><span>Fwd-model err</span><span class="val" id="sv-prederr" style="color:#50B0A0">--</span></div>
+    <div class="stat-row" title="Attentional control / central executive (A1): concentration of the bottom-up SALIENCE that feeds the recall-time attentional re-weight (mcp_server/core/attentional_control.py, wired via recall_pipeline.attentional_focus_rerank). That stage scores each recall candidate by top-down query relevance PLUS a bottom-up salience term (0.5·importance + 0.5·|valence|) — Posner &amp; Petersen's (1990, Annu. Rev. Neurosci. 13:25-42) stimulus-driven capture — softmax-weights them (temperature-scaled), and nudges scores toward the salient/relevant few within the Cowan (2001) ~4-chunk focus (Baddeley 2003, Nat. Rev. Neurosci. 4:829-839). The top-down half is query-dependent and in-flight — nothing at rest to measure. The bottom-up half IS persisted (importance, emotional_valence), so this shows how CONCENTRATED it is: the share of recent salience mass held by the ~4 most-salient memories. HIGH = a few memories dominate stimulus-driven capture (a sharp spotlight even before any query); LOW = salience spread evenly (attention rests on the query alone). Sample size in parentheses; '--' when the store predates the affect columns. DESIGN INFERENCE: a descriptive concentration ratio of the fixed-constant bottom-up salience term, NOT the softmax spotlight itself (which needs a live query) and NOT a learned saliency model."><span>Attn focus</span><span class="val" id="sv-attn" style="color:#C878E0">--</span></div>
   </div>
 </div>
 
@@ -80,6 +96,10 @@
     <button class="view-btn" data-view="wiki">Wiki</button>
     <button class="view-btn" data-view="timeline">Board</button>
     <button class="view-btn" data-view="sankey">Pipeline</button>
+    <!-- Brain is a separate 3D WebGL surface (its own page), not an in-page
+         tab — data-nav navigates instead of swapping the active view. -->
+    <button class="view-btn view-btn--brain" data-nav="/brain"
+            title="Open the 3D anatomical brain view (same graph, placed in a real cortical mesh)">Brain ⟶</button>
   </span>
   <button class="filter-btn" id="glossary-toggle" title="Glossary (?)">?</button>
   <span class="filter-sep"></span>
@@ -453,10 +473,12 @@
 <script src="/js/tooltip.js?v=117ece5"></script>
 <script src="/js/renderer.js?v=117ece5"></script>
 <script src="/js/graph.js?v=117ece5"></script>
+<script src="/js/graph_stream_loader.js?v=117ece5"></script>
 <script src="/js/detail_tools.js?v=117ece5"></script>
 <script src="/js/detail_format.js?v=117ece5"></script>
 <script src="/js/detail_diff.js?v=117ece5"></script>
 <script src="/js/detail_panel.js?v=117ece5"></script>
+<script src="/js/skills_panel.js?v=117ece5"></script>
 <script src="/js/trace_detail.js"></script>
 <script src="/js/discussion_detail.js?v=117ece5"></script>
 <script src="/js/memory_science.js?v=117ece5"></script>
@@ -557,30 +579,83 @@
     return true;
   }
 
-  // Load the COMPLETE graph from the durable PG snapshot (/api/graph/full).
-  // Snapshot-ONLY by design: it is stable across the build's rebuild loop and
-  // never lazy-kicks a build, so the hero view (entities + AST symbols) loads
-  // instantly once any build has completed once. We deliberately do NOT fall
-  // back to /api/graph here — that volatile cache can return a PARTIAL graph
-  // mid-build, which must never latch as "full". 503 (no snapshot yet, first
-  // install) just resolves false; the progressive L0–L5 path keeps the view
-  // useful until the first build finishes and writes the snapshot. Returns a
-  // Promise<bool> — true once the full graph is applied (latched).
+  // Load the COMPLETE graph from the durable PG snapshot. Snapshot-ONLY by
+  // design: it is stable across the build's rebuild loop and never
+  // lazy-kicks a build, so the hero view (entities + AST symbols) loads
+  // once any build has completed once. We deliberately do NOT fall back to
+  // /api/graph here — that volatile cache can return a PARTIAL graph
+  // mid-build, which must never latch as "full". 503 (no snapshot yet,
+  // first install) just resolves false; the progressive L0–L5 path keeps
+  // the view useful until the first build finishes and writes the
+  // snapshot. Returns a Promise<bool> — true once applied (latched).
+  //
+  // Transport: /api/graph/full/stream through the throttled bounded-queue
+  // loader (graph_stream_loader.js) — the single-document form crossed
+  // ~1.17 GB decompressed, which response.json() cannot hold, so the same
+  // total arrives as NDJSON frames applied incrementally. The one-shot
+  // legacy fetch remains as fallback for older servers (stream 404s).
+  function _streamFullGraph() {
+    if (typeof JUG.streamFullGraph !== 'function') {
+      return Promise.resolve({ ok: false });
+    }
+    return JUG.streamFullGraph({
+      apply: function (nodes, edges) {
+        _seedLastData();
+        JUG.appendGraphDelta(nodes, edges);
+      },
+      onProgress: function (c) {
+        _symbolHint('streaming full graph — '
+          + c.nodes.toLocaleString()
+          + (c.node_total ? '/' + c.node_total.toLocaleString() : '')
+          + ' nodes, ' + c.edges.toLocaleString() + ' edges');
+      },
+    });
+  }
+
+  function _legacyFullFetch() {
+    return fetch('/api/graph/full')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (g) { return _applyFullGraph(g); });
+  }
+
+  // A truncated stream (server restarted mid-transfer) must never latch as
+  // "full" — retry the stream once; appendGraphDelta dedups on id, so the
+  // second pass only fills in what the first one missed.
+  function _streamWithRetry() {
+    return _streamFullGraph().then(function (res) {
+      if (res && res.truncated) {
+        console.warn('[phase] stream truncated — retrying once');
+        return _streamFullGraph();
+      }
+      return res;
+    });
+  }
+
   function _loadFullGraph() {
     if (_fullLoaded || _fullInflight) return Promise.resolve(_fullLoaded);
     _fullInflight = true;
-    return fetch('/api/graph/full')
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (g) {
-        var ok = _applyFullGraph(g);
+    return _streamWithRetry()
+      .then(function (res) {
+        if (res && res.ok && res.nodes > 0) {
+          console.log('[phase] FULL graph streamed',
+            res.nodes + 'N', res.edges + 'E');
+          _symbolHint('');
+          return true;
+        }
+        return _legacyFullFetch();
+      })
+      .catch(function (err) {
+        console.warn('[phase] stream load failed, trying legacy:',
+          err && err.message);
+        return _legacyFullFetch().catch(function (err2) {
+          console.warn('[phase] full graph load failed:', err2 && err2.message);
+          return false;
+        });
+      })
+      .then(function (ok) {
         if (ok) _fullLoaded = true;   // latch only on real, complete data
         _fullInflight = false;
         return ok;
-      })
-      .catch(function (err) {
-        _fullInflight = false;
-        console.warn('[phase] full graph load failed:', err && err.message);
-        return false;
       });
   }
 

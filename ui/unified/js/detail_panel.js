@@ -14,6 +14,10 @@
   }
 
   function findNode(id) {
+    // O(1) fast path when a renderer publishes a node index (the brain view
+    // has 279k nodes — a linear scan per connection would stall selection).
+    // The galaxy never sets _nodeIndex, so its behaviour is unchanged.
+    if (JUG._nodeIndex) return JUG._nodeIndex.get(id) || null;
     var gd = JUG.getGraph ? JUG.getGraph().graphData() : { nodes: [] };
     for (var i = 0; i < gd.nodes.length; i++) {
       if (gd.nodes[i].id === id) return gd.nodes[i];

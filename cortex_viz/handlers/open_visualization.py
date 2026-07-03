@@ -53,6 +53,23 @@ schema = {
                 ),
                 "examples": ["cortex", "auth-service"],
             },
+            "view": {
+                "type": "string",
+                "enum": ["galaxy", "brain"],
+                "default": "galaxy",
+                "description": (
+                    "Which visualization surface to open. 'galaxy' (default) "
+                    "is the 2D force-directed neural graph with the Graph / "
+                    "Trace / Knowledge / Wiki / Board / Pipeline tabs. 'brain' "
+                    "opens the 3D anatomical-brain view — the same full graph "
+                    "placed inside a real cortical mesh by memory-system "
+                    "neuroanatomy (episodic in the medial temporal lobe, "
+                    "semantic in temporal neocortex, procedural in the "
+                    "striatum/cerebellum), with the consolidation heat "
+                    "gradient and tract-routed synapses. Both read the same "
+                    "store; you can switch between them in the UI."
+                ),
+            },
         },
     },
 }
@@ -295,16 +312,31 @@ async def handler(args: dict | None = None) -> dict:
     # / two-stage fallback path the force-directed renderer uses. Landing
     # on ?viz=force gives the user first paint in ~1 s on any DB size;
     # the heavy data fills in behind it.
-    target_url = url.rstrip("/") + "/?viz=force"
+    view = (args or {}).get("view") or "galaxy"
+    if view == "brain":
+        # 3D anatomical-brain surface: the same full graph placed inside a
+        # cortical mesh by memory-system neuroanatomy. Its own page (three.js
+        # WebGL), reachable here or from the galaxy's Brain view-toggle.
+        target_url = url.rstrip("/") + "/brain"
+        message = (
+            f"3D anatomical brain view opened at {target_url}. The full graph "
+            "streams into a real cortical mesh — memories in the medial "
+            "temporal lobe (hot→consolidated depth gradient), entities in "
+            "temporal neocortex, skills in the striatum/cerebellum, domains at "
+            "the connectome hubs — with synapses routed along white-matter "
+            "tracts. Switch back to the 2D galaxy from the view bar."
+        )
+    else:
+        target_url = url.rstrip("/") + "/?viz=force"
+        message = (
+            f"Workflow graph opened at {target_url}. Click the Graph tab in "
+            "the UI if not already selected; the build kicks lazily on first "
+            "progress poll. First paint (skeleton: domains + setup) appears "
+            "in ~1 s; the full graph fills in behind it as memories / files / "
+            "AST symbols stream from the cache. Open the 3D brain view with "
+            "view='brain' or the Brain button in the view bar."
+        )
     open_in_browser(target_url)
-
-    message = (
-        f"Workflow graph opened at {target_url}. Click the Graph tab in "
-        "the UI if not already selected; the build kicks lazily on first "
-        "progress poll. First paint (skeleton: domains + setup) appears "
-        "in ~1 s; the full graph fills in behind it as memories / files / "
-        "AST symbols stream from the cache."
-    )
     return {
         "url": target_url,
         "message": message,

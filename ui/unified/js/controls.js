@@ -3,6 +3,11 @@
   document.addEventListener('DOMContentLoaded', function() {
     // ── View toggle (Graph / Timeline) ──
     var viewBtns = document.querySelectorAll('.view-toggle .view-btn[data-view]');
+    // Nav buttons (e.g. Brain) open a separate page instead of swapping the
+    // in-page active view — the 3D brain is its own WebGL surface.
+    document.querySelectorAll('.view-toggle .view-btn[data-nav]').forEach(function (btn) {
+      btn.addEventListener('click', function () { window.location.href = btn.dataset.nav; });
+    });
     function _toggleGraphWarn(view) {
       var w = document.getElementById('cortex-graph-warn');
       if (!w) return;

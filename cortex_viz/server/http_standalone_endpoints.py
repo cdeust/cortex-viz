@@ -45,6 +45,22 @@ def serve_graph(handler, store) -> None:
         send_json_error(handler, e)
 
 
+def serve_dashboard(handler, store) -> None:
+    """GET /api/dashboard — memory graph for the atom-shell 3D view.
+
+    Read-only assembly of the entity + memory + heat data the atom-viz
+    front-end (``ui/atom-viz.html`` + ``ui/dashboard/js``) polls. Pure
+    formatting lives in ``http_dashboard_data``; this only shapes the HTTP
+    response.
+    """
+    try:
+        from cortex_viz.server.http_dashboard_data import build_dashboard_data
+
+        send_json_ok(handler, build_dashboard_data(store))
+    except Exception as e:
+        send_json_error(handler, e)
+
+
 def serve_graph_full(handler, store) -> None:
     """GET /api/graph/full — the COMPLETE graph from the durable PG snapshot.
 
@@ -55,11 +71,20 @@ def serve_graph_full(handler, store) -> None:
     stable across the build's rebuild loop: once a build has completed once,
     the snapshot is always available and identical.
 
-    The stored payload is already gzip(JSON); it is streamed verbatim with
+    A ``json.v1`` row is already gzip(JSON); it is streamed verbatim with
     ``Content-Encoding: gzip`` (the browser inflates transparently) — no
-    server-side decode/re-encode. When no snapshot exists yet (no build has
-    finished since install) returns 503 ``{"reason":"no_snapshot"}`` so the
-    client falls back to the progressive ``/api/graph`` path.
+    server-side decode/re-encode. An ``ndjson.v1`` row (current writer —
+    see snapshot_pg_store) is stream-transformed back into the single
+    JSON document line by line, identity-encoded with ``Connection:
+    close``: same bytes-level arrays, no parsing. When no snapshot exists
+    yet (no build has finished since install) returns 503
+    ``{"reason":"no_snapshot"}`` so the client falls back to the
+    progressive ``/api/graph`` path.
+
+    NOTE: at the current corpus this document is ~1.17 GB decompressed —
+    browsers cannot ``response.json()`` it. In-browser consumers use
+    ``/api/graph/full/stream``; this endpoint remains for curl / scripting
+    / MCP consumers that parse with a real JSON library.
     """
     try:
         from cortex_viz.infrastructure import snapshot_pg_store
@@ -75,6 +100,13 @@ def serve_graph_full(handler, store) -> None:
         handler.send_header("Content-Length", str(len(body)))
         handler.end_headers()
         handler.wfile.write(body)
+        return
+    if snap.get("format") == snapshot_pg_store.FORMAT_NDJSON_V1:
+        from cortex_viz.server.http_standalone_fullstream import (
+            serve_full_document_from_ndjson,
+        )
+
+        serve_full_document_from_ndjson(handler, snap)
         return
     payload = snap["payload_gzip"]
     handler.send_response(200)

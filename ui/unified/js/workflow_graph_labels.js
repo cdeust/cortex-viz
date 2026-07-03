@@ -72,17 +72,19 @@
   // wrong, Cortex captured it. "Stabilizing" (-izing verb) contradicts
   // LATE_LTP's near-permanent state. Corrected.
   var STAGE_LABELS = {
-    labile:       'Newly captured',
-    early_ltp:    'Forming',
-    late_ltp:     'Well-held',
-    consolidated: 'Solidly remembered',
+    labile:          'Newly captured',
+    early_ltp:       'Forming',
+    late_ltp:        'Well-held',
+    consolidated:    'Solidly remembered',
+    reconsolidating: 'Being updated',
   };
 
   var STAGE_HINTS = {
-    labile:       'Fresh — still fragile, can be updated or forgotten easily.',
-    early_ltp:    'Starting to stick. A few more recalls and it will stabilize.',
-    late_ltp:     'Settled. It would take active forgetting to lose this.',
-    consolidated: 'Baked in. This is part of the long-term picture.',
+    labile:          'Fresh — still fragile, can be updated or forgotten easily.',
+    early_ltp:       'Starting to stick. A few more recalls and it will stabilize.',
+    late_ltp:        'Settled. It would take active forgetting to lose this.',
+    consolidated:    'Baked in. This is part of the long-term picture.',
+    reconsolidating: 'Recalled and reopened — briefly fragile again while it re-settles.',
   };
 
   // ── Edge kinds — what the relationship means in English ──────────────

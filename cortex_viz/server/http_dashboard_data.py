@@ -9,23 +9,45 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
+# Node caps for the 3D atom-shell view. Each node is a THREE.Group of ~3–4
+# objects (core mesh + glow sprite + label); keeping the visible set near ~1k
+# nodes holds the scene well inside WebGL draw-call budgets and keeps the
+# polled JSON small. The full corpus (100k+ memories / entities) belongs to
+# the galaxy graph build, not this hot-subset dashboard.
+DASHBOARD_MEMORY_LIMIT = 600
+DASHBOARD_ENTITY_LIMIT = 400
+
 
 def build_dashboard_data(store) -> dict:
-    """Assemble all dashboard data in a single response."""
+    """Assemble the hot-subset dashboard data in a single response.
+
+    Bounded to the hottest memories + entities so the 3D atom view stays
+    renderable; ``stats`` still reflects the full-corpus counts.
+    """
     counts = store.count_memories()
-    hot = store.get_hot_memories(min_heat=0.0, limit=0)
-    entities = store.get_all_entities(min_heat=0.0)
-    relationships = store.get_all_relationships()
+    hot = store.get_hot_memories(min_heat=0.0, limit=DASHBOARD_MEMORY_LIMIT)
+    entities = sorted(
+        store.get_all_entities(),
+        key=lambda e: e.get("heat", 0) or 0,
+        reverse=True,
+    )[:DASHBOARD_ENTITY_LIMIT]
+    kept_entity_ids = {e["id"] for e in entities}
+    relationships = [
+        r
+        for r in store.get_all_relationships()
+        if r.get("source_entity_id") in kept_entity_ids
+        and r.get("target_entity_id") in kept_entity_ids
+    ]
     recent = store.get_recent_memories(limit=50)
     domain_counts = store.get_domain_counts()
-    engram_slots = _safe_call(store.get_all_engram_slots, [])
-    slot_occupancy = _safe_call(store.get_slot_occupancy, {})
+    engram_slots = _safe_call(store, "get_all_engram_slots", [])
+    slot_occupancy = _safe_call(store, "get_slot_occupancy", {})
 
     engram_active = build_engram_data(engram_slots, slot_occupancy)
 
-    stage_counts = _safe_call(store.get_stage_counts, {})
-    schema_count = _safe_call(store.count_schemas, 0)
-    schemas = _safe_call(store.get_all_schemas, [])
+    stage_counts = _safe_call(store, "get_stage_counts", {})
+    schema_count = _safe_call(store, "count_schemas", 0)
+    schemas = _safe_call(store, "get_all_schemas", [])
 
     return {
         "stats": build_stats(
@@ -49,8 +71,19 @@ def build_dashboard_data(store) -> dict:
     }
 
 
-def _safe_call(fn, default):
-    """Call a store method, returning default on error."""
+def _safe_call(store, method: str, default):
+    """Call an optional store method by name, returning default if it is
+    absent or raises.
+
+    The thin-viz ``MemoryReader`` deliberately omits engram/schema/stage
+    methods that the full Cortex ``MemoryStore`` has. Looking the method up
+    via ``getattr`` (rather than evaluating ``store.method`` at the call
+    site) lets the dashboard degrade those optional sections to empty
+    instead of crashing the whole response.
+    """
+    fn = getattr(store, method, None)
+    if fn is None:
+        return default
     try:
         return fn()
     except Exception:
@@ -79,6 +112,56 @@ def build_stats(
         "entities": store.count_entities(),
         "relationships": store.count_relationships(),
         "triggers": store.count_active_triggers(),
+        "procedural_skills": _safe_call(store, "count_procedural_skills", 0),
+        "provenance": _safe_call(
+            store,
+            "count_provenance",
+            {"perceived": 0, "told": 0, "inferred": 0, "unknown": 0},
+        ),
+        "crystallized_confabulations": _safe_call(
+            store, "count_crystallized_confabulations", 0
+        ),
+        "habituated_repeats": _safe_call(store, "count_habituated_repeats", 0),
+        "extinguished": _safe_call(store, "count_extinguished", 0),
+        "conflicting_claim_pairs": _safe_call(
+            store, "count_conflicting_claim_pairs", 0
+        ),
+        "familiarity_resolvable": _safe_call(
+            store,
+            "count_familiarity_resolvable",
+            {"sampled": 0, "resolvable": 0, "share": 0.0, "mean_top_sim": 0.0},
+        ),
+        "sleep_phase_outputs": _safe_call(
+            store, "count_sleep_phase_outputs", {"nrem": 0, "rem": 0}
+        ),
+        "targeted_reactivation": _safe_call(
+            store, "count_targeted_reactivation", {"cue": None, "cued_replayed": 0}
+        ),
+        "stress_modulation": _safe_call(
+            store,
+            "count_stress_modulation",
+            {"stress": 0.0, "gain": 1.0, "is_impairing": False},
+        ),
+        "active_goal": _safe_call(
+            store,
+            "count_active_goal",
+            {"active": False, "triggers": 0, "keywords": 0, "label": None},
+        ),
+        "attentional_salience": _safe_call(
+            store,
+            "count_attentional_salience",
+            {
+                "sampled": 0,
+                "focus_share": 0.0,
+                "mean_salience": 0.0,
+                "max_salience": 0.0,
+            },
+        ),
+        "forward_model": _safe_call(
+            store,
+            "count_forward_model",
+            {"sampled": 0, "mean_error": 0.0},
+        ),
         "last_consolidation": store.get_last_consolidation(),
         "engram_total_slots": total_slots,
         "engram_occupied_slots": active_slots,

@@ -10,6 +10,9 @@ these so existing import paths keep resolving.
 
 from __future__ import annotations
 
+import threading
+import time
+
 from cortex_viz.server.http_standalone_response import (
     send_json_error,
     send_json_ok,
@@ -101,35 +104,65 @@ def serve_sankey(handler, store) -> None:
         send_json_error(handler, e)
 
 
+# /api/stats TTL cache. The payload now includes system_vitals, whose
+# effective-heat aggregates (AVG ~1.9 s, count FILTERs similar — measured
+# 2026-07-02 on 108k memories) must not run per poll: both the galaxy HUD
+# and the brain HUD fetch this endpoint, and vitals only move on
+# store-write timescales. Same module-level cache idiom as the
+# conversations cache (http_standalone_state).
+_STATS_TTL_SECONDS = 60.0
+_stats_lock = threading.Lock()
+_stats_cache: dict = {"ts": 0.0, "payload": None}
+
+
+def _build_stats_payload(store) -> dict:
+    """Store-total counts + memory-science vitals (see serve_stats)."""
+    from cortex_viz.server.graph_discussions import _compute_memory_vitals
+
+    counts = store.count_memories()
+    domains = store.get_domain_counts() or {}
+    mem = int(counts.get("total", 0) or 0)
+    ent = int(store.count_entities() or 0)
+    rel = int(store.count_relationships() or 0)
+    return {
+        "domain_count": len(domains),
+        "memory_count": mem,
+        "entity_count": ent,
+        # HUD "Synapses" reads edge_count; here that is the knowledge-
+        # graph relationship total (the real synapse population).
+        "edge_count": rel,
+        # HUD "Nodes": the addressable memory+entity population.
+        "node_count": mem + ent,
+        "discussion_count": int(counts.get("discussions", 0) or 0),
+        # Memory-science vitals (consolidation pipeline, mean effective
+        # heat, B1 skills, C1 provenance) — polling.js and the brain HUD
+        # read meta.system_vitals from here.
+        "system_vitals": _compute_memory_vitals(store),
+    }
+
+
 def serve_stats(handler, store) -> None:
-    """GET /api/stats — TRUE store counts for the HUD.
+    """GET /api/stats — TRUE store counts + system vitals for the HUD.
 
     The sidebar counters must reflect the whole memory system (what the user
     actually has), NOT just the nodes the current view happens to render. The
     trace view, for instance, renders domain/session/chain nodes and zero
     memory nodes — counting loaded nodes there showed "Memories 0" against a
-    475k-memory store. These are cheap COUNT(*) queries straight off the store,
-    independent of any graph build. source: user report — HUD showed 0 memories.
+    475k-memory store. source: user report — HUD showed 0 memories.
     """
     try:
-        counts = store.count_memories()
-        domains = store.get_domain_counts() or {}
-        mem = int(counts.get("total", 0) or 0)
-        ent = int(store.count_entities() or 0)
-        rel = int(store.count_relationships() or 0)
-        send_json_ok(
-            handler,
-            {
-                "domain_count": len(domains),
-                "memory_count": mem,
-                "entity_count": ent,
-                # HUD "Synapses" reads edge_count; here that is the knowledge-
-                # graph relationship total (the real synapse population).
-                "edge_count": rel,
-                # HUD "Nodes": the addressable memory+entity population.
-                "node_count": mem + ent,
-                "discussion_count": int(counts.get("discussions", 0) or 0),
-            },
-        )
+        now = time.time()
+        with _stats_lock:
+            fresh = (
+                _stats_cache["payload"] is not None
+                and now - _stats_cache["ts"] < _STATS_TTL_SECONDS
+            )
+            payload = _stats_cache["payload"] if fresh else None
+        if payload is None:
+            payload = _build_stats_payload(store)
+            with _stats_lock:
+                _stats_cache["ts"] = now
+                _stats_cache["payload"] = payload
+        send_json_ok(handler, payload)
     except Exception as e:
         send_json_error(handler, e)

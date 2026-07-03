@@ -67,11 +67,19 @@ PRIMARY_TOOL_COLORS: dict[PrimaryToolCluster, str] = {
     PrimaryToolCluster.BASH: "#F97316",  # orange — files touched only by shell
 }
 
+# Consolidation-stage → node color. The viz mirrors this map verbatim in
+# ui/brain/js/palette.js (STAGE_COLORS) so the brain's memory-science stage
+# rows and legend use the SAME greens the memory nodes are painted with — one
+# canonical stage palette across nodes, vitals, and legend. Keep in sync.
 MEMORY_STAGE_COLORS: dict[str, str] = {
     "labile": "#86EFAC",
     "early_ltp": "#4ADE80",
     "late_ltp": "#16A34A",
     "consolidated": "#166534",
+    # reconsolidating: a consolidated memory recalled and reopened — briefly
+    # plastic again. Teal keeps it in the cool band but distinct from the four
+    # consolidation greens and from semantic purple. source: unify pass 2026-07-03.
+    "reconsolidating": "#2DD4BF",
     # episodic is the default PG stage before LTP promotion — paint it
     # with the same green as early_ltp so the legend's green band covers
     # every non-semantic memory and there's no "unexplained green".

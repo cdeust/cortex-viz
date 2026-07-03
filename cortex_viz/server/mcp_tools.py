@@ -30,10 +30,12 @@ def _register_open_visualization(mcp: FastMCP) -> None:
         name="open_visualization",
         **tool_kwargs(open_visualization.schema),
     )
-    async def tool_open_visualization(domain: str | None = None) -> dict:
+    async def tool_open_visualization(
+        domain: str | None = None, view: str = "galaxy"
+    ) -> dict:
         return await safe_handler(
             open_visualization.handler,
-            {"domain": domain},
+            {"domain": domain, "view": view},
             tool_name="open_visualization",
         )
 

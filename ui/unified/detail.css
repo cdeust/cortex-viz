@@ -125,3 +125,20 @@
 .conv-tool-call { margin: 6px 0; }
 .conv-tool-call summary { font-size: 8px; color: #E0A840; cursor: pointer; letter-spacing: 1px; text-transform: uppercase; padding: 2px 0; }
 .conv-tool-io { font-family: 'JetBrains Mono', monospace; font-size: 8px; color: var(--text-dim); background: rgba(0,0,0,0.3); padding: 6px 8px; margin: 4px 0; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; border: 1px solid rgba(0,255,255,0.04); }
+
+/* ── Procedural skills panel (B1) ─────────────────────────────────────── */
+.skill-panel-head { margin-bottom: 10px; border-bottom: 1px solid rgba(240,128,60,0.15); padding-bottom: 8px; }
+.skill-panel-title { font-family: 'Orbitron', sans-serif; font-size: 12px; color: #F0803C; letter-spacing: 1px; }
+.skill-panel-sub { font-size: 9px; color: var(--text-dim); margin-top: 2px; }
+.skill-panel-note { font-size: 8px; color: var(--text-dim); margin-top: 5px; line-height: 1.5; opacity: 0.8; }
+.skill-list { display: flex; flex-direction: column; gap: 6px; }
+.skill-row { padding: 7px 8px; background: rgba(240,128,60,0.04); border: 1px solid rgba(240,128,60,0.10); border-radius: 4px; }
+.skill-chain { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--text); line-height: 1.7; word-break: break-word; }
+.skill-step { color: #E0C0A0; }
+.skill-arrow { color: #F0803C80; margin: 0 3px; }
+.skill-badge { font-size: 7px; letter-spacing: 0.5px; padding: 1px 4px; border-radius: 3px; margin-left: 4px; vertical-align: middle; }
+.skill-badge--habit { background: rgba(240,128,60,0.18); color: #F0A860; border: 1px solid rgba(240,128,60,0.30); }
+.skill-meta { display: flex; gap: 10px; align-items: center; margin-top: 4px; font-size: 8px; color: var(--text-dim); }
+.skill-prof { font-weight: 600; }
+.skill-ctx { font-family: 'JetBrains Mono', monospace; color: #6090A0; }
+.skill-empty { font-size: 9px; color: var(--text-dim); line-height: 1.6; padding: 12px 4px; }

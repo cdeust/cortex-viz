@@ -292,6 +292,20 @@ def run_build(store, domain_filter: str | None) -> None:
             # over the complete post-AST graph (see _persist_full_layout).
             # source: superlinear DrL cost — OpenOrd (Martin et al.,
             # SPIE 2011); _BACKBONE_KINDS cap removed 2026-06-14.
+            #
+            # Honest progress during the bake: DrL over the full baseline
+            # is the dominant wall-clock phase (hours at the 278k-node /
+            # 5.5M-edge corpus, observed 2026-07-02) — without this update
+            # /api/graph/progress kept showing the LAST source message
+            # ("loading memories") for the whole bake.
+            _set_progress(
+                phase="layout bake (DrL)",
+                pct=0.29,
+                message=(
+                    f"DrL layout over {len(_bl_nodes)} baseline nodes — "
+                    "the long phase"
+                ),
+            )
             _ids = [n["id"] for n in _bl_nodes if n.get("id")]
             _id_set = set(_ids)
             _edge_pairs = []

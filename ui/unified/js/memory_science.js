@@ -187,6 +187,8 @@
   // scanning a memory; burying them in the measurement grid hides the
   // signal. We surface them as separate chips above the grid.
 
+  // The Cortex backend can only emit these six dominant_emotion values
+  // (pg_schema.py dominant_emotion CHECK). Colors below match that closed set.
   var EMOTION_COLORS = {
     urgency:      "#EF4444",  // red
     frustration:  "#F59E0B",  // amber
@@ -194,12 +196,9 @@
     discovery:    "#60A5FA",  // sky
     confusion:    "#A78BFA",  // violet
     neutral:      "#9CA3AF",  // slate
-    joy:          "#FCD34D",
-    fear:         "#F472B6",
-    surprise:     "#06B6D4",
-    anger:        "#DC2626",
-    sadness:      "#3B82F6",
-    disgust:      "#84CC16",
+    // Reserved / not currently emitted by Cortex (kept for forward-compat):
+    // joy "#FCD34D", fear "#F472B6", surprise "#06B6D4",
+    // anger "#DC2626", sadness "#3B82F6", disgust "#84CC16"
   };
 
   function buildEmotionChip(mem) {
@@ -445,7 +444,7 @@
     reconsolidation_count: "How many times this memory has been modified on retrieval. Every recall is a chance to update or correct it.",
     hours_in_stage: "How long the memory has sat in its current consolidation stage. Long stays can indicate it's stuck.",
     compression_level: "How much the original content has been summarised into a gist. Zero means full original text.",
-    dominant_emotion: "Which emotional category best describes the content: urgency, frustration, satisfaction, discovery, confusion, etc.",
+    dominant_emotion: "Which emotional category best describes the content: urgency, frustration, satisfaction, discovery, confusion, or neutral.",
     store_type: "Episodic = a specific experience (what happened). Semantic = extracted general knowledge (what it means).",
     schema_id: "The name of the knowledge structure this memory has been slotted into.",
     is_protected: "Marked as must-keep. The decay and eviction processes skip over this memory.",

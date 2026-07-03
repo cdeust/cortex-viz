@@ -1,6 +1,6 @@
 // Cortex Memory Dashboard — Node Builder
 // Glowing neural nodes: spheres for memories, octahedrons for entities.
-// Strong bloom + halo for DNA-helix visual.
+// Strong bloom + halo for the atom-shell visual.
 
 (function() {
 

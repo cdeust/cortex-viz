@@ -169,3 +169,86 @@ def test_no_single_connection(reader) -> None:
 def test_get_last_consolidation_type(reader) -> None:
     val = reader.get_last_consolidation()
     assert val is None or isinstance(val, str)
+
+
+# ── A3 goal / task-set maintenance reader (offline, no DB) ───────────────────
+# count_active_goal promotes the store's active prospective triggers into the
+# sustained goal vector's standing footprint. Verified via a fake cursor so it
+# runs with no Postgres (the sandbox has no DB).
+class _FakeCursor:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def fetchall(self):
+        return self._rows
+
+
+def _reader_with_rows(rows):
+    """A MemoryReader whose _execute yields `rows` (or raises if rows is an
+    Exception), bypassing __init__ so no connection pool is built."""
+    r = MemoryReader.__new__(MemoryReader)
+    if isinstance(rows, Exception):
+        def _boom(*a, **k):
+            raise rows
+        r._execute = _boom
+    else:
+        r._execute = lambda *a, **k: _FakeCursor(rows)
+    return r
+
+
+def test_active_goal_promotes_keyword_triggers() -> None:
+    r = _reader_with_rows(
+        [
+            {"trigger_type": "keyword_match",
+             "trigger_condition": "refactor recall pipeline",
+             "target_directory": None},
+            {"trigger_type": "entity_match",
+             "trigger_condition": "PgMemoryStore", "target_directory": None},
+        ]
+    )
+    goal = r.count_active_goal()
+    assert goal["active"] is True
+    assert goal["triggers"] == 2
+    assert goal["keywords"] == 3  # refactor, recall, pipeline
+    assert "recall" in goal["label"] and "pipeline" in goal["label"]
+
+
+def test_active_goal_empty_when_no_triggers() -> None:
+    goal = _reader_with_rows([]).count_active_goal()
+    assert goal == {"active": False, "triggers": 0, "keywords": 0, "label": None}
+
+
+def test_active_goal_time_based_only_is_inactive() -> None:
+    # a clock condition carries no task-content signal → inactive goal (identity)
+    goal = _reader_with_rows(
+        [{"trigger_type": "time_based", "trigger_condition": "09:30",
+          "target_directory": None}]
+    ).count_active_goal()
+    assert goal["active"] is False
+    assert goal["triggers"] == 1
+    assert goal["label"] is None
+
+
+def test_active_goal_noise_keywords_are_inactive() -> None:
+    # only stop/short tokens → no goal keyword surface → inactive
+    goal = _reader_with_rows(
+        [{"trigger_type": "keyword_match", "trigger_condition": "the a an io",
+          "target_directory": None}]
+    ).count_active_goal()
+    assert goal["active"] is False
+    assert goal["keywords"] == 0
+
+
+def test_active_goal_directory_trigger_activates_without_keywords() -> None:
+    goal = _reader_with_rows(
+        [{"trigger_type": "directory_match", "trigger_condition": "",
+          "target_directory": "/repo/Cortex"}]
+    ).count_active_goal()
+    assert goal["active"] is True
+    assert goal["keywords"] == 0
+    assert goal["label"] is None  # no keywords → no label, but goal is active
+
+
+def test_active_goal_absent_table_is_inactive() -> None:
+    goal = _reader_with_rows(RuntimeError("no prospective_memories")).count_active_goal()
+    assert goal == {"active": False, "triggers": 0, "keywords": 0, "label": None}

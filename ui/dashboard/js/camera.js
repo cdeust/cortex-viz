@@ -36,7 +36,7 @@
     var dist = bboxRadius / Math.sin(fov / 2);
     dist = Math.max(200, dist * 1.3); // 30% padding
 
-    // Place camera looking at the helix from the side
+    // Place camera looking at the atom from the side
     JMD.camera.position.set(cx, cy, cz + dist);
     JMD.controls.target.set(cx, cy, cz);
     JMD.controls.update();

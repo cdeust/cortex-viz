@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cortex — 3D Brain</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<!-- Reuse the galaxy's detail-panel styling so a picked brain node shows the
+     SAME card. theme.css carries the design tokens (:root) the others read; its
+     global body/button rules are harmless because the brain's own <style>
+     below re-asserts this page's chrome. -->
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/panels.css">
+<link rel="stylesheet" href="/css/detail.css">
+<link rel="stylesheet" href="/css/knowledge.css">
+<link rel="stylesheet" href="/css/memory_science.css">
+<style>
+  :root { --cyan:#5fd0e0; --dim:#6a8090; --bg:#05070d; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:#dfe8f0;
+    font-family:'JetBrains Mono', ui-monospace, monospace; overflow:hidden; }
+  #view { position:fixed; inset:0; }
+  #view canvas { display:block; }
+
+  #loading { position:fixed; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:10px; background:var(--bg);
+    z-index:50; transition:opacity .6s ease; }
+  #loading.gone { opacity:0; pointer-events:none; }
+  #loading.error #loading-title { color:#ff6b6b; }
+  .loader-ring { width:54px; height:54px; border:3px solid #ffffff14;
+    border-top-color:var(--cyan); border-radius:50%; animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  #loading-title { font-family:'Orbitron', sans-serif; letter-spacing:.22em;
+    font-size:18px; color:#cfe6ee; }
+  #loading-sub { color:var(--dim); font-size:12px; }
+
+  .hud { position:fixed; background:#0a0f18cc; border:1px solid #ffffff14;
+    border-radius:10px; padding:12px 14px; backdrop-filter:blur(8px); z-index:20; }
+  /* Capped + scrollable: the memory-science list grows as Claude Science adds
+     vitals, so the panel must never run off the bottom of the screen. */
+  #info { top:16px; left:16px; min-width:178px; max-width:300px;
+    max-height:calc(100vh - 32px); overflow-y:auto; overflow-x:hidden;
+    scrollbar-width:thin; }
+  #info .stat { font-size:11.5px; }
+  #info .title { font-family:'Orbitron',sans-serif; letter-spacing:.16em;
+    font-size:13px; color:#cfe6ee; }
+  #info .sub { font-size:9px; text-transform:uppercase; letter-spacing:.18em;
+    color:var(--dim); margin-bottom:8px; }
+  .galaxy-back { color:var(--cyan,#6cf); text-decoration:none; }
+  .galaxy-back:hover { color:#fff; }
+  .stat { display:flex; justify-content:space-between; gap:18px; font-size:12px;
+    padding:2px 0; }
+  .stat span:first-child { color:var(--dim); }
+  .stat .v { color:#dfe8f0; }
+
+  /* display:block OVERRIDES the galaxy panels.css #legend rule, which sets
+     display:grid with two 140px-min columns — that 2-column grid needed
+     ~290px and got clipped inside this box (the cropping in the screenshot).
+     A single wrapping column shows every row in full. Fixed width +
+     overflow-x hidden so long labels wrap INSIDE the box, never spill past
+     its edges. !important guards against panels.css load-order surprises. */
+  /* Bottom-RIGHT (the stats #info panel owns top-left) so the two panels
+     never stack on one side and clip each other. left:auto !important
+     overrides panels.css's left:24px. */
+  /* Bottom-right, CAPPED so the (now exhaustive, tall) legend never rises
+     into the reset button at top-right: max-height leaves ~92px clear at the
+     top (reset button + gap); if content is still taller it scrolls inside.
+     Compact type keeps every row readable without dominating the view. */
+  #legend { display:block !important; grid-template-columns:none !important;
+    bottom:16px; right:16px; left:auto !important; top:auto; width:222px;
+    box-sizing:border-box; font-size:9.5px; line-height:1.34;
+    max-height:calc(100vh - 92px); overflow-y:auto; overflow-x:hidden;
+    padding:9px 11px; scrollbar-width:thin; }
+  .leg-head { font-size:8.5px; text-transform:uppercase; letter-spacing:.12em;
+    color:var(--dim); margin-bottom:4px; }
+  .leg-more { color:var(--dim); font-size:9px; margin-top:3px; }
+  .leg-note { color:var(--dim); font-size:8.5px; line-height:1.4; margin:6px 0;
+    font-style:italic; opacity:.82; }
+  /* align-items flex-start + a shrinkable label (min-width:0) makes long
+     labels wrap under the dot instead of forcing the row wider than the box. */
+  .leg-item { display:flex; align-items:flex-start; gap:6px; color:#b8c6d2;
+    margin:1px 0; }
+  .leg-dot { width:7px; height:7px; border-radius:50%; flex:0 0 auto;
+    margin-top:2.5px; box-shadow:0 0 5px currentColor; }
+  .leg-label { flex:1 1 auto; min-width:0; word-break:break-word; }
+  .leg-n { flex:0 0 auto; margin-left:6px; color:var(--dim); font-size:9px;
+    font-variant-numeric:tabular-nums; }
+  /* Graded-kind header (e.g. "memory  108,952") above its per-colour rows. */
+  .leg-subhead { display:flex; justify-content:space-between; align-items:baseline;
+    margin:4px 0 1px; color:#cdd8e2; text-transform:capitalize; font-size:9.5px; }
+  .leg-subhead .leg-n { color:#8fa0ad; }
+  /* Indented per-colour sub-row under a graded kind. */
+  .leg-item.sub { margin-left:12px; font-size:9px; }
+  .leg-item.sub .leg-label { color:var(--dim); }
+
+  /* Impact box whose target file isn't a node in this graph — not clickable. */
+  .impact-box--dead { opacity:.5; cursor:default !important; }
+  .impact-box[data-file]:not(.impact-box--dead):hover { background:rgba(120,200,220,0.10); }
+
+  /* Hover tooltip — shows the node label before you click it. */
+  #brain-tip { position:fixed; display:none; z-index:300; pointer-events:none;
+    background:#0a0f18ee; border:1px solid #ffffff20; border-radius:6px;
+    padding:5px 9px; font-size:11px; color:#dfe8f0; max-width:340px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    box-shadow:0 4px 16px #000a; }
+
+  /* Compact pill, top-right corner (out of the way of the legend and the
+     detail panel that slides in from the right edge). */
+  #reset-btn { position:fixed; top:16px; right:16px; z-index:30;
+    background:#0a0f18cc; color:#cfe6ee; border:1px solid #ffffff20;
+    border-radius:8px; padding:7px 12px; font-family:'Orbitron',sans-serif;
+    font-size:10px; letter-spacing:.12em; text-transform:uppercase;
+    cursor:pointer; backdrop-filter:blur(8px); }
+  #reset-btn:hover { border-color:var(--cyan); color:#fff; }
+  #attrib { position:fixed; bottom:4px; left:50%; transform:translateX(-50%);
+    font-size:9px; color:#43525e; z-index:20; }
+  #attrib a { color:#5a6f7c; }
+</style>
+</head>
+<body>
+  <div id="view"></div>
+
+  <div id="loading">
+    <div class="loader-ring"></div>
+    <div id="loading-title">CORTEX · BRAIN</div>
+    <div id="loading-sub">initializing…</div>
+  </div>
+
+  <div id="info" class="hud">
+    <div class="title">CORTEX</div>
+    <div class="sub">3D Brain · <a href="/" class="galaxy-back" title="Back to the 2D galaxy graph">⟵ Galaxy</a></div>
+    <!-- Store truth — the same /api/stats totals the galaxy sidebar shows
+         ("counters must reflect the whole memory system, NOT just the nodes
+         the current view happens to render" — serve_stats, user direction).
+         Filled by ui/brain/js/vitals.js. -->
+    <div class="stat" title="Addressable memory + entity population in the store (memories + entities)."><span>Nodes</span><span class="v" id="s-nodes">--</span></div>
+    <div class="stat" title="Knowledge-graph relationships in the store — the real synapse population."><span>Synapses</span><span class="v" id="s-edges">--</span></div>
+    <div class="stat"><span>Domains</span><span class="v" id="s-dom">--</span></div>
+    <div class="stat"><span>Memories</span><span class="v" id="s-mem">--</span></div>
+    <div class="stat"><span>Entities</span><span class="v" id="s-ent">--</span></div>
+    <!-- Rendered graph — what THIS view actually draws from the snapshot
+         (more than the galaxy: it defers AST symbols; the brain shows them).
+         Filled by boot.js once the stream lands. -->
+    <div id="brain-rendered" style="margin-top:8px; border-top:1px solid #ffffff14; padding-top:6px;">
+      <div class="sub" style="margin-bottom:4px;">Rendered graph</div>
+      <div class="stat" title="Nodes drawn in this view — every snapshot node, including the AST symbols the galaxy defers."><span>In view</span><span class="v" id="r-nodes">--</span></div>
+      <div class="stat" title="Graph edges routed as synapses along the white-matter tracts."><span>Edges</span><span class="v" id="r-edges">--</span></div>
+      <div class="stat" title="AST symbols rendered (galaxy loads these only on demand)."><span>Symbols</span><span class="v" id="s-sym">--</span></div>
+    </div>
+    <!-- Memory-science vitals — rendered DYNAMICALLY by ui/brain/js/vitals.js
+         from /api/stats system_vitals + BRAIN.VITALS_SPEC. Rows are built from
+         the live payload (not hardcoded), so every vital Claude Science adds to
+         the backend appears here automatically — no stale hand-mirrored copies.
+         Hidden until the first payload arrives. -->
+    <div id="brain-vitals" style="display:none; margin-top:8px; border-top:1px solid #ffffff14; padding-top:6px;">
+      <div class="sub" style="margin-bottom:4px;">Memory science</div>
+      <div id="brain-vitals-rows"></div>
+    </div>
+  </div>
+
+  <div id="legend" class="hud"></div>
+
+  <!-- Galaxy detail panel, reused verbatim (styled by /css/panels.css +
+       detail.css). Populated by the unified detail subsystem when a brain
+       node is picked — see ui/brain/js/detail_bridge.js. -->
+  <div id="detail-panel">
+    <div class="detail-peek-bar" id="detail-peek">&#x25B2; DETAIL VIEW</div>
+    <div class="detail-window-btns">
+      <button class="window-btn" id="minimize-detail" title="Minimize">&#x2500;</button>
+      <button class="window-btn" id="close-detail" title="Close">&#x2715;</button>
+    </div>
+    <div id="detail-content"></div>
+  </div>
+  <div id="brain-tip"></div>
+
+  <!-- Modals the shared detail subsystem needs (styled by /css/detail.css,
+       already loaded). Without these in the DOM the detail-panel links did
+       nothing: detail_diff.js needs #diff-modal, discussion_detail.js needs
+       #conversation-modal. Same markup as unified-viz.html. -->
+  <div id="diff-modal">
+    <div class="diff-modal-backdrop"></div>
+    <div class="diff-modal-panel">
+      <div class="diff-modal-header">
+        <div><span class="diff-modal-filename"></span><span class="diff-modal-subtitle"></span></div>
+        <button class="diff-modal-close">&#x2715;</button>
+      </div>
+      <div class="diff-modal-body"></div>
+    </div>
+  </div>
+  <div id="conversation-modal">
+    <div class="conv-modal-backdrop"></div>
+    <div class="conv-modal-panel">
+      <div class="conv-modal-header">
+        <div class="conv-modal-title"></div>
+        <button class="conv-modal-close">&#x2715;</button>
+      </div>
+      <div class="conv-modal-body"></div>
+    </div>
+  </div>
+  <!-- Impact diagram target. The galaxy opens impact in the trace view's
+       #flow-panel (trace.js), which the brain doesn't load; this reuses the
+       same ids so trace_detail.js's TraceView.showImpact has somewhere to
+       render. brain/js/impact.js provides the TraceView shim + fetch. -->
+  <div id="flow-panel">
+    <div class="flow-header">
+      <div class="flow-title" id="flow-title">Impact</div>
+      <button class="flow-close" id="flow-close">&#x2715;</button>
+    </div>
+    <div id="flow-content"></div>
+  </div>
+
+  <button id="reset-btn">Reset view</button>
+  <div id="attrib">Brain mesh © dgallichan ·
+    <a href="http://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC-BY-4.0</a>
+    · via NIH 3D</div>
+
+  <!-- three.js r137 + addons (global THREE.*). EffectComposer is NOT used
+       here; the neural glow comes from additive points, so no post-processing
+       chain (and no Pass-ordering footgun). -->
+  <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://unpkg.com/three@0.137.0/examples/js/loaders/GLTFLoader.js"></script>
+
+  <!-- Galaxy detail subsystem, reused as-is (same files the unified view
+       serves at /js/*). They self-register on the JUG namespace; the brain's
+       detail_bridge.js supplies the renderer hooks they expect. -->
+  <script src="/js/config.js"></script>
+  <script src="/js/state.js"></script>
+  <script src="/js/detail_tools.js"></script>
+  <script src="/js/detail_format.js"></script>
+  <script src="/js/detail_diff.js"></script>
+  <script src="/js/detail_panel.js"></script>
+  <script src="/js/trace_detail.js"></script>
+  <script src="/js/discussion_detail.js"></script>
+  <script src="/js/memory_science.js"></script>
+  <!-- Procedural-skills panel (B1) — same file the galaxy serves; renders
+       /api/skills into the shared #detail-panel, opened by clicking the
+       Skills vitals row. -->
+  <script src="/js/skills_panel.js"></script>
+  <!-- Throttled NDJSON snapshot loader (bounded queue + frame budget) —
+       data.js streams the full graph through it instead of one
+       response.json() the browser cannot hold. -->
+  <script src="/js/graph_stream_loader.js"></script>
+
+  <script src="/brain/js/scene.js"></script>
+  <script src="/brain/js/brain_mesh.js"></script>
+  <script src="/brain/js/data.js"></script>
+  <!-- Colour palette mirror (server source of truth) — reverse colour→label
+       maps for the exhaustive legend + unified stage colours. Before boot.js. -->
+  <script src="/brain/js/palette.js"></script>
+  <!-- Real MNI152 atlas centroids — anatomy.js registers region centres from
+       these instead of hand-picked fractions. Must load BEFORE anatomy.js. -->
+  <script src="/brain/js/atlas_mni.js"></script>
+  <script src="/brain/js/anatomy.js"></script>
+  <script src="/brain/js/regions.js"></script>
+  <script src="/brain/js/scaffold.js"></script>
+  <script src="/brain/js/layout.js"></script>
+  <script src="/brain/js/points.js"></script>
+  <script src="/brain/js/edges.js"></script>
+  <script src="/brain/js/detail_bridge.js"></script>
+  <script src="/brain/js/interact.js"></script>
+  <!-- Impact-diagram shim: provides TraceView.showImpact so the detail
+       panel's "Open the impact diagram" link works without the trace view. -->
+  <script src="/brain/js/impact.js"></script>
+  <!-- Memory-science vitals spec (one row per backend vital + fallback for
+       new ones). Before vitals.js. -->
+  <script src="/brain/js/vitals_spec.js"></script>
+  <script src="/brain/js/vitals.js"></script>
+  <script src="/brain/js/boot.js"></script>
+</body>
+</html>
