@@ -74,6 +74,10 @@ The same graph, on a second surface: every node placed inside an anatomical **co
 Because the full graph (278k+ nodes, 5.5M edges) is far larger than a browser can take in one payload, the brain **streams** it in progressively through a bounded-queue, frame-budgeted NDJSON loader — the cloud fills in as you watch. Clicking any node opens the same rich detail card as the galaxy (content, tags, live heat, relations, git diff, impact). Open it from the **Brain** button in the view bar, directly at `/brain`, or programmatically via `open_visualization(view="brain")`.
 
 <p align="center">
+<img src="docs/assets/cortex-brain.png" width="100%" alt="3D Brain view — the full memory graph streamed into a translucent anatomical cortical mesh; episodic memories in the medial temporal lobe fading outward to neocortex along a hot→consolidated depth gradient, semantic entities and code symbols in association cortex, procedural skills toward the striatum and cerebellum, domain hubs at the connectome's rich-club centres, synapses routed along white-matter tracts; the left panel reads node / synapse / domain / memory / entity counts plus memory-science vitals (mean heat, growing, strong, conflicts, forward-model error) and the right panel legends the memory-system regions and per-category node counts" />
+</p>
+
+<p align="center">
 <img src="docs/assets/cortex-consolidation-board.png" width="100%" alt="Board view — five columns for labile, early LTP, late LTP, consolidated, and reconsolidating memories, each column header showing total count and per-bucket stage metrics (decay, vulnerability, plasticity, heat, importance, encoding, interference, hippo, replay) plus cards grouped by stage" />
 </p>
 
