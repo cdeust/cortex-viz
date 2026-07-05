@@ -11,16 +11,32 @@
 (function () {
   'use strict';
 
-  var TOOL_DOT = {
-    Read: '#38BDF8', NotebookRead: '#38BDF8', Grep: '#7DD3FC', Glob: '#7DD3FC',
-    Edit: '#FBBF24', MultiEdit: '#FBBF24', NotebookEdit: '#FBBF24',
-    Write: '#34D399', Bash: '#F87171', Task: '#EC4899', Agent: '#EC4899',
-    WebFetch: '#A78BFA', WebSearch: '#A78BFA',
+  // G9/G5 (design gate): tool + kind colour resolved LIVE from the design
+  // system, never a static hex table — the previous tables baked the SAME
+  // paper-illegible hex as trace.js's old TOOL_COLOR (Edit 1.44:1 etc.) and,
+  // for domain/session, a bright gold (#FCD34D, ~1:1 on cream) that made the
+  // '● SESSION' chip unreadable on paper. Tool families map to the DS
+  // --tool-* tokens (ui/shared/tokens/surfaces.css); kind badges use the
+  // surface-aware -ink aliases (--warn-ink for the hub family, matching
+  // workflow_graph.js's KIND_TOKEN.domain/session) so text/dot/border stay
+  // legible on both surfaces.
+  var TOOL_DOT_TOKEN = {
+    Read: '--tool-read', NotebookRead: '--tool-read',
+    Grep: '--tool-search', Glob: '--tool-search',
+    Edit: '--tool-edit', MultiEdit: '--tool-edit', NotebookEdit: '--tool-edit',
+    Write: '--tool-write', Bash: '--tool-exec', Task: '--tool-agent', Agent: '--tool-agent',
+    WebFetch: '--tool-web', WebSearch: '--tool-web',
   };
-  var KIND_COLOR = {
-    domain: '#FCD34D', session: '#FCD34D', prompt: '#22D3EE',
-    action: '#94A3B8', file: '#06B6D4',
+  var KIND_TOKEN = {
+    domain: '--warn-ink', session: '--warn-ink', prompt: '--stage-early',
+    action: '--tool-read', file: '--tool-read',
   };
+  function _resolveToken(token) {
+    if (!token) return null;
+    if (window.CortexPalette) return window.CortexPalette.hex(token);
+    var v = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
+    return v || null;
+  }
 
   function esc(s) {
     // Full HTML escape incl. quotes → safe in both text and quoted-attribute
@@ -37,8 +53,11 @@
   }
   function color(node) {
     var k = node.kind || node.type;
-    if (k === 'action' && node.tool && TOOL_DOT[node.tool]) return TOOL_DOT[node.tool];
-    return KIND_COLOR[k] || '#00d2ff';
+    if (k === 'action' && node.tool) {
+      var toolC = _resolveToken(TOOL_DOT_TOKEN[node.tool]);
+      if (toolC) return toolC;
+    }
+    return _resolveToken(KIND_TOKEN[k]) || _resolveToken('--info-ink');
   }
   function kindLabel(node) {
     var k = node.kind || node.type;

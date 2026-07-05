@@ -7,12 +7,44 @@
   JUG._draw = {};
   JUG._draw.animFrame = function() { return animFrame; };
 
+  // ── Surface-correct baked colours (canvas cannot read CSS custom
+  //    properties) — read once via CortexPalette, refreshed on
+  //    cortex:surface-change. Falls back to the ink-tuned literals if
+  //    CortexPalette hasn't loaded yet (module-order safety only). */
+  var pal = {
+    ok: '#40D870', warn: '#E0B040', danger: '#E05050',
+    accentInk: '#8B6914', text: '#FFFFFF', canvas: '#08080f',
+    // DD-04 point-cloud ambient + selection — the node-fill data family
+    // itself lives in JUG._tok (config.js); this is only what draw.js
+    // needs directly: the ambient mass and the selection override.
+    fieldPoint: '#B8AC98', accentDeep: '#A53E00',
+  };
+  function refreshPalette() {
+    if (!window.CortexPalette) return;
+    var hex = window.CortexPalette.hex;
+    pal.ok = hex('--ok-ink') || pal.ok;
+    pal.warn = hex('--warn-ink') || pal.warn;
+    pal.danger = hex('--danger-ink') || pal.danger;
+    pal.accentInk = hex('--accent-ink') || pal.accentInk;
+    pal.text = hex('--text') || pal.text;
+    pal.canvas = hex('--canvas') || pal.canvas;
+    pal.fieldPoint = hex('--field-point') || pal.fieldPoint;
+    pal.accentDeep = hex('--accent-deep') || pal.accentDeep;
+  }
+  refreshPalette();
+  if (window.CortexSurface) {
+    window.addEventListener(window.CortexSurface.EVENT, refreshPalette);
+  }
+  JUG._draw.palette = pal;
+
   // ── Node sizing — hierarchy-aware ──
   JUG._draw.nodeRadius = function(n) {
     var base = n.size || 3;
     if (n.type === 'root') return 12;
     if (n.type === 'category') return Math.max(6, base * 0.5);
-    if (n.type === 'domain') return Math.max(5, base * 0.9);
+    // Domain hub — DD-04 (cards/data-pointcloud.html): "one --warn-deep
+    // hub per domain, 1.3x larger."
+    if (n.type === 'domain') return Math.max(5, base * 0.9) * 1.3;
     if (n.type === 'agent') return 4;
     if (n.type === 'type-group') return 2.5;
     if (n.type === 'topic') return Math.max(4, base * 0.7);
@@ -38,13 +70,6 @@
   }
   JUG._draw.colorAlpha = rgba;
 
-  function lighten(hex, f) {
-    var r = Math.min(255, (parseInt(hex.slice(1, 3), 16) || 0) * (1 + f));
-    var g = Math.min(255, (parseInt(hex.slice(3, 5), 16) || 0) * (1 + f));
-    var b = Math.min(255, (parseInt(hex.slice(5, 7), 16) || 0) * (1 + f));
-    return 'rgb(' + Math.round(r) + ',' + Math.round(g) + ',' + Math.round(b) + ')';
-  }
-
   // ── Node rendering — large solid glowing circles ──
   JUG._draw.node = function(node, ctx, globalScale, hoveredId, selectedId, neighbors) {
     try { _drawNodeInner(node, ctx, globalScale, hoveredId, selectedId, neighbors); }
@@ -54,44 +79,71 @@
     var x = node.x, y = node.y;
     if (x === undefined || y === undefined) return;
     var r = JUG._draw.nodeRadius(node);
-    var color = JUG.getNodeColor(node);
-    var isHighlit = node.id === hoveredId || node.id === selectedId;
-    var isDimmed = selectedId && node.id !== selectedId && !neighbors[node.id];
+    var isSelected = node.id === selectedId;
+    var isHighlit = node.id === hoveredId || isSelected;
+    var isDimmed = selectedId && !isSelected && !neighbors[node.id];
 
-    ctx.globalAlpha = isDimmed ? 0.08 : 1.0;
+    // Ambient mass (G7 — cards/data-pointcloud.html DD-04): once a node is
+    // selected, everything outside its neighborhood becomes ambient
+    // texture — opaque --field-point, never an alpha-faded copy of the
+    // node's own data hue. Alpha-fading here would both violate the token
+    // contract and make the mass invisible on the paper surface (a
+    // translucent dark dot vanishes on cream). Cheap flat dot, no glow,
+    // no rings, no label — this IS the ambient-mass rendering path.
+    if (isDimmed) {
+      ctx.globalAlpha = 1.0;
+      ctx.fillStyle = pal.fieldPoint;
+      ctx.beginPath();
+      ctx.arc(x, y, Math.max(1.4, r * 0.55), 0, 2 * Math.PI);
+      ctx.fill();
+      return;
+    }
 
-    // Outer glow halo — scaled by node importance
-    var isLeaf = node.type === 'memory' || node.type === 'entity' || node.type === 'discussion';
-    var glowR = isHighlit ? r * 5 : (isLeaf ? r * 1.8 : r * 3);
-    var glowA = isHighlit ? 0.35 : (node.type === 'domain' ? 0.2 : (isLeaf ? 0.06 : 0.12));
-    var grad = ctx.createRadialGradient(x, y, r * 0.5, x, y, glowR);
-    grad.addColorStop(0, rgba(color, glowA));
-    grad.addColorStop(0.5, rgba(color, glowA * 0.3));
-    grad.addColorStop(1, 'transparent');
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(x, y, glowR, 0, 2 * Math.PI);
-    ctx.fill();
+    // Selected/focus node renders in the accent, nothing else does
+    // (G4 — terracotta is selection only, never a data category).
+    var color = isSelected ? pal.accentDeep : JUG.getNodeColor(node);
 
-    // Solid circle body — bright fill with specular highlight
-    var bodyGrad = ctx.createRadialGradient(x - r * 0.3, y - r * 0.35, r * 0.1, x, y, r);
-    bodyGrad.addColorStop(0, lighten(color, 0.6));
-    bodyGrad.addColorStop(0.6, color);
-    bodyGrad.addColorStop(1, rgba(color, 0.85));
-    ctx.fillStyle = bodyGrad;
+    ctx.globalAlpha = 1.0;
+
+    // Selection halo — the ONE glow this system draws (DD-04: "Selected/
+    // focus = --accent-deep + halo"). G6 forbids decorative glow/gradient
+    // everywhere else ("no glow — reactor dot excepted"); the diffuse
+    // radial-gradient wash this file used to draw around EVERY node (a
+    // "neural network aesthetic" left over from before the design gate)
+    // is exactly that forbidden pattern, and at ~90k overlapping
+    // instances it compounds into a pale cyan haze that hides the deep
+    // per-node hue entirely, regardless of how correct the underlying
+    // token is. Hover gets a crisp rim instead (its detail lives in the
+    // tooltip DOM overlay, not the canvas — DD-04: "hover = kind badge +
+    // verbatim path + heat meter").
+    if (isSelected) {
+      var haloR = r * 4;
+      var halo = ctx.createRadialGradient(x, y, r * 0.6, x, y, haloR);
+      halo.addColorStop(0, rgba(color, 0.4));
+      halo.addColorStop(1, 'transparent');
+      ctx.fillStyle = halo;
+      ctx.beginPath();
+      ctx.arc(x, y, haloR, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+
+    // Flat true-hue body — the point IS the deep token, undiluted; no
+    // specular-highlight gradient (G6 — the heat track is the system's
+    // only sanctioned gradient) to dilute it toward a lighter tint.
+    ctx.fillStyle = color;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, 2 * Math.PI);
     ctx.fill();
 
-    // Thin bright rim
-    ctx.strokeStyle = rgba(lighten(color, 0.3), 0.6);
-    ctx.lineWidth = 0.4;
+    // Thin rim — crisp edge definition; brighter/thicker on hover only.
+    ctx.strokeStyle = rgba(color, isHighlit ? 0.9 : 0.5);
+    ctx.lineWidth = isHighlit ? 0.9 : 0.4;
     ctx.stroke();
 
     // Quality indicator ring — green (≥0.6), amber (≥0.3), red (<0.3)
-    if (node.quality !== undefined && !isDimmed) {
+    if (node.quality !== undefined) {
       var q = node.quality;
-      var qColor = q >= 0.6 ? '#40D870' : q >= 0.3 ? '#E0B040' : '#E05050';
+      var qColor = q >= 0.6 ? pal.ok : q >= 0.3 ? pal.warn : pal.danger;
       var qAlpha = 0.5 + q * 0.4;
       ctx.strokeStyle = rgba(qColor, qAlpha);
       ctx.lineWidth = 0.6;
@@ -102,13 +154,13 @@
     }
 
     // Global indicator — golden double ring
-    if (node.isGlobal && !isDimmed) {
-      ctx.strokeStyle = rgba('#8B6914', 0.7);
+    if (node.isGlobal) {
+      ctx.strokeStyle = rgba(pal.accentInk, 0.7);
       ctx.lineWidth = 0.7;
       ctx.beginPath();
       ctx.arc(x, y, r + 1.8, 0, 2 * Math.PI);
       ctx.stroke();
-      ctx.strokeStyle = rgba('#8B6914', 0.35);
+      ctx.strokeStyle = rgba(pal.accentInk, 0.35);
       ctx.lineWidth = 0.4;
       ctx.beginPath();
       ctx.arc(x, y, r + 3.2, 0, 2 * Math.PI);
@@ -116,8 +168,8 @@
     }
 
     // Protected indicator
-    if (node.isProtected && !isDimmed) {
-      ctx.strokeStyle = rgba('#D4A040', 0.6);
+    if (node.isProtected) {
+      ctx.strokeStyle = rgba(pal.accentInk, 0.6);
       ctx.lineWidth = 0.5;
       ctx.setLineDash([2, 2]);
       ctx.beginPath();
@@ -127,7 +179,7 @@
     }
 
     // Emotion pulse
-    if (node.emotion && node.emotion !== 'neutral' && (node.arousal || 0) > 0.2 && !isDimmed) {
+    if (node.emotion && node.emotion !== 'neutral' && (node.arousal || 0) > 0.2) {
       var pulse = 0.3 + 0.5 * Math.sin(animFrame * 0.04 * (0.5 + (node.arousal || 0)));
       ctx.strokeStyle = rgba(color, Math.abs(pulse) * 0.5);
       ctx.lineWidth = 0.4;
@@ -137,7 +189,7 @@
     }
 
     // Consolidation stage ring — colored per stage, line style indicates stability
-    if (node.consolidationStage && node.type === 'memory' && !isDimmed) {
+    if (node.consolidationStage && node.type === 'memory') {
       var sc = JUG.CONSOLIDATION_COLORS[node.consolidationStage] || '#50C8E0';
       ctx.strokeStyle = rgba(sc, 0.7);
       ctx.lineWidth = node.consolidationStage === 'consolidated' ? 1.0 : 0.7;
@@ -150,9 +202,9 @@
     }
 
     // Interference spikes — red radiating lines for high-interference memories
-    if (node.interferenceScore > 0.5 && node.type === 'memory' && !isDimmed) {
+    if (node.interferenceScore > 0.5 && node.type === 'memory') {
       var iAlpha = Math.min(0.6, (node.interferenceScore - 0.5) * 1.2);
-      ctx.strokeStyle = rgba('#E07070', iAlpha);
+      ctx.strokeStyle = rgba(pal.danger, iAlpha);
       ctx.lineWidth = 0.4;
       for (var spike = 0; spike < 4; spike++) {
         var angle = spike * Math.PI / 2 + animFrame * 0.01;
@@ -164,8 +216,8 @@
     }
 
     // Schema badge — small gold diamond for schema-matched memories
-    if (node.schemaMatchScore > 0.5 && node.type === 'memory' && !isDimmed) {
-      ctx.fillStyle = rgba('#E8B840', 0.6);
+    if (node.schemaMatchScore > 0.5 && node.type === 'memory') {
+      ctx.fillStyle = rgba(pal.accentInk, 0.6);
       var dx = x + r * 0.7, dy = y + r * 0.7;
       ctx.beginPath();
       ctx.moveTo(dx, dy - 1.5);
@@ -177,7 +229,7 @@
     }
 
     // Labels
-    if (!isDimmed) drawLabel(ctx, node, x, y, r, globalScale, isHighlit);
+    drawLabel(ctx, node, x, y, r, globalScale, isHighlit);
 
     ctx.globalAlpha = 1.0;
   }
@@ -199,14 +251,15 @@
     var text = JUG._bestNodeLabel(node).slice(0, 28);
     var ty = y + r + fs * 0.5;
 
-    // Dark outline for contrast against any background
-    ctx.strokeStyle = 'rgba(8, 8, 16, 0.85)';
+    // Canvas-colour outline for contrast against the current surface
+    // (was a hardcoded dark rgba — didn't invert on the paper surface).
+    ctx.strokeStyle = rgba(pal.canvas, 0.85);
     ctx.lineWidth = fs * 0.35;
     ctx.lineJoin = 'round';
     ctx.strokeText(text, x, ty);
 
-    // White text for readability
-    ctx.fillStyle = rgba('#FFFFFF', isHighlit ? 1.0 : 0.92);
+    // Text-colour fill for readability, re-inked per surface.
+    ctx.fillStyle = rgba(pal.text, isHighlit ? 1.0 : 0.92);
     ctx.fillText(text, x, ty);
   }
 

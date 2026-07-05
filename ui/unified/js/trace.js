@@ -13,12 +13,33 @@
   'use strict';
 
   // Per-tool action colors (override the generic 'action' KIND_COLOR).
-  var TOOL_COLOR = {
-    Read: '#38BDF8', NotebookRead: '#38BDF8', Grep: '#7DD3FC', Glob: '#7DD3FC',
-    Edit: '#FBBF24', MultiEdit: '#FBBF24', NotebookEdit: '#FBBF24',
-    Write: '#34D399', Bash: '#F87171',
-    Task: '#EC4899', Agent: '#EC4899', WebFetch: '#A78BFA', WebSearch: '#A78BFA',
+  // G9 (design gate): tool colour comes from the --tool-* family tokens
+  // (ui/shared/tokens/surfaces.css), resolved LIVE against the current
+  // surface — never a static hex table. The previous static hex table baked
+  // paper-only, low-contrast values straight into n.color (Edit 1.44:1,
+  // Write 1.66:1, Read 1.85:1, Web 2.35:1, Bash 2.39:1 on paper), and because
+  // nodeColor() prefers n.color over KIND_COLOR, the client tokens could
+  // never override them. TOOL_COLOR now maps each tool to a token NAME;
+  // _colorize (below) still bakes the resolved value into n.color at fetch
+  // time — that contract is unchanged, only the colour SOURCE moved from a
+  // literal to a live token read.
+  var TOOL_COLOR_TOKEN = {
+    Read: '--tool-read', NotebookRead: '--tool-read',
+    Grep: '--tool-search', Glob: '--tool-search',
+    Edit: '--tool-edit', MultiEdit: '--tool-edit', NotebookEdit: '--tool-edit',
+    Write: '--tool-write', Bash: '--tool-exec',
+    Task: '--tool-agent', Agent: '--tool-agent',
+    WebFetch: '--tool-web', WebSearch: '--tool-web',
   };
+  function _resolveToolColor(tool) {
+    var token = TOOL_COLOR_TOKEN[tool];
+    if (!token) return null;
+    if (window.CortexPalette) return window.CortexPalette.hex(token);
+    // Defensive fallback (palette.js failed to load) — same getComputedStyle
+    // read every other renderer in this app uses when CortexPalette is absent.
+    var v = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
+    return v || null;
+  }
 
   var _expanded = Object.create(null);
   var _mounted = false;
@@ -64,8 +85,9 @@
   function _colorize(nodes) {
     for (var i = 0; i < nodes.length; i++) {
       var n = nodes[i];
-      if ((n.kind === 'action' || n.type === 'action') && n.tool && TOOL_COLOR[n.tool]) {
-        n.color = TOOL_COLOR[n.tool];
+      if ((n.kind === 'action' || n.type === 'action') && n.tool) {
+        var c = _resolveToolColor(n.tool);
+        if (c) n.color = c;
       }
     }
     return nodes;
@@ -141,15 +163,6 @@
     // file click: the impact diagram + detail are handled by the
     // detail-panel "Impact" section (detail_panel.js), not here.
   }
-
-  // Tool→color used by both the canvas (via workflow_graph KIND_COLOR) and
-  // the impact diagram / flow panel.
-  var TOOL_DOT = {
-    Read: '#38BDF8', NotebookRead: '#38BDF8', Grep: '#7DD3FC', Glob: '#7DD3FC',
-    Edit: '#FBBF24', MultiEdit: '#FBBF24', NotebookEdit: '#FBBF24',
-    Write: '#34D399', Bash: '#F87171', Task: '#EC4899', Agent: '#EC4899',
-    WebFetch: '#A78BFA', WebSearch: '#A78BFA',
-  };
 
   // ── Impact / dependency DIAGRAM (flow panel) ─────────────────────────
   // A developer's blast-radius view for a file: what it imports/calls

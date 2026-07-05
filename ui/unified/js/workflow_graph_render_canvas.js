@@ -1,6 +1,32 @@
 // Cortex — Workflow Graph: Canvas renderer (used for nodes > threshold).
 // Exposes JUG._wfg.mountCanvas(container, ctx, sim, width, height).
 (function () {
+  // G2/G12 (design gate): label colour resolved LIVE per surface — the
+  // previous hard-coded '#E8E4D8' (an ink-only cream) rendered at ~1.10:1 on
+  // the paper canvas (invisible). Domain hub labels use --text (primary);
+  // tool_hub labels use --text-secondary (they're the smaller, secondary
+  // annotation) — both re-ink correctly via tokens/surfaces.css.
+  function _labelColor(kind) {
+    var token = kind === 'domain' ? '--text' : '--text-secondary';
+    if (window.CortexPalette) return window.CortexPalette.hex(token);
+    var v = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
+    // Last-resort fallback if the design system itself never loaded (in
+    // which case nothing on the page is styled anyway) — 'CanvasText' is
+    // the CSS system-color keyword for the platform's default text color,
+    // not a brand hex literal (G3/G9: never a raw hex table).
+    return v || 'CanvasText';
+  }
+  // G4 (design gate): the focus/selection ring around a node is the ONE
+  // legitimate data use of terracotta ("accent/selection only"). --accent-ink
+  // is the surface-aware alias already used for every other selection
+  // indicator in this app (theme.css, panels.css, knowledge.css) — deep on
+  // paper, lifted on ink. Replaces the previous hard-coded '#F0D870' (a
+  // fixed gold that never re-inked and wasn't a data-family token at all).
+  function _strokeAccent() {
+    if (window.CortexPalette) return window.CortexPalette.hex('--accent-ink');
+    var v = getComputedStyle(document.documentElement).getPropertyValue('--accent-ink').trim();
+    return v || 'CanvasText';
+  }
   function mountCanvas(container, ctx, sim, width, height) {
     var d3 = window.d3;
     var wfg = window.JUG._wfg;
@@ -185,10 +211,10 @@
         g.globalAlpha = isDim ? 0.15 : 1.0;
         g.fillStyle = wfg.nodeColor(n);
         g.beginPath(); g.arc(n.x, n.y, r, 0, Math.PI * 2); g.fill();
-        if (isFocus) { g.lineWidth = 2; g.strokeStyle = '#F0D870'; g.stroke(); }
+        if (isFocus) { g.lineWidth = 2; g.strokeStyle = _strokeAccent(); g.stroke(); }
         if ((n.kind === 'domain' || n.kind === 'tool_hub') && transform.k > 0.5) {
           g.globalAlpha = isDim ? 0.3 : 0.95;
-          g.fillStyle = '#E8E4D8';
+          g.fillStyle = _labelColor(n.kind);
           g.font = (n.kind === 'domain' ? '12px ' : '10px ') + "'Inter Tight', system-ui, sans-serif";
           g.textAlign = 'center'; g.textBaseline = 'bottom';
           g.fillText(wfg.labelOf(n), n.x, n.y - r - 3);
@@ -345,10 +371,10 @@
         g.globalAlpha = kept ? (isDim ? 0.06 : 1.0) : 0.04;
         g.fillStyle = wfg.nodeColor(n);
         g.beginPath(); g.arc(n.x, n.y, r, 0, Math.PI * 2); g.fill();
-        if (isFocus) { g.lineWidth = 2; g.strokeStyle = '#F0D870'; g.stroke(); }
+        if (isFocus) { g.lineWidth = 2; g.strokeStyle = _strokeAccent(); g.stroke(); }
         if (kept && (n.kind === 'domain' || n.kind === 'tool_hub') && transform.k > 0.5) {
           g.globalAlpha = isDim ? 0.3 : 0.95;
-          g.fillStyle = '#E8E4D8';
+          g.fillStyle = _labelColor(n.kind);
           g.font = (n.kind === 'domain' ? '12px ' : '10px ') + "'Inter Tight', system-ui, sans-serif";
           g.textAlign = 'center'; g.textBaseline = 'bottom';
           g.fillText(wfg.labelOf(n), n.x, n.y - r - 3);
@@ -364,6 +390,16 @@
         canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
         fitToContent();
       },
+      // G2 (design gate): repaint-only re-ink hook for 'cortex:surface-change'.
+      // Re-reads every colour this frame paints (nodeColor/_labelColor/
+      // _strokeAccent all resolve tokens live) and calls the SAME draw()
+      // used by every mouse/zoom/tick event — it never touches the
+      // simulation (no sim.restart()/alpha() calls here) and never
+      // mutates n.x/n.y, so node positions are bit-identical before and
+      // after. Callers must NOT call this while the sim is actively
+      // ticking for an unrelated reason; it is safe to call any time
+      // because draw() only reads current positions, never writes them.
+      redraw: function () { draw(); },
       selectId: function (id) {
         var n = ctx.byId[id];
         if (!n) return;

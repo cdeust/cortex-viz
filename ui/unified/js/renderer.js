@@ -7,17 +7,46 @@
   var selectedNode = null;
   var neighborSet = {};
 
-  // Default bright edge color — cyan like the reference image
-  var EDGE_DEFAULT = 'rgba(80, 210, 235, 0.12)';
-  var EDGE_DIMMED  = 'rgba(80, 210, 235, 0.04)';
-  var EDGE_ACTIVE  = 'rgba(240, 210, 100, 0.9)';
+  // ── Surface-correct edge/background colour ──────────────────────────────
+  // Edges are graph chrome, not data points (G3: "chrome is greyscale;
+  // colour comes only from data tokens or the single terracotta accent") —
+  // so the default/dimmed link tiers share one neutral, muted tone
+  // (--text-faint), and the "focused" tier (edges touching the selected
+  // node, plus its directional particles) is the ONE place edges legitimately
+  // carry the accent, since that focus IS the selection state (G4). Resolved
+  // via CortexPalette (canvas cannot read CSS custom properties) and
+  // refreshed on cortex:surface-change.
+  var pal = {
+    canvas: '#08080f',
+    edgeDefault: 'rgba(150,150,150,0.30)',
+    edgeDimmed: 'rgba(150,150,150,0.10)',
+    edgeActive: 'rgba(165,62,0,0.85)',
+    particle: '#A53E00',
+  };
+  function refreshPalette() {
+    if (!window.CortexPalette) return;
+    var hex = window.CortexPalette.hex;
+    var toRgba = (window.JUG && JUG._draw && JUG._draw.colorAlpha) || function (h) { return h; };
+    pal.canvas = hex('--canvas') || pal.canvas;
+    var faint = hex('--text-faint') || '#969696';
+    var accent = hex('--accent-deep') || pal.particle;
+    pal.edgeDefault = toRgba(faint, 0.35);
+    pal.edgeDimmed = toRgba(faint, 0.12);
+    pal.edgeActive = toRgba(accent, 0.85);
+    pal.particle = accent;
+    if (graph) graph.backgroundColor(pal.canvas);
+  }
+  refreshPalette();
+  if (window.CortexSurface) {
+    window.addEventListener(window.CortexSurface.EVENT, refreshPalette);
+  }
 
   function init() {
     var container = document.getElementById('graph-container');
     if (!container) return;
 
     graph = ForceGraph()(container)
-      .backgroundColor('#080810')
+      .backgroundColor(pal.canvas)
       .nodeId('id')
       .nodeLabel(null)
       .nodeCanvasObject(drawNode)
@@ -38,7 +67,7 @@
         return (sid === selectedNode.id || tid === selectedNode.id) ? 3 : 0;
       })
       .linkDirectionalParticleWidth(1.5)
-      .linkDirectionalParticleColor(function() { return '#F0D870'; })
+      .linkDirectionalParticleColor(function() { return pal.particle; })
       .linkDirectionalParticleSpeed(0.006)
       .d3AlphaDecay(0.015)
       .d3VelocityDecay(0.35)
@@ -55,14 +84,14 @@
     });
   }
 
-  // ── Link styling — bright cyan like reference image ──
+  // ── Link styling — greyscale chrome, accent only on the focused edges ──
   function linkColor(e) {
     var focusId = selectedNode ? selectedNode.id : (hoveredNode ? hoveredNode.id : null);
-    if (!focusId) return EDGE_DEFAULT;
+    if (!focusId) return pal.edgeDefault;
     var sid = typeof e.source === 'object' ? e.source.id : e.source;
     var tid = typeof e.target === 'object' ? e.target.id : e.target;
-    if (sid === focusId || tid === focusId) return EDGE_ACTIVE;
-    return EDGE_DIMMED;
+    if (sid === focusId || tid === focusId) return pal.edgeActive;
+    return pal.edgeDimmed;
   }
 
   function linkWidth(e) {
