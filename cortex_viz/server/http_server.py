@@ -108,6 +108,17 @@ def _build_handler_class(server_state: dict) -> type:
                 ".css"
             ):
                 _serve_static(self, meth_dir / "css", self.path[17:], "text/css")
+            elif self.path.split("?")[0].startswith("/shared/"):
+                # Vendored AI Architect design-system foundation (ui/shared/) —
+                # same token contract the unified server exposes, so the
+                # methodology map reads as part of the ecosystem.
+                from cortex_viz.server.http_standalone_endpoints import (
+                    serve_shared_asset,
+                )
+
+                serve_shared_asset(
+                    self, ui_root / "shared", self.path.split("?")[0][len("/shared/") :]
+                )
             else:
                 _serve_html_page(self, server_state)
 

@@ -749,6 +749,55 @@ def serve_static(handler, base_dir: Path, filename: str, content_type: str) -> N
     handler.wfile.write(body)
 
 
+# Content types for the shared design-system foundation (ui/shared/*). Kept
+# small and explicit — the foundation ships only these kinds.
+_SHARED_CONTENT_TYPES = {
+    ".css": "text/css",
+    ".js": "application/javascript",
+    ".mjs": "application/javascript",
+    ".json": "application/json",
+    ".woff2": "font/woff2",
+    ".woff": "font/woff",
+    ".ttf": "font/ttf",
+    ".svg": "image/svg+xml",
+}
+
+
+def serve_shared_asset(handler, shared_dir: Path, rel_path: str) -> None:
+    """Sandboxed reader for the vendored design-system foundation (``/shared/``).
+
+    Unlike ``serve_static`` (single-level, filename-only) this serves the
+    NESTED token/component tree — ``tokens/colors.css``, ``components/core/
+    core.css`` — because ``ds.css`` ``@import``s them by relative subpath. The
+    depth is the reason for a distinct reader; the traversal guard is the price:
+    the resolved path MUST stay inside ``shared_dir`` and be an existing file,
+    so a crafted ``../`` can never escape the foundation directory.
+    """
+    # Reject the obvious attacks before touching the filesystem.
+    if not rel_path or "\x00" in rel_path or any(
+        part in ("", "..") or part.startswith(".") for part in rel_path.split("/")
+    ):
+        send_plain_error(handler, 403)
+        return
+    base = shared_dir.resolve()
+    target = (base / rel_path).resolve()
+    # Containment check — the resolved path must be within the foundation dir.
+    if base != target and base not in target.parents:
+        send_plain_error(handler, 403)
+        return
+    if not target.is_file():
+        send_plain_error(handler, 404)
+        return
+    content_type = _SHARED_CONTENT_TYPES.get(target.suffix.lower(), "text/plain")
+    body = target.read_bytes()
+    handler.send_response(200)
+    handler.send_header("Content-Type", content_type + "; charset=utf-8")
+    handler.send_header("Content-Length", str(len(body)))
+    handler.send_header("Cache-Control", "no-cache")
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
 def serve_file_diff(handler) -> None:
     """Thin delegate to ``http_file_diff.serve_file_diff``."""
     from cortex_viz.server.http_file_diff import serve_file_diff as _serve

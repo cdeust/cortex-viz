@@ -235,6 +235,14 @@ def _route_unified_get(
         serve_static(
             handler, ui_root / "dashboard", path_no_qs[len("/dashboard/") :], "text/css"
         )
+    elif path_no_qs.startswith("/shared/"):
+        # Vendored AI Architect design-system foundation (ui/shared/): the
+        # token contract, surface toggle, and data palette shared by every
+        # viz surface. Nested subpaths (tokens/, components/) are served with a
+        # traversal guard — see serve_shared_asset.
+        from cortex_viz.server.http_standalone_endpoints import serve_shared_asset
+
+        serve_shared_asset(handler, ui_root / "shared", path_no_qs[len("/shared/") :])
     elif path.startswith("/js/") and path_no_qs.endswith(".js"):
         serve_static(handler, js_dir, path_no_qs[4:], "application/javascript")
     elif path.startswith("/css/") and path_no_qs.endswith(".css"):
