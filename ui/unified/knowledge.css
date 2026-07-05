@@ -9,7 +9,7 @@
 #knowledge-container {
   display: none;
   flex-direction: column;
-  background: #080810;
+  background: var(--surface);
 }
 
 /* Domain pills bar */
@@ -18,13 +18,13 @@
   flex-wrap: wrap;
   margin-bottom: 16px;
   padding-bottom: 12px;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid color-mix(in oklab, var(--text) 6%, transparent);
 }
 .kv-domain-pill {
   background: none;
-  border: 1px solid rgba(255,255,255,0.08);
-  color: #c0c8d8;
-  font-family: 'Source Sans 3', 'Source Sans Pro', sans-serif;
+  border: 1px solid color-mix(in oklab, var(--text) 8%, transparent);
+  color: var(--text-muted);
+  font-family: var(--sans);
   font-size: 11px; font-weight: 600;
   letter-spacing: 0.5px;
   padding: 5px 14px;
@@ -33,18 +33,18 @@
   white-space: nowrap;
 }
 .kv-domain-pill:hover {
-  border-color: rgba(255,255,255,0.18);
-  color: #f0eff4;
+  border-color: color-mix(in oklab, var(--text) 18%, transparent);
+  color: var(--text);
 }
 .kv-domain-pill.active {
-  border-color: rgba(144,184,224,0.5);
-  color: #f0eff4;
-  background: rgba(144,184,224,0.08);
+  border-color: color-mix(in oklab, var(--accent-ink) 50%, transparent);
+  color: var(--text);
+  background: color-mix(in oklab, var(--accent-ink) 8%, transparent);
 }
 .kv-domain-pill.kv-pill-global.active {
-  border-color: rgba(224,184,64,0.4);
-  color: #E0B840;
-  background: rgba(224,184,64,0.06);
+  border-color: color-mix(in oklab, var(--warn-ink) 40%, transparent);
+  color: var(--warn-ink);
+  background: color-mix(in oklab, var(--warn-ink) 6%, transparent);
 }
 
 /* Search */
@@ -54,19 +54,19 @@
 }
 .kv-search {
   flex: 1; max-width: 520px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.08);
-  color: #f0eff4;
-  font-family: 'EB Garamond', Georgia, serif;
+  background: color-mix(in oklab, var(--text) 3%, transparent);
+  border: 1px solid color-mix(in oklab, var(--text) 8%, transparent);
+  color: var(--text);
+  font-family: var(--serif);
   font-size: 15px;
   padding: 9px 16px;
   outline: none;
   transition: border-color 0.2s;
 }
 .kv-search:focus {
-  border-color: rgba(144,184,224,0.5);
+  border-color: color-mix(in oklab, var(--accent-ink) 50%, transparent);
 }
-.kv-search::placeholder { color: #b0b8c8; }
+.kv-search::placeholder { color: var(--text-muted); }
 
 /* Sort controls */
 .kv-sort-group {
@@ -74,28 +74,28 @@
   margin-left: auto;
 }
 .kv-sort-label {
-  font-family: 'Source Sans 3', 'Source Sans Pro', sans-serif;
+  font-family: var(--sans);
   font-size: 11px;
   letter-spacing: 0.3px;
-  color: #b0b8c8;
+  color: var(--text-muted);
   margin-right: 4px;
 }
 .kv-sort-btn {
   background: none;
-  border: 1px solid rgba(255,255,255,0.06);
-  color: #b0b8c8;
-  font-family: 'Source Sans 3', 'Source Sans Pro', sans-serif;
+  border: 1px solid color-mix(in oklab, var(--text) 6%, transparent);
+  color: var(--text-muted);
+  font-family: var(--sans);
   font-size: 11px; font-weight: 600;
   letter-spacing: 0.3px;
   padding: 4px 12px;
   cursor: pointer;
   transition: all 0.2s;
 }
-.kv-sort-btn:hover { border-color: rgba(255,255,255,0.15); color: #c0c8d8; }
+.kv-sort-btn:hover { border-color: color-mix(in oklab, var(--text) 15%, transparent); color: var(--text-muted); }
 .kv-sort-btn.active {
-  border-color: rgba(144,184,224,0.4);
-  color: #f0eff4;
-  background: rgba(144,184,224,0.06);
+  border-color: color-mix(in oklab, var(--accent-ink) 40%, transparent);
+  color: var(--text);
+  background: color-mix(in oklab, var(--accent-ink) 6%, transparent);
 }
 
 /* Stats summary */
@@ -107,14 +107,14 @@
   display: flex; align-items: baseline; gap: 6px;
 }
 .kv-stat-val {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 18px; font-weight: 600;
-  color: #f0eff4;
+  color: var(--text);
 }
 .kv-stat-label {
-  font-family: 'Source Sans 3', 'Source Sans Pro', sans-serif;
+  font-family: var(--sans);
   font-size: 11px;
-  color: #b0b8c8;
+  color: var(--text-muted);
   letter-spacing: 0.2px;
 }
 
@@ -124,26 +124,36 @@
   padding: 0;
 }
 .kv-global-title {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 16px; font-weight: 600;
-  color: #E0B840;
+  color: var(--warn-ink);
   margin-bottom: 8px;
   padding-bottom: 6px;
-  border-bottom: 1px solid rgba(224,184,64,0.12);
+  border-bottom: 1px solid color-mix(in oklab, var(--warn-ink) 12%, transparent);
   font-variant: small-caps;
   letter-spacing: 0.5px;
 }
 
-/* Cards grid — responsive multi-column; rows stay short (card auto-height). */
+/* Cards grid — a fixed 2-column exhibit grid, centred and width-capped so
+   it reads as a controlled gallery on very wide displays instead of
+   stretching into an N-column soup. source: da-user-addendum.md Ref A
+   ("Grille de cartes = exhibits, 2 colonnes"). */
 .kv-grid {
   flex: 1;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  /* Full-width responsive fill (user directive 2026-07-04): the grid claims
+     the whole viewport width; column COUNT adapts to the screen, card width
+     stays in a readable 340-460px band. */
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   grid-auto-rows: max-content;
   align-items: start;
-  gap: 12px;
+  gap: 16px;
+  width: 100%;
   overflow-y: auto;
   padding-bottom: 24px;
+}
+@media (max-width: 820px) {
+  .kv-grid { grid-template-columns: 1fr; }
 }
 /* Domain headers + global banner live inside the grid and must span all columns. */
 .kv-grid > .kv-domain-header,
@@ -151,58 +161,145 @@
 .kv-grid > .kv-empty { grid-column: 1 / -1; }
 .kv-grid::-webkit-scrollbar { width: 3px; }
 .kv-grid::-webkit-scrollbar-track { background: transparent; }
-.kv-grid::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); }
+.kv-grid::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--text) 6%, transparent); }
 
 /* Domain section header */
 .kv-domain-header {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 16px; font-weight: 600;
-  color: #c0c8d8;
+  color: var(--text-muted);
   padding: 18px 0 6px;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid color-mix(in oklab, var(--text) 6%, transparent);
   margin-bottom: 2px;
   font-variant: small-caps;
   letter-spacing: 0.5px;
 }
 
-/* ── Memory card ── */
+/* ── Memory card ──
+   DS forbids coloured-left-border cards; hot/global tint the full
+   hairline instead (see the paper re-skin section below, which wins). */
 .kv-card {
-  background: #0d0d1a;
-  border: 1px solid rgba(255,255,255,0.04);
-  border-left: 4px solid transparent;
+  background: var(--surface-card);
+  border: 1px solid var(--border);
   padding: 16px 20px 14px;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
   position: relative;
 }
 .kv-card:hover {
-  background: #101020;
-  border-color: rgba(255,255,255,0.08);
-  border-left-color: rgba(144,184,224,0.3);
+  background: var(--surface-card);
+  border-color: var(--border-strong);
 }
 
 /* Hot memory accent */
 .kv-card.kv-card-hot {
-  border-left-color: #E07070;
+  border-color: color-mix(in oklab, var(--warn-ink) 25%, var(--border));
 }
 .kv-card.kv-card-hot:hover {
-  border-left-color: #E07070;
+  border-color: color-mix(in oklab, var(--warn-ink) 40%, var(--border-strong));
 }
 
 /* Global card accent */
 .kv-card.kv-card-global {
-  border-left-color: rgba(224,184,64,0.4);
+  border-color: color-mix(in oklab, var(--warn-ink) 25%, var(--border));
 }
 .kv-card.kv-card-global:hover {
-  border-left-color: rgba(224,184,64,0.6);
+  border-color: color-mix(in oklab, var(--warn-ink) 40%, var(--border-strong));
+}
+
+/* DD-01 memory-card anatomy — zone styles ported verbatim from the DS
+   exhibit (cards/data-memory-card.html). Title serif · Feeling mono ·
+   excerpt sans · Meaning italic mono quote · badge row + relative time ·
+   four meters (amber fill, empty track when zero) · provenance ledger ·
+   capture-tag footer. */
+.kv-mc-title {
+  font: 400 16px/1.2 var(--font-serif);
+  color: var(--text);
+  margin: 0 0 7px;
+}
+.kv-mc-feel {
+  display: flex; align-items: center; gap: 7px;
+  font: 400 10px var(--font-mono);
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.kv-mc-feel-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--text-faint);
+  flex: none;
+}
+.kv-mc-cmd {
+  font: 400 11px/1.5 var(--font-sans);
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  word-break: break-word;
+}
+.kv-mc-ml {
+  font: 600 9px/1 var(--font-mono);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin: 0 0 6px;
+}
+.kv-mc-quote {
+  font: italic 400 10.5px/1.45 var(--font-mono);
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  word-break: break-word;
+}
+.kv-mc-brow {
+  display: flex; flex-wrap: wrap; gap: 5px; align-items: center;
+  margin-bottom: 10px;
+}
+.kv-mc-when {
+  margin-left: auto;
+  font: 400 9px var(--font-mono);
+  color: var(--text-faint);
+}
+.kv-mc-meter {
+  display: flex; align-items: center; gap: 8px;
+  margin: 4px 0;
+}
+.kv-mc-meter-k {
+  width: 74px; flex: none;
+  font: 400 9px var(--font-mono);
+  letter-spacing: .08em;
+  color: var(--text-muted);
+}
+.kv-mc-meter-track {
+  flex: 1; height: 4px; border-radius: 99px;
+  background: var(--surface-chip);
+  overflow: hidden;
+}
+.kv-mc-meter-fill {
+  display: block; height: 100%; border-radius: 99px;
+  background: var(--heat-warm);
+}
+.kv-mc-kv {
+  display: flex; justify-content: space-between; gap: 10px;
+  font: 400 9.5px var(--font-mono);
+  color: var(--text-muted);
+  padding: 3px 0;
+}
+.kv-mc-kv b {
+  color: var(--text);
+  font-weight: 500;
+  text-align: right;
+}
+.kv-mc-ftags {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-top: 8px; padding-top: 8px;
+  border-top: 1px solid var(--divider);
+  font: 400 9px var(--font-mono);
+  color: var(--text-faint);
 }
 
 /* Card title */
 .kv-card-title {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 17px;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--text);
   line-height: 1.35;
   margin-bottom: 4px;
   display: -webkit-box;
@@ -213,9 +310,9 @@
 
 /* Card body preview */
 .kv-card-body {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 14px;
-  color: #d0d4e0;
+  color: var(--text-secondary);
   line-height: 1.55;
   margin-bottom: 10px;
   display: -webkit-box;
@@ -234,25 +331,25 @@
 
 /* Consolidation badge */
 .kv-badge {
-  font-family: 'Source Sans 3', 'Source Sans Pro', sans-serif;
+  font-family: var(--sans);
   font-size: 10px; font-weight: 600;
   letter-spacing: 0.3px;
   padding: 1px 8px;
   border: 1px solid;
 }
-.kv-badge-new { color: #80D0F0; border-color: rgba(128,208,240,0.25); }
-.kv-badge-growing { color: #80C0F0; border-color: rgba(96,160,224,0.25); }
-.kv-badge-strong { color: #70E090; border-color: rgba(112,224,144,0.25); }
-.kv-badge-stable { color: #E8B840; border-color: rgba(232,184,64,0.25); }
-.kv-badge-updating { color: #D090E0; border-color: rgba(208,144,224,0.25); }
+.kv-badge-new { color: var(--stage-labile); border-color: color-mix(in oklab, var(--stage-labile) 25%, transparent); }
+.kv-badge-growing { color: var(--stage-early); border-color: color-mix(in oklab, var(--stage-early) 25%, transparent); }
+.kv-badge-strong { color: var(--stage-late); border-color: color-mix(in oklab, var(--stage-late) 25%, transparent); }
+.kv-badge-stable { color: var(--stage-cons); border-color: color-mix(in oklab, var(--stage-cons) 25%, transparent); }
+.kv-badge-updating { color: var(--stage-recon); border-color: color-mix(in oklab, var(--stage-recon) 25%, transparent); }
 
 /* Domain pill inside card */
 .kv-card-domain {
-  font-family: 'Source Sans 3', 'Source Sans Pro', sans-serif;
+  font-family: var(--sans);
   font-size: 10px;
-  color: #b0b8c8;
+  color: var(--text-muted);
   padding: 1px 8px;
-  border: 1px solid rgba(255,255,255,0.06);
+  border: 1px solid color-mix(in oklab, var(--text) 6%, transparent);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -261,22 +358,22 @@
 
 /* Store type */
 .kv-card-store {
-  font-family: 'Source Sans 3', 'Source Sans Pro', sans-serif;
+  font-family: var(--sans);
   font-size: 10px;
-  color: #c0c8d8;
+  color: var(--text-muted);
 }
 
 /* Heat label in metadata */
 .kv-card-heat {
-  font-family: 'Source Sans 3', 'Source Sans Pro', sans-serif;
+  font-family: var(--sans);
   font-size: 10px; font-weight: 600;
 }
 
 /* Date in metadata */
 .kv-card-date {
-  font-family: 'Source Sans 3', 'Source Sans Pro', sans-serif;
+  font-family: var(--sans);
   font-size: 10px;
-  color: #c0c8d8;
+  color: var(--text-muted);
   margin-left: auto;
 }
 
@@ -286,205 +383,132 @@
   margin-top: 4px;
 }
 .kv-card-tag {
-  font-family: 'Source Sans 3', 'Source Sans Pro', sans-serif;
+  font-family: var(--sans);
   font-size: 10px;
   padding: 1px 8px;
-  border: 1px solid rgba(255,255,255,0.06);
-  color: #b0b8c8;
+  border: 1px solid color-mix(in oklab, var(--text) 6%, transparent);
+  color: var(--text-muted);
   letter-spacing: 0.2px;
 }
 .kv-tag-more {
-  color: #c0c8d8;
+  color: var(--text-muted);
   border-style: dashed;
 }
 
 /* Emotion indicator */
 .kv-card-emotion {
-  font-family: 'Source Sans 3', 'Source Sans Pro', sans-serif;
+  font-family: var(--sans);
   font-size: 10px; font-weight: 600;
 }
 
 /* Protected indicator */
 .kv-card-protected {
-  font-family: 'Source Sans 3', 'Source Sans Pro', sans-serif;
+  font-family: var(--sans);
   font-size: 10px;
-  color: #E0B840;
+  color: var(--warn-ink);
 }
 
-/* ── Expanded card overlay ── */
+/* ── Detail inspector — right-docked 380px panel, kit-detail anatomy
+   (da-user-addendum.md Ref A "Panneau détail droit"). Slides in from the
+   right, same treatment as the Trace/Graph node inspector so every view's
+   detail panel reads as ONE instrument. ── */
 .kv-expanded {
-  position: fixed;
-  top: 3%; left: 3%; right: 3%; bottom: 3%;
-  overflow-y: auto;
-  background: #0d0d1a;
-  border: 1px solid rgba(255,255,255,0.1);
-  padding: 4% 5%;
+  position: fixed; top: 0; right: 0; bottom: 0;
+  width: 380px; max-width: 92vw;
   z-index: 300;
-  box-shadow: 0 8px 80px rgba(0,0,0,0.6);
+  background: color-mix(in oklab, var(--surface) 97%, transparent);
+  border-left: 1px solid var(--border);
+  padding: 22px 22px;
+  overflow-y: auto;
+  transform: translateX(100%); opacity: 0; pointer-events: none;
+  transition: transform var(--dur-panel, .32s) var(--ease-panel, ease),
+              opacity var(--dur-base, .2s) var(--ease, ease);
 }
+.kv-expanded.open { transform: translateX(0); opacity: 1; pointer-events: auto; }
 .kv-expanded::-webkit-scrollbar { width: 3px; }
 .kv-expanded::-webkit-scrollbar-track { background: transparent; }
-.kv-expanded::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); }
+.kv-expanded::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--text) 8%, transparent); }
 
 .kv-expanded-close {
-  position: absolute; top: 16px; right: 18px;
-  background: none; border: 1px solid rgba(255,255,255,0.08);
-  width: 28px; height: 28px;
-  color: #b0b8c8; font-size: 14px;
+  position: absolute; top: 16px; right: 16px;
+  width: 26px; height: 26px;
+  background: none; border: 1px solid var(--border);
+  border-radius: var(--r-xs, 3px);
+  color: var(--text-muted); font-size: 15px;
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  transition: all 0.2s;
+  transition: color .14s var(--ease), border-color .14s var(--ease);
 }
-.kv-expanded-close:hover {
-  color: #f0eff4;
-  border-color: rgba(255,255,255,0.2);
-}
+.kv-expanded-close:hover { color: var(--text); border-color: var(--border-strong); }
 
-/* Expanded title */
+/* Title (serif) + domain label under it — matches kit-detail h2 / __domain. */
 .kv-expanded-title {
-  font-family: 'EB Garamond', Georgia, serif;
-  font-size: 26px;
-  font-weight: 700;
-  color: #ffffff;
-  line-height: 1.3;
-  margin: 0 0 12px;
-  padding-right: 40px;
+  font: 600 16px/1.35 var(--serif);
+  color: var(--text);
+  margin: 12px 0 3px;
+  padding-right: 34px;
+}
+.kv-expanded-domain {
+  font: 400 10px/1 var(--mono);
+  letter-spacing: .08em; text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 16px;
 }
 
-/* Expanded metadata row */
-.kv-expanded-meta-row {
-  display: flex; align-items: center; gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 20px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+/* Section: micro-caps mono label + hairline rule, per section. */
+.kv-section { margin-bottom: 18px; }
+.kv-detail__label {
+  font: 600 9px/1 var(--mono);
+  letter-spacing: .16em; text-transform: uppercase;
+  color: var(--text-faint);
+  margin: 0 0 9px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--divider);
 }
 
-/* Expanded full content -- wiki typography */
+/* CONTENT — serif prose, same typographic voice as the card body. */
 .kv-expanded-content {
-  font-family: 'EB Garamond', Georgia, serif;
-  font-size: 18px;
-  color: #f0eff4;
-  line-height: 1.7;
-  word-break: break-word;
-  margin: 0 0 24px;
+  font: 400 14px/1.6 var(--serif);
+  color: var(--text-secondary);
 }
-.kv-expanded-content p {
-  margin: 0 0 16px;
+.kv-expanded-content p { margin: 0 0 14px; }
+.kv-expanded-content h2, .kv-expanded-content h3, .kv-expanded-content h4 {
+  font-family: var(--serif); color: var(--text); margin: 18px 0 8px;
 }
-.kv-expanded-content h2, .kv-expanded-content h3, .kv-expanded-content h4, .kv-expanded-content h5 {
-  font-family: 'EB Garamond', Georgia, serif;
-  color: #ffffff;
-  margin: 28px 0 12px;
-}
-.kv-expanded-content h2 { font-size: 22px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px; }
-.kv-expanded-content h3 { font-size: 19px; }
-.kv-expanded-content h4 { font-size: 17px; font-style: italic; }
-.kv-expanded-content li {
-  margin: 4px 0 4px 24px;
-  list-style: disc;
-}
-.kv-expanded-content strong { color: #ffffff; }
+.kv-expanded-content li { margin: 4px 0 4px 22px; list-style: disc; }
+.kv-expanded-content strong { color: var(--text); }
 .kv-expanded-content code {
-  font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
-  font-size: 0.85em;
-  background: rgba(255,255,255,0.06);
-  padding: 2px 6px;
+  font-family: var(--mono); font-size: .85em;
+  background: var(--surface-chip); padding: 2px 6px;
 }
 .kv-code {
-  font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
-  font-size: 14px;
-  line-height: 1.5;
-  background: #101020;
-  color: #c8d0e0;
-  padding: 16px 20px;
-  margin: 16px 0;
-  overflow-x: auto;
-  border: 1px solid rgba(255,255,255,0.06);
-  white-space: pre-wrap;
-  word-break: break-all;
+  font-family: var(--mono); font-size: 13px; line-height: 1.5;
+  background: var(--surface-chip); color: var(--text-secondary);
+  padding: 12px 14px; margin: 12px 0; overflow-x: auto;
+  border: 1px solid var(--border);
+  white-space: pre-wrap; word-break: break-all;
 }
 
-/* Section headers in expanded view */
-.kv-expanded-section {
-  font-family: 'EB Garamond', Georgia, serif;
-  font-size: 14px; font-weight: 600;
-  color: #c0c8d8;
-  margin: 20px 0 8px;
-  padding-bottom: 4px;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-  font-variant: small-caps;
-  letter-spacing: 0.5px;
-}
+/* PROPERTIES — ledger grid, key micro-caps / value mono (kit-props). */
+.kv-props { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin: 0; }
+.kv-prop { display: flex; flex-direction: column; gap: 2px; }
+.kv-prop dt { font: 400 9px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--text-faint); margin: 0; }
+.kv-prop dd { margin: 0; font: 500 12px/1.3 var(--mono); color: var(--text); }
 
-.kv-expanded-meta {
-  display: flex; flex-wrap: wrap; gap: 16px;
-}
-.kv-expanded-meta-item {
-  display: flex; flex-direction: column; gap: 2px;
-}
-.kv-expanded-meta-label {
-  font-family: 'Source Sans 3', 'Source Sans Pro', sans-serif;
-  font-size: 10px;
-  color: #c0c8d8;
-  letter-spacing: 0.3px;
-}
-.kv-expanded-meta-val {
-  font-family: 'EB Garamond', Georgia, serif;
-  font-size: 15px;
-  color: #f0eff4;
-}
+/* CLASSIFIERS — outline chips, reuses aia-badge. */
+.kv-tags { display: flex; flex-wrap: wrap; gap: 6px; }
 
-.kv-expanded-entities {
-  display: flex; flex-wrap: wrap; gap: 6px;
+/* PROXIMAL LINKS — dot + label + mono metric, one row per link. */
+.kv-link {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 0; border-top: 1px solid var(--divider);
+  cursor: pointer; transition: padding-left .14s var(--ease);
 }
-.kv-entity-chip {
-  font-family: 'EB Garamond', Georgia, serif;
-  font-size: 13px; padding: 2px 10px;
-  border: 1px solid rgba(255,255,255,0.1);
-  color: #c0c8d8;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.kv-entity-chip:hover {
-  border-color: rgba(144,184,224,0.4);
-  color: #f0eff4;
-  background: rgba(144,184,224,0.06);
-}
-
-/* Related memory items in expanded view */
-.kv-related-item {
-  padding: 10px 12px;
-  border: 1px solid rgba(255,255,255,0.04);
-  background: rgba(255,255,255,0.02);
-  margin-bottom: 4px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.kv-related-item:hover {
-  background: rgba(255,255,255,0.04);
-}
-.kv-related-title {
-  font-family: 'EB Garamond', Georgia, serif;
-  font-size: 14px;
-  font-weight: 600;
-  color: #f0eff4;
-  line-height: 1.3;
-  margin-bottom: 2px;
-}
-.kv-related-preview {
-  font-family: 'EB Garamond', Georgia, serif;
-  font-size: 13px;
-  color: #b0b8c8;
-  line-height: 1.4;
-}
-
-.kv-backdrop {
-  position: fixed; inset: 0;
-  background: rgba(4,4,8,0.75);
-  z-index: 299;
-  
-}
+.kv-link:first-of-type { border-top: none; }
+.kv-link:hover { padding-left: 4px; }
+.kv-link__dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.kv-link__name { font: 400 12px/1.3 var(--sans); color: var(--text-secondary); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kv-link__w { font: 400 10px/1 var(--mono); color: var(--text-faint); }
 
 /* Empty state */
 .kv-empty {
@@ -492,15 +516,15 @@
   padding: 80px 20px;
 }
 .kv-empty-title {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 20px; font-weight: 600;
-  color: #c0c8d8;
+  color: var(--text-muted);
   margin-bottom: 8px;
 }
 .kv-empty-sub {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 15px;
-  color: #b0b8c8;
+  color: var(--text-muted);
   font-style: italic;
 }
 
@@ -508,24 +532,106 @@
 /* Geometry owned by theme.css — keep only cosmetic properties here. */
 #wiki-container {
   display: none;
-  background: #111118;
+  background: var(--surface-card);
 }
 
 .wiki-layout {
   display: grid;
   grid-template-columns: 20% 1fr;
+  gap: 16px;
   height: 100%;
 }
 
 /* ── Sidebar ── */
+/* DD-06: the rail is its own bordered paper card (not a bare column with
+   a single hairline edge) — matches the record card on the right.
+   source: user mockup 2026-07-05 (Wiki page reader — anatomy). */
 .wiki-sidebar {
   min-width: 0;
   min-height: 0;
-  background: #0e0e16;
-  border-right: 1px solid rgba(255,255,255,0.06);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+/* DD-06 tree rail: Tree/Graph lens chips + cross-lens toggles — paper chips
+   on the record, active = accent (never a coloured slab; the old inline
+   rgba-white/cyan literals were dark-surface leftovers). */
+.wiki-mode-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--divider);
+}
+.wiki-mode-seg { display: flex; gap: 4px; }
+/* Segmented lens control — boxed mono micro-caps, never a filled chip.
+   Active state is border-only ("bordure appuyée"); colour never comes
+   from a background fill here. source: user mockup 2026-07-05 (DD-06
+   tree rail, "2nd rejection: buttons must be exactly the same"). */
+.wiki-mode-btn {
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: var(--r-sm);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+}
+.wiki-mode-btn.active {
+  border: 1.5px solid var(--accent-ink);
+  background: transparent;
+  color: var(--accent-ink);
+}
+.wiki-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+/* Custom checkbox — small square, accent BORDER only. Native
+   accent-color paints a solid filled block on :checked, which the
+   mockup explicitly rejects ("checkbox carrée bordure accent", never a
+   filled orange slab). */
+.wiki-toggle input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  margin: 0;
+  flex: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  background: transparent;
+  position: relative;
+  cursor: pointer;
+}
+.wiki-toggle input[type="checkbox"]:checked {
+  border-color: var(--accent-ink);
+}
+.wiki-toggle input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 0px;
+  width: 3px;
+  height: 6px;
+  border: solid var(--accent-ink);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
 }
 
 .wiki-search-wrap {
@@ -537,30 +643,48 @@
   left: 28px;
   top: 50%;
   transform: translateY(-50%);
-  color: #d0d8e8;
+  color: var(--text-secondary);
   pointer-events: none;
   display: flex;
   align-items: center;
 }
 .wiki-search {
   width: 100%;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 0;
-  color: #f0eff4;
-  font-family: 'EB Garamond', Georgia, serif;
-  font-size: 14px;
+  background: color-mix(in oklab, var(--text) 3%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
   padding: 8px 12px 8px 36px;
   outline: none;
   transition: border-color 0.2s, background 0.2s;
 }
 .wiki-search:focus {
-  border-color: rgba(122,158,194,0.5);
-  background: rgba(255,255,255,0.05);
+  border-color: color-mix(in oklab, var(--accent-ink) 50%, transparent);
+  background: color-mix(in oklab, var(--text) 5%, transparent);
 }
 .wiki-search::placeholder {
-  color: #c0c8e0;
+  color: var(--text-muted);
 }
+
+/* Curation-gap banner — warn ink, hairline, no glow, no pictograph. */
+.wiki-curation-banner {
+  border: 1px solid color-mix(in oklab, var(--warn-ink) 40%, transparent);
+  background: color-mix(in oklab, var(--warn-ink) 8%, transparent);
+  padding: 14px 18px;
+  border-radius: 6px;
+  margin: 14px 0 18px;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.wiki-curation-summary {
+  margin-bottom: 8px;
+  color: var(--warn-ink);
+  font-weight: 600;
+}
+.wiki-curation-intro { color: var(--text-secondary); margin-bottom: 6px; }
+.wiki-curation-list { margin: 0; padding-left: 22px; }
 
 /* Tree */
 .wiki-tree {
@@ -570,7 +694,7 @@
 }
 .wiki-tree::-webkit-scrollbar { width: 3px; }
 .wiki-tree::-webkit-scrollbar-track { background: transparent; }
-.wiki-tree::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); }
+.wiki-tree::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--text) 8%, transparent); }
 
 .wiki-tree-section {
   margin-bottom: 2px;
@@ -586,12 +710,12 @@
   user-select: none;
 }
 .wiki-tree-kind:hover {
-  background: rgba(255,255,255,0.03);
+  background: color-mix(in oklab, var(--text) 3%, transparent);
 }
 
 .wiki-tree-arrow {
-  font-size: 8px;
-  color: #c0c8e0;
+  font-size: 9px;
+  color: var(--text-muted);
   transition: transform 0.2s;
   display: inline-block;
   width: 10px;
@@ -601,7 +725,7 @@
   transform: rotate(90deg);
 }
 .wiki-tree-arrow-sm {
-  font-size: 7px;
+  font-size: 9px;
 }
 
 .wiki-tree-kind-icon {
@@ -610,22 +734,25 @@
   display: none;
 }
 
+/* Domain header — bold mono, count right-aligned by the flex row
+   (arrow / label flex:1 / count). source: user mockup 2026-07-05
+   (DD-06 rail: "agentic-ai … 43"). */
 .wiki-tree-kind-label {
-  font-family: 'EB Garamond', Georgia, serif;
-  font-size: 13px;
-  font-weight: 500;
-  color: #c8c6d0;
-  letter-spacing: 0.2px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
   flex: 1;
 }
 
 .wiki-tree-count {
-  font-family: 'EB Garamond', Georgia, serif;
-  font-size: 12px;
-  color: #c8c8d8;
-  background: rgba(255,255,255,0.03);
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  background: color-mix(in oklab, var(--text) 3%, transparent);
   padding: 1px 7px;
-  border-radius: 0;
+  border-radius: var(--r-sm);
   flex-shrink: 0;
 }
 
@@ -647,15 +774,17 @@
   user-select: none;
 }
 .wiki-tree-domain:hover {
-  background: rgba(255,255,255,0.02);
+  background: color-mix(in oklab, var(--text) 2%, transparent);
 }
+/* Kind/section header — mono micro-cap, count right-aligned by the row.
+   source: user mockup 2026-07-05 (DD-06 rail: "Architecture Decisions"). */
 .wiki-tree-domain-label {
-  font-family: 'EB Garamond', Georgia, serif;
-  font-size: 12px;
-  font-weight: 500;
-  color: #c8c8d8;
-  letter-spacing: 0.3px;
-  font-variant: small-caps;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   flex: 1;
 }
 
@@ -673,150 +802,178 @@
   position: relative;
 }
 .wiki-tree-item:hover {
-  background: rgba(255,255,255,0.03);
-  color: #f0eff4;
+  background: color-mix(in oklab, var(--text) 3%, transparent);
+  color: var(--text);
 }
 .wiki-tree-item.active {
-  background: rgba(255,255,255,0.04);
-  border-left-color: #90b8e0;
+  background: color-mix(in oklab, var(--text) 4%, transparent);
+  border-left-color: var(--accent-ink);
 }
+/* Active row: accent label behind the accent tick, no leading dash —
+   the tick IS the marker. source: user mockup 2026-07-05 (tree rail:
+   "active = accent tick", the active row reads "| security" in accent). */
 .wiki-tree-item.active .wiki-tree-item-label {
-  color: #f0eff4;
+  color: var(--accent-ink);
   font-weight: 500;
 }
+.wiki-tree-item.active .wiki-tree-item-label::before { content: none; }
 
 .wiki-tree-item-label {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 14px;
-  color: #c8c8d8;
+  color: var(--text-muted);
   line-height: 1.4;
   word-break: break-word;
 }
+/* Leading em-dash on page rows ("— security") per the DD-06 rail mockup. */
+.wiki-tree-item-label::before {
+  content: '\2014\00a0';
+  color: var(--text-faint);
+}
 .wiki-tree-item:hover .wiki-tree-item-label {
-  color: #c8c4be;
+  color: var(--text-secondary);
+}
+/* Active row keeps the accent on hover — three-class selector outranks
+   the two-class hover rule above regardless of source order.
+   source: user mockup 2026-07-05 (tree rail: "active = accent tick"
+   must not be overridden by hover). */
+.wiki-tree-item.active:hover .wiki-tree-item-label {
+  color: var(--accent-ink);
 }
 
 .wiki-tree-dup-badge {
   display: inline-block;
   margin-left: 8px;
   padding: 1px 7px;
-  font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  font-family: var(--mono);
   font-size: 9px;
   letter-spacing: 0.5px;
-  color: #909098;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.1);
+  color: var(--text-faint);
+  background: color-mix(in oklab, var(--text) 4%, transparent);
+  border: 1px solid color-mix(in oklab, var(--text) 10%, transparent);
   border-radius: 0;
   vertical-align: middle;
   flex-shrink: 0;
 }
 .wiki-tree-item:hover .wiki-tree-dup-badge {
-  color: #c8c4be;
-  border-color: rgba(144,208,255,0.25);
+  color: var(--text-secondary);
+  border-color: color-mix(in oklab, var(--accent-ink) 25%, transparent);
 }
 
 .wiki-sibling-picker {
   position: fixed;
   z-index: 500;
-  background: #0e0e16;
-  border: 1px solid rgba(255,255,255,0.1);
+  background: var(--surface-card);
+  border: 1px solid color-mix(in oklab, var(--text) 10%, transparent);
   padding: 4px 0;
   max-width: 520px;
   max-height: 60vh;
   overflow-y: auto;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  box-shadow: var(--shadow-md); /* source: DS tokens/elevation.css */
 }
 .wiki-sibling-row {
   padding: 6px 14px;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--mono);
   font-size: 11px;
-  color: #c0c0d0;
+  color: var(--text-muted);
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .wiki-sibling-row:hover {
-  background: rgba(144,208,255,0.08);
-  color: #90d0ff;
+  background: color-mix(in oklab, var(--accent-ink) 8%, transparent);
+  color: var(--accent-ink);
 }
 
 .wiki-tree-empty {
   padding: 24px 16px;
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 14px;
-  color: #c8c8d8;
+  color: var(--text-muted);
   text-align: center;
 }
 
 /* ── Main Content ── */
+/* DD-06: the record is its own bordered paper card, distinct from the
+   rail. source: user mockup 2026-07-05 (Wiki page reader — anatomy). */
 .wiki-main {
   overflow-y: auto;
+  overflow-x: hidden;
   min-height: 0;
   padding: 0;
-  background: #111118;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
 }
 .wiki-main::-webkit-scrollbar { width: 4px; }
 .wiki-main::-webkit-scrollbar-track { background: transparent; }
-.wiki-main::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); }
+.wiki-main::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--text) 6%, transparent); }
 
 .wiki-article {
   padding: 3% 5% 5%;
 }
 
-/* Page Header — academic paper style */
+/* Page Header — DD-06 record anatomy: a LEFT-aligned block (breadcrumb /
+   title+badges / provenance / export strip), closed by a hairline rule,
+   never the centered academic-paper layout. source: user mockup
+   2026-07-05 (Wiki page reader — anatomy; 2nd rejection). */
 .wiki-page-header {
-  margin-bottom: 36px;
-  text-align: center;
+  margin-bottom: 32px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--divider);
+  text-align: left;
 }
 
 .wiki-breadcrumb {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 0;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 .wiki-breadcrumb span {
-  font-family: 'EB Garamond', Georgia, serif;
-  font-size: 13px;
-  color: #c0c0d0;
-  letter-spacing: 0.3px;
-  font-variant: small-caps;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 .wiki-breadcrumb-sep {
   margin: 0 8px;
-  color: #b0b0c8 !important;
+  color: var(--text-faint) !important;
 }
 
 .wiki-title-row {
   display: flex;
   align-items: baseline;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 14px;
   flex-wrap: wrap;
   margin-bottom: 14px;
 }
 
 .wiki-page-title {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 32px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--text);
   line-height: 1.25;
   letter-spacing: 0;
-  margin: 0;
+  margin: 0 auto 0 0; /* pushes the badge group to the right of the row */
 }
 
-/* Maturity labels — academic, not pills */
+/* Maturity + kind badges — boxed micro-caps, both rendered as boxes.
+   source: user mockup 2026-07-05 ("DRAFT boxed micro-cap + kind boxed
+   micro-cap — les DEUX en boîtes bordées"). */
 .wiki-mat-pill {
-  font-family: 'EB Garamond', Georgia, serif;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.3px;
-  font-variant: small-caps;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   padding: 2px 8px;
-  border-radius: 0;
+  border-radius: var(--radius-xs);
   border: 1px solid;
   display: inline-block;
   white-space: nowrap;
@@ -824,37 +981,44 @@
 }
 .wiki-mat-stub {
   background: none;
-  color: #F0A090;
-  border-color: rgba(160,96,80,0.3);
+  color: var(--danger-ink);
+  border-color: color-mix(in oklab, var(--danger-ink) 30%, transparent);
 }
 .wiki-mat-draft {
   background: none;
-  color: #F0D880;
-  border-color: rgba(160,144,80,0.3);
+  color: var(--warn-ink);
+  border-color: color-mix(in oklab, var(--warn-ink) 30%, transparent);
 }
 .wiki-mat-reviewed {
   background: none;
-  color: #A0E0F0;
-  border-color: rgba(96,144,160,0.3);
+  color: var(--info-ink);
+  border-color: color-mix(in oklab, var(--info-ink) 30%, transparent);
 }
 .wiki-mat-stable {
   background: none;
-  color: #A0F0B0;
-  border-color: rgba(96,144,112,0.3);
+  color: var(--ok-ink);
+  border-color: color-mix(in oklab, var(--ok-ink) 30%, transparent);
 }
 
 .wiki-kind-pill {
-  font-family: 'EB Garamond', Georgia, serif;
-  font-size: 13px;
-  color: #c0c0d0;
-  font-variant: small-caps;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border-strong);
+  color: var(--text-secondary);
+  display: inline-block;
+  white-space: nowrap;
   flex-shrink: 0;
 }
 
 /* ─── Phase 6 — Thermodynamic state pills + heat bar ─── */
 
 .wiki-lc-pill {
-  font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 1px;
   padding: 3px 10px;
@@ -863,42 +1027,43 @@
   flex-shrink: 0;
 }
 .wiki-lc-active {
-  color: #90d0ff;
-  border-color: rgba(144,208,255,0.35);
-  background: rgba(144,208,255,0.06);
+  /* lifecycle state is DATA — info ink, not the chrome accent */
+  color: var(--info-ink);
+  border-color: color-mix(in oklab, var(--info-ink) 35%, transparent);
+  background: color-mix(in oklab, var(--info-ink) 6%, transparent);
 }
 .wiki-lc-area {
-  color: #e8c470;
-  border-color: rgba(232,196,112,0.35);
-  background: rgba(232,196,112,0.06);
+  color: var(--warn-ink);
+  border-color: color-mix(in oklab, var(--warn-ink) 35%, transparent);
+  background: color-mix(in oklab, var(--warn-ink) 6%, transparent);
 }
 .wiki-lc-archived {
-  color: #a0a0b0;
-  border-color: rgba(160,160,176,0.28);
-  background: rgba(160,160,176,0.04);
+  color: var(--text-faint);
+  border-color: color-mix(in oklab, var(--text-faint) 28%, transparent);
+  background: color-mix(in oklab, var(--text-faint) 4%, transparent);
 }
 .wiki-lc-evergreen {
-  color: #a8e0b0;
-  border-color: rgba(168,224,176,0.35);
-  background: rgba(168,224,176,0.06);
+  color: var(--ok-ink);
+  border-color: color-mix(in oklab, var(--ok-ink) 35%, transparent);
+  background: color-mix(in oklab, var(--ok-ink) 6%, transparent);
 }
 
 .wiki-stale-pill {
-  font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 1px;
   padding: 3px 10px;
   text-transform: uppercase;
-  color: #ff9494;
-  border: 1px solid rgba(255,148,148,0.35);
-  background: rgba(255,148,148,0.05);
+  color: var(--danger-ink);
+  border: 1px solid color-mix(in oklab, var(--danger-ink) 35%, transparent);
+  background: color-mix(in oklab, var(--danger-ink) 5%, transparent);
   flex-shrink: 0;
 }
 
 .wiki-heat-bar {
   position: relative;
   height: 4px;
-  background: rgba(255,255,255,0.05);
+  background: color-mix(in oklab, var(--text) 5%, transparent);
   margin: 16px 0 8px;
   border-radius: 0;
   overflow: hidden;
@@ -906,14 +1071,14 @@
 .wiki-heat-fill {
   position: absolute;
   top: 0; left: 0; bottom: 0;
-  background: linear-gradient(90deg, #205868 0%, #50D0E8 60%, #e07070 100%);
+  background: var(--heat-warm); /* source: DS tokens/colors.css --heat-warm — flat fill; gradients forbidden by DS */
   transition: width 0.4s ease-out;
 }
 .wiki-heat-label {
   display: block;
-  font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  font-family: var(--mono);
   font-size: 11px;
-  color: #c0c8d8;
+  color: var(--text-muted);
   letter-spacing: 0.3px;
   margin-top: 4px;
 }
@@ -923,13 +1088,13 @@
 .wiki-backlinks {
   margin-top: 48px;
   padding-top: 20px;
-  border-top: 1px solid rgba(255,255,255,0.1);
+  border-top: 1px solid color-mix(in oklab, var(--text) 10%, transparent);
 }
 .wiki-backlinks-title {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 18px;
   font-weight: 600;
-  color: #e0ddd8;
+  color: var(--text);
   margin: 0 0 12px;
   text-align: left;
 }
@@ -943,12 +1108,12 @@
   align-items: baseline;
   justify-content: space-between;
   padding: 6px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
+  border-bottom: 1px solid color-mix(in oklab, var(--text) 4%, transparent);
 }
 .wiki-link-kind {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--mono);
   font-size: 10px;
-  color: #909098;
+  color: var(--text-faint);
   text-transform: uppercase;
   letter-spacing: 1px;
 }
@@ -963,26 +1128,26 @@
 }
 .wiki-edit-btn, .wiki-export-btn {
   padding: 4px 14px;
-  font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  font-family: var(--mono);
   font-size: 11px;
   letter-spacing: 1px;
   text-transform: uppercase;
-  color: #d0d8e8;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.14);
+  color: var(--text-secondary);
+  background: color-mix(in oklab, var(--text) 4%, transparent);
+  border: 1px solid color-mix(in oklab, var(--text) 14%, transparent);
   cursor: pointer;
   text-decoration: none;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 .wiki-edit-btn:hover, .wiki-export-btn:hover {
-  background: rgba(144,208,255,0.08);
-  border-color: rgba(144,208,255,0.45);
-  color: #90d0ff;
+  background: color-mix(in oklab, var(--accent-ink) 8%, transparent);
+  border-color: color-mix(in oklab, var(--accent-ink) 45%, transparent);
+  color: var(--accent-ink);
 }
 .wiki-export-btn {
   font-size: 10px;
   padding: 4px 10px;
-  color: #b0b8c8;
+  color: var(--text-muted);
 }
 
 .wiki-editor-wrap {
@@ -996,14 +1161,14 @@
   align-items: center;
   gap: 12px;
   padding: 16px 24px;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
-  background: rgba(255,255,255,0.02);
+  border-bottom: 1px solid color-mix(in oklab, var(--text) 8%, transparent);
+  background: color-mix(in oklab, var(--text) 2%, transparent);
 }
 .wiki-editor-title {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 18px;
   font-weight: 600;
-  color: #e0ddd8;
+  color: var(--text);
   margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1013,24 +1178,24 @@
 .wiki-editor-spacer { flex: 1; }
 .wiki-editor-btn {
   padding: 6px 18px;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--mono);
   font-size: 11px;
   letter-spacing: 1px;
   text-transform: uppercase;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.14);
-  color: #d0d8e8;
+  background: color-mix(in oklab, var(--text) 4%, transparent);
+  border: 1px solid color-mix(in oklab, var(--text) 14%, transparent);
+  color: var(--text-secondary);
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
 .wiki-editor-save {
-  background: rgba(144,208,255,0.14);
-  border-color: rgba(144,208,255,0.5);
-  color: #90d0ff;
+  background: color-mix(in oklab, var(--accent-ink) 14%, transparent);
+  border-color: color-mix(in oklab, var(--accent-ink) 50%, transparent);
+  color: var(--accent-ink);
 }
-.wiki-editor-save:hover { background: rgba(144,208,255,0.22); }
+.wiki-editor-save:hover { background: color-mix(in oklab, var(--accent-ink) 22%, transparent); }
 .wiki-editor-save:disabled { opacity: 0.6; cursor: progress; }
-.wiki-editor-cancel:hover { background: rgba(255,148,148,0.12); color: #ff9494; }
+.wiki-editor-cancel:hover { background: color-mix(in oklab, var(--danger-ink) 12%, transparent); color: var(--danger-ink); }
 
 .wiki-editor-split {
   display: grid;
@@ -1044,19 +1209,19 @@
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
-  border-left: 1px solid rgba(255,255,255,0.06);
+  border-left: 1px solid color-mix(in oklab, var(--text) 6%, transparent);
 }
 .wiki-editor-pane:first-child {
   border-left: none;
-  border-right: 1px solid rgba(255,255,255,0.08);
+  border-right: 1px solid color-mix(in oklab, var(--text) 8%, transparent);
 }
 .wiki-editor-source {
-  background: #0d0d18;
-  font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  background: var(--surface-card);
+  font-family: var(--mono);
 }
 .wiki-editor-source .cm-editor {
   height: 100%;
-  font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace !important;
+  font-family: var(--mono) !important;
   font-size: 14px;
 }
 .wiki-editor-source .cm-content {
@@ -1064,7 +1229,7 @@
   padding: 16px 24px;
 }
 .wiki-editor-preview {
-  background: #111118;
+  background: var(--surface-card);
   padding: 24px 32px;
 }
 .wiki-preview-body {
@@ -1073,7 +1238,7 @@
 
 /* KaTeX tweaks — inherit our dark palette */
 .katex {
-  color: #e2ddd6;
+  color: var(--text);
   font-size: 1.05em;
 }
 .katex-display {
@@ -1084,63 +1249,63 @@
 /* ─── Phase 9 — academic layer ─── */
 
 .wiki-section-num {
-  font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  font-family: var(--mono);
   font-weight: 400;
   font-size: 0.85em;
-  color: #909098;
+  color: var(--text-faint);
   margin-right: 8px;
   letter-spacing: 0.4px;
 }
 
 .wiki-caption-prefix {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-weight: 600;
-  color: #d0ccc6;
+  color: var(--text-secondary);
   margin-right: 4px;
 }
 figure figcaption, .wiki-caption {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 0.9em;
-  color: #b0b0c0;
+  color: var(--text-muted);
   text-align: center;
   font-style: italic;
   margin-top: 6px;
 }
 
 .wiki-xref {
-  color: #90d0ff;
+  color: var(--accent-ink);
   text-decoration: none;
-  border-bottom: 1px dotted rgba(144, 208, 255, 0.4);
+  border-bottom: 1px dotted color-mix(in oklab, var(--accent-ink) 40%, transparent);
   font-weight: 500;
 }
 .wiki-xref:hover {
-  color: #c0e0ff;
+  color: var(--accent-ink);
   border-bottom-style: solid;
 }
 
 .wiki-cite {
-  color: #c8c4be;
+  color: var(--text-secondary);
   text-decoration: none;
   font-style: italic;
   font-size: 0.9em;
   padding: 0 1px;
 }
 .wiki-cite:hover {
-  color: #e2ddd6;
-  background: rgba(144, 208, 255, 0.08);
+  color: var(--text);
+  background: color-mix(in oklab, var(--accent-ink) 8%, transparent);
 }
 
 .wiki-bibliography {
   margin-top: 48px;
   padding-top: 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  font-family: 'EB Garamond', Georgia, serif;
+  border-top: 1px solid color-mix(in oklab, var(--text) 10%, transparent);
+  font-family: var(--serif);
 }
 .wiki-bibliography h2 {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 22px;
   font-weight: 700;
-  color: #e0ddd8;
+  color: var(--text);
   margin: 0 0 14px;
   text-align: left;
 }
@@ -1148,7 +1313,7 @@ figure figcaption, .wiki-caption {
   margin: 0 0 10px;
   padding-left: 1.6em;
   text-indent: -1.6em;
-  color: #d0ccc6;
+  color: var(--text-secondary);
   font-size: 14px;
   line-height: 1.5;
 }
@@ -1158,37 +1323,37 @@ figure figcaption, .wiki-caption {
 .wiki-inspector {
   margin-top: 40px;
   padding: 20px;
-  border: 1px solid rgba(255,255,255,0.08);
-  background: rgba(255,255,255,0.02);
+  border: 1px solid color-mix(in oklab, var(--text) 8%, transparent);
+  background: color-mix(in oklab, var(--text) 2%, transparent);
 }
 .wiki-inspector-summary {
   cursor: pointer;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--mono);
   font-size: 12px;
   letter-spacing: 1px;
   text-transform: uppercase;
-  color: #a0a8c0;
+  color: var(--text-muted);
   user-select: none;
   outline: none;
 }
 .wiki-inspector-summary:hover {
-  color: #d0d8e8;
+  color: var(--text-secondary);
 }
 .wiki-inspector-grid {
   display: grid;
   grid-template-columns: 1fr 2fr;
   gap: 28px;
   margin-top: 20px;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--mono);
   font-size: 12px;
 }
 .wiki-inspector-col {
   min-width: 0;
 }
 .wiki-inspector-heading {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 15px;
-  color: #e0ddd8;
+  color: var(--text);
   margin: 0 0 10px;
   font-weight: 600;
 }
@@ -1196,80 +1361,90 @@ figure figcaption, .wiki-caption {
   display: flex;
   justify-content: space-between;
   padding: 3px 0;
-  border-bottom: 1px dashed rgba(255,255,255,0.04);
+  border-bottom: 1px dashed color-mix(in oklab, var(--text) 4%, transparent);
 }
 .wiki-inspect-label {
-  color: #909098;
+  color: var(--text-faint);
   text-transform: uppercase;
   font-size: 10px;
   letter-spacing: 1px;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--mono);
 }
 .wiki-inspect-val {
-  color: #d0d8e8;
-  font-family: 'IBM Plex Mono', monospace;
+  color: var(--text-secondary);
+  font-family: var(--mono);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 60%;
 }
 .wiki-inspector-memos {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 13px;
-  color: #d0ccc6;
+  color: var(--text-secondary);
   max-height: 400px;
   overflow-y: auto;
 }
 .wiki-memo-entry {
   padding: 10px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
+  border-bottom: 1px solid color-mix(in oklab, var(--text) 4%, transparent);
 }
 .wiki-memo-entry:last-child { border-bottom: none; }
 .wiki-memo-decision {
-  color: #90d0ff;
-  font-family: 'IBM Plex Mono', monospace;
+  color: var(--accent-ink);
+  font-family: var(--mono);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 1px;
 }
 .wiki-memo-rationale {
   margin-top: 4px;
-  color: #c8c4be;
+  color: var(--text-secondary);
 }
 .wiki-memo-author {
   margin-top: 4px;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--mono);
   font-size: 10px;
-  color: #808090;
+  color: var(--text-faint);
   letter-spacing: 0.5px;
 }
 
-/* Metadata bar — author/date line */
+/* Metadata bar — provenance line, mono micro-caps ("CREATED … · UPDATED
+   …"), left-aligned under the title/badge row. The header's own bottom
+   rule (.wiki-page-header) closes the block — no second rule needed
+   here. source: user mockup 2026-07-05 (DD-06 record anatomy). */
 .wiki-meta-bar {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 20px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  justify-content: flex-start;
+  gap: 16px;
   flex-wrap: wrap;
 }
 
 .wiki-meta-item {
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: 4px;
+}
+/* "Created · Updated" — the middle dot is part of the provenance line's
+   anatomy. source: user mockup 2026-07-05 (DD-06). */
+.wiki-meta-item + .wiki-meta-item::before {
+  content: '\00b7';
+  color: var(--text-faint);
+  margin-right: 4px;
 }
 .wiki-meta-label {
-  font-family: 'EB Garamond', Georgia, serif;
-  font-size: 13px;
-  color: #c0c0d0;
-  font-variant: small-caps;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 .wiki-meta-value {
-  font-family: 'EB Garamond', Georgia, serif;
-  font-size: 14px;
-  color: #d0ccc8;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
 }
 
 .wiki-tag-wrap {
@@ -1279,22 +1454,22 @@ figure figcaption, .wiki-caption {
   margin-left: auto;
 }
 .wiki-tag {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 12px;
   font-weight: 500;
-  color: #90b8e0;
+  color: var(--accent-ink);
   background: none;
   padding: 1px 8px;
-  border: 1px solid rgba(122,158,194,0.2);
+  border: 1px solid color-mix(in oklab, var(--accent-ink) 20%, transparent);
   border-radius: 0;
   white-space: nowrap;
 }
 
 /* ── Markdown Body — LaTeX Typography ── */
 .wiki-body {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 18px;
-  color: #f0eff4;
+  color: var(--text);
   line-height: 1.7;
   padding-top: 28px;
   text-align: justify;
@@ -1303,43 +1478,43 @@ figure figcaption, .wiki-caption {
 }
 
 .wiki-body h1 {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 28px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--text);
   margin: 44px 0 14px;
   padding-bottom: 6px;
-  border-bottom: 1px solid rgba(255,255,255,0.12);
+  border-bottom: 1px solid color-mix(in oklab, var(--text) 12%, transparent);
   line-height: 1.3;
   letter-spacing: 0;
   text-align: left;
 }
 .wiki-body h2 {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 23px;
   font-weight: 700;
-  color: #e2ddd6;
+  color: var(--text);
   margin: 36px 0 10px;
   padding-bottom: 4px;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid color-mix(in oklab, var(--text) 6%, transparent);
   line-height: 1.3;
   text-align: left;
 }
 .wiki-body h3 {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 20px;
   font-weight: 700;
   font-style: italic;
-  color: #d0ccc6;
+  color: var(--text-secondary);
   margin: 30px 0 8px;
   line-height: 1.4;
   text-align: left;
 }
 .wiki-body h4 {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 18px;
   font-weight: 700;
-  color: #d0d0dc;
+  color: var(--text-secondary);
   margin: 24px 0 6px;
   line-height: 1.4;
   font-variant: small-caps;
@@ -1365,41 +1540,41 @@ figure figcaption, .wiki-caption {
 }
 
 .wiki-body strong {
-  color: #ffffff;
+  color: var(--text);
   font-weight: 700;
 }
 
 .wiki-body em {
-  color: #c8c4be;
+  color: var(--text-secondary);
   font-style: italic;
 }
 
 .wiki-body code {
-  font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  font-family: var(--mono);
   font-size: 0.85em;
-  background: #151520;
+  background: var(--surface-chip);
   border: none;
   padding: 2px 5px;
   border-radius: 0;
-  color: #c8c6d0;
+  color: var(--text-secondary);
 }
 
 .wiki-code-block {
   margin: 20px 0;
   border-radius: 0;
   overflow: hidden;
-  background: #151520;
-  border-top: 1px solid rgba(255,255,255,0.08);
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  background: var(--surface-chip);
+  border-top: 1px solid color-mix(in oklab, var(--text) 8%, transparent);
+  border-bottom: 1px solid color-mix(in oklab, var(--text) 8%, transparent);
 }
 .wiki-code-block pre {
   margin: 0;
   padding: 16px 20px;
   overflow-x: auto;
-  font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  font-family: var(--mono);
   font-size: 13px;
   line-height: 1.6;
-  color: #d8d4d0;
+  color: var(--text-secondary);
   background: none;
   border: none;
 }
@@ -1422,14 +1597,14 @@ figure figcaption, .wiki-caption {
   text-indent: 0;
 }
 .wiki-body li::marker {
-  color: #c0c0d0;
+  color: var(--text-muted);
 }
 
 .wiki-body blockquote {
-  border-left: 2px solid #c0c0d0;
+  border-left: 2px solid var(--text-muted);
   padding: 8px 20px;
   margin: 20px 0;
-  color: #c8c6d0;
+  color: var(--text-secondary);
   background: none;
   border-radius: 0;
   font-style: italic;
@@ -1438,7 +1613,7 @@ figure figcaption, .wiki-caption {
 .wiki-body hr {
   border: none;
   height: 1px;
-  background: rgba(255,255,255,0.1);
+  background: color-mix(in oklab, var(--text) 10%, transparent);
   margin: 32px 0;
 }
 
@@ -1447,43 +1622,53 @@ figure figcaption, .wiki-caption {
   width: 100%;
   border-collapse: collapse;
   margin: 20px 0;
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 15px;
-  border-top: 2px solid rgba(255,255,255,0.2);
-  border-bottom: 2px solid rgba(255,255,255,0.2);
+  border-top: 2px solid color-mix(in oklab, var(--text) 20%, transparent);
+  border-bottom: 2px solid color-mix(in oklab, var(--text) 20%, transparent);
 }
 .wiki-body table th {
   text-align: left;
   padding: 8px 14px;
   background: none;
-  color: #f0eff4;
+  color: var(--text);
+  /* "tables sans heads / mono values": headers break from the serif prose
+     in sans, values keep serif + mono chips for identifiers.
+     source: user mockup 2026-07-05 (DD-06 body anatomy). */
+  font-family: var(--sans);
   font-weight: 600;
-  border-bottom: 1px solid rgba(255,255,255,0.15);
-  font-size: 14px;
+  border-bottom: 1px solid color-mix(in oklab, var(--text) 15%, transparent);
+  font-size: 13px;
   letter-spacing: 0;
   text-transform: none;
 }
 .wiki-body table td {
   padding: 7px 14px;
-  color: #c8c6d0;
+  color: var(--text-secondary);
   border-bottom: none;
+  /* Values are mono, not serif prose — DD-06 body anatomy: headers sans,
+     values mono (identifiers already rendered in backtick <code> inherit
+     this, they don't need a separate rule).
+     source: user mockup 2026-07-05 (DD-06 body anatomy). */
+  font-family: var(--mono);
+  font-size: 13px;
 }
 .wiki-body table tr:nth-child(even) td {
   background: none;
 }
 .wiki-body table tr:hover td {
-  background: rgba(255,255,255,0.02);
+  background: color-mix(in oklab, var(--text) 2%, transparent);
 }
 
 /* Links — hyperref style (dark blue, no underline) */
 .wiki-body a, .wiki-body .wiki-link {
-  color: #90b8e0;
+  color: var(--accent-ink);
   text-decoration: none;
   transition: color 0.15s;
   cursor: pointer;
 }
 .wiki-body a:hover, .wiki-body .wiki-link:hover {
-  color: #9ab8d6;
+  color: var(--accent-ink);
   text-decoration: none;
 }
 
@@ -1495,15 +1680,15 @@ figure figcaption, .wiki-caption {
   justify-content: center;
   gap: 16px;
   padding: 80px 20px;
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 15px;
-  color: #c0c0d0;
+  color: var(--text-muted);
 }
 .wiki-loading-spinner {
   width: 20px;
   height: 20px;
-  border: 1.5px solid rgba(255,255,255,0.06);
-  border-top-color: #90b8e0;
+  border: 1.5px solid color-mix(in oklab, var(--text) 6%, transparent);
+  border-top-color: var(--accent-ink);
   border-radius: 50%;
   animation: wiki-spin 0.8s linear infinite;
 }
@@ -1517,7 +1702,7 @@ figure figcaption, .wiki-caption {
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: #c8c8d8;
+  color: var(--text-muted);
   text-align: center;
   padding: 40px;
 }
@@ -1526,16 +1711,16 @@ figure figcaption, .wiki-caption {
   opacity: 0.25;
 }
 .wiki-error-title {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 20px;
   font-weight: 600;
-  color: #d0ccc8;
+  color: var(--text-secondary);
   margin-bottom: 8px;
 }
 .wiki-error-sub {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 15px;
-  color: #c0c0d0;
+  color: var(--text-muted);
 }
 
 /* ── Welcome Panel — Academic Index ── */
@@ -1547,20 +1732,20 @@ figure figcaption, .wiki-caption {
   margin-bottom: 40px;
   text-align: center;
   padding-bottom: 20px;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  border-bottom: 1px solid color-mix(in oklab, var(--text) 8%, transparent);
 }
 .wiki-welcome-title {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 32px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--text);
   margin: 0 0 8px;
   letter-spacing: 0;
 }
 .wiki-welcome-subtitle {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 16px;
-  color: #c0c0d0;
+  color: var(--text-muted);
   margin: 0;
   font-style: italic;
 }
@@ -1577,13 +1762,13 @@ figure figcaption, .wiki-caption {
   gap: 12px;
   padding: 12px 16px;
   background: none;
-  border: 1px solid rgba(255,255,255,0.06);
+  border: 1px solid color-mix(in oklab, var(--text) 6%, transparent);
   border-radius: 0;
   transition: background 0.15s, border-color 0.15s;
 }
 .wiki-welcome-kind-card:hover {
-  background: rgba(255,255,255,0.03);
-  border-color: rgba(255,255,255,0.1);
+  background: color-mix(in oklab, var(--text) 3%, transparent);
+  border-color: color-mix(in oklab, var(--text) 10%, transparent);
 }
 .wiki-welcome-kind-icon {
   font-size: 22px;
@@ -1595,16 +1780,16 @@ figure figcaption, .wiki-caption {
   flex-direction: column;
 }
 .wiki-welcome-kind-count {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 22px;
   font-weight: 600;
-  color: #f0eff4;
+  color: var(--text);
   line-height: 1.1;
 }
 .wiki-welcome-kind-label {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 12px;
-  color: #c0c0d0;
+  color: var(--text-muted);
   letter-spacing: 0.2px;
   font-variant: small-caps;
 }
@@ -1613,20 +1798,20 @@ figure figcaption, .wiki-caption {
   margin-bottom: 32px;
 }
 .wiki-welcome-section-title {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 18px;
   font-weight: 700;
-  color: #f0eff4;
+  color: var(--text);
   text-transform: none;
   letter-spacing: 0;
   margin: 0 0 4px;
   padding-bottom: 6px;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  border-bottom: 1px solid color-mix(in oklab, var(--text) 8%, transparent);
 }
 .wiki-welcome-section-sub {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 14px;
-  color: #c0c0d0;
+  color: var(--text-muted);
   font-style: italic;
   margin: 0 0 12px;
 }
@@ -1645,19 +1830,19 @@ figure figcaption, .wiki-caption {
   border-radius: 0;
   cursor: pointer;
   transition: background 0.15s;
-  border-bottom: 1px solid rgba(255,255,255,0.03);
+  border-bottom: 1px solid color-mix(in oklab, var(--text) 3%, transparent);
 }
 .wiki-welcome-list-item:hover {
-  background: rgba(255,255,255,0.03);
+  background: color-mix(in oklab, var(--text) 3%, transparent);
 }
 .wiki-welcome-list-item--stable {
   gap: 10px;
   justify-content: flex-start;
 }
 .wiki-welcome-list-title {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 15px;
-  color: #f0eff4;
+  color: var(--text);
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -1665,12 +1850,12 @@ figure figcaption, .wiki-caption {
   white-space: nowrap;
 }
 .wiki-welcome-list-item:hover .wiki-welcome-list-title {
-  color: #ffffff;
+  color: var(--text);
 }
 .wiki-welcome-list-meta {
-  font-family: 'EB Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 13px;
-  color: #c8c8d8;
+  color: var(--text-muted);
   flex-shrink: 0;
   white-space: nowrap;
   font-style: italic;
@@ -1739,181 +1924,287 @@ figure figcaption, .wiki-caption {
   }
 
   .kv-expanded {
-    top: 1%; left: 1%; right: 1%; bottom: 1%;
-    padding: 3% 3%;
+    width: 100vw; max-width: 100vw;
+    padding: 16px 16px;
   }
   .kv-expanded-title {
-    font-size: 22px;
+    font-size: 20px;
   }
 }
 
 
 /* =======================================================================
-   CORTEX DESIGN RE-SKIN — warm-neutral dark, Inter/Newsreader/JB-Mono.
-   Appended last so the token-driven aesthetic wins over the v2 hex
-   literals used throughout this file and its siblings (timeline.css,
-   sankey.css, panels.css, detail.css). Does NOT alter any id/class name
-   the v2 JS reads — only re-skins their visual treatment.
+   CORTEX DESIGN RE-SKIN — AI Architect paper doctrine.
+   Inter Tight / Newsreader / JetBrains Mono; cream desk, whiter sheets,
+   warm inks, ruled hairlines, quiet shadows; the single terracotta
+   accent; colour only from data (heat, stage, valence) via the deep
+   re-inked paper tokens. Appended last so the token-driven aesthetic
+   wins over the legacy rules above and in the sibling stylesheets
+   (timeline.css, sankey.css, panels.css, detail.css). Does NOT alter
+   any id/class name the v2 JS reads — only re-skins their treatment.
    ======================================================================= */
 
-/* ─── Knowledge view canvas + domain bar ─────────────────────── */
+/* ─── Knowledge view — the record (paper doctrine) ───────────── */
 /* Padding is owned by theme.css so the view clears the fixed filter-bar
-   and info-panel. We only set background + font here. */
+   and info-panel. Chrome is warm-neutral greyscale on the cream desk;
+   colour enters only as DATA (heat, stage, valence) through the deep
+   re-inked tokens the paper surface provides (DS tokens/surfaces.css).
+   Specs: DS README §3 · cards/data-memory-card.html (DD-01) ·
+   components/core/core.css (Chip / Tabs / Input / Button). */
 #knowledge-container {
-  background: var(--ink-0) !important;
+  background: var(--canvas) !important;
   font-family: var(--sans) !important;
 }
+
+/* Domain tabs — DS Chip spec: rest = --surface-chip on a hairline;
+   active = --accent-soft fill + --accent-ink text; counts in mono. */
 .kv-domain-bar {
-  border-bottom: 1px solid var(--hair) !important;
+  border-bottom: 1px solid var(--divider) !important;
   padding-bottom: 12px !important;
   margin-bottom: 14px !important;
   gap: 6px !important;
 }
 .kv-domain-pill {
-  background: transparent !important;
-  border: 1px solid var(--line) !important;
-  color: var(--fg-1) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  background: var(--surface-chip) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-secondary) !important;
   font-family: var(--sans) !important;
   font-size: 11.5px !important;
   font-weight: 500 !important;
   letter-spacing: 0 !important;
   padding: 4px 10px !important;
-  border-radius: 999px !important;
-  transition: background .15s var(--ease), border-color .15s var(--ease), color .15s var(--ease) !important;
+  border-radius: var(--radius-pill) !important;
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease) !important;
 }
 .kv-domain-pill:hover {
-  border-color: var(--line-2) !important;
-  color: var(--fg-0) !important;
+  border-color: var(--border-strong) !important;
+  color: var(--text) !important;
 }
 .kv-domain-pill.active {
-  background: var(--ink-2) !important;
-  border-color: var(--line-2) !important;
-  color: var(--fg-0) !important;
+  background: var(--accent-soft) !important;
+  border-color: var(--border-strong) !important;
+  color: var(--accent-ink) !important;
 }
 .kv-domain-pill.kv-pill-global.active {
   background: var(--amber-soft) !important;
-  border-color: color-mix(in oklab, var(--amber) 30%, transparent) !important;
-  color: var(--amber) !important;
+  border-color: var(--border-strong) !important;
+  color: var(--warn-ink) !important;
 }
+/* Counts inside chips and pills — proof is monospaced. */
+.kv-chip-count {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-faint);
+}
+.kv-domain-pill.active .kv-chip-count,
+.kv-chip.active .kv-chip-count { color: inherit; }
 
-/* Search row */
+/* Search — DS Input spec (components/core/core.css .aia-field). */
 .kv-search-row {
   gap: 10px !important;
   margin-bottom: 12px !important;
 }
 .kv-search {
-  background: var(--ink-2) !important;
-  border: 1px solid var(--line) !important;
-  color: var(--fg-0) !important;
+  background: var(--surface-input) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
   font-family: var(--mono) !important;
   font-size: 11.5px !important;
-  padding: 7px 10px !important;
+  padding: 7px 11px !important;
   border-radius: var(--r-sm) !important;
 }
 .kv-search:focus {
-  border-color: var(--amber) !important;
-  background: var(--ink-1) !important;
-  box-shadow: 0 0 0 2px var(--amber-soft) !important;
+  border-color: var(--accent-ink) !important;
+  background: var(--surface) !important;
+  box-shadow: var(--shadow-focus) !important;
   outline: 0 !important;
 }
-.kv-search::placeholder { color: var(--fg-3) !important; }
+.kv-search::placeholder { color: var(--text-faint) !important; }
 
-/* Sort buttons */
+/* Sort — a chip-group (DS Chip spec); label is a mono micro-cap. */
 .kv-sort-label {
   font-family: var(--mono) !important;
-  font-size: 10.5px !important;
-  color: var(--fg-3) !important;
-  letter-spacing: 0.04em !important;
+  font-size: 9px !important;
+  color: var(--text-faint) !important;
+  letter-spacing: var(--tracking-caps) !important;
+  text-transform: uppercase !important;
 }
 .kv-sort-btn {
-  background: transparent !important;
-  border: 1px solid var(--line) !important;
-  color: var(--fg-2) !important;
+  background: var(--surface-chip) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-secondary) !important;
   font-family: var(--sans) !important;
-  font-size: 11px !important;
+  font-size: 11.5px !important;
+  font-weight: 500 !important;
   padding: 4px 10px !important;
-  border-radius: var(--r-sm) !important;
+  border-radius: var(--radius-pill) !important;
   letter-spacing: 0 !important;
   text-transform: none !important;
-  transition: background .15s var(--ease), border-color .15s var(--ease), color .15s var(--ease) !important;
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease) !important;
 }
-.kv-sort-btn:hover  { border-color: var(--line-2) !important; color: var(--fg-0) !important; }
-.kv-sort-btn.active { background: var(--ink-2) !important; border-color: var(--line-2) !important; color: var(--fg-0) !important; }
+.kv-sort-btn:hover  { border-color: var(--border-strong) !important; color: var(--text) !important; }
+.kv-sort-btn.active {
+  background: var(--accent-soft) !important;
+  border-color: var(--border-strong) !important;
+  color: var(--accent-ink) !important;
+}
 
-/* Stats bar */
+/* Filter chips — DS Chip spec. Data-carrying chips (emotion, heat,
+   protected) declare their ink via --chip-ink, set by knowledge.js to
+   a DS data token; chrome chips fall back to the accent. The 14%
+   active tint mirrors --accent-soft (the accent at 14% alpha —
+   source: DS tokens/colors.css --accent-soft). */
+.kv-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 0 0 10px;
+}
+.kv-filter-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-right: 4px;
+}
+.kv-filter-sep { color: var(--text-faint); margin: 0 6px; }
+.kv-chip {
+  --chip-ink: var(--accent-ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-chip);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-family: var(--sans);
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.kv-chip:hover { border-color: var(--border-strong); color: var(--text); }
+.kv-chip.active {
+  background: color-mix(in oklab, var(--chip-ink) 14%, transparent);
+  border-color: var(--border-strong);
+  color: var(--chip-ink);
+  font-weight: 600;
+}
+.kv-chip-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--chip-ink);
+  flex: none;
+}
+.kv-clear-btn {
+  margin-left: auto;
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 4px 12px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.kv-clear-btn:hover { background: var(--surface-chip); border-color: var(--border-strong); }
+
+/* Stats bar — mono values, micro-cap labels. */
 .kv-stats-bar {
-  border-bottom: 1px solid var(--hair) !important;
+  border-bottom: 1px solid var(--divider) !important;
   padding-bottom: 10px !important;
   margin-bottom: 14px !important;
   gap: 18px !important;
 }
-.kv-stat-val   { font-family: var(--mono) !important; color: var(--fg-0) !important; font-size: 13px !important; font-weight: 600 !important; }
-.kv-stat-label { font-family: var(--sans) !important; color: var(--fg-3) !important; font-size: 10.5px !important; text-transform: none !important; letter-spacing: 0 !important; }
+.kv-stat-val   { font-family: var(--mono) !important; color: var(--text) !important; font-size: 13px !important; font-weight: 600 !important; }
+.kv-stat-label { font-family: var(--mono) !important; color: var(--text-faint) !important; font-size: 9px !important; text-transform: uppercase !important; letter-spacing: var(--tracking-caps) !important; }
 
-/* Global memory banner */
+/* Global memory banner — amber tint fill, warn-ink micro-cap head.
+   Amber marks "applies everywhere" warmth; on paper its text form is
+   the deep --warn-ink (DS tokens/surfaces.css). */
 .kv-global-banner {
   background: var(--amber-soft) !important;
-  border: 1px solid color-mix(in oklab, var(--amber) 25%, transparent) !important;
+  border: 1px solid color-mix(in oklab, var(--warn-ink) 25%, transparent) !important;
   border-radius: var(--r-md) !important;
   padding: 10px 14px !important;
 }
 .kv-global-title {
-  font-family: var(--sans) !important;
-  color: var(--amber) !important;
-  font-size: 12px !important;
+  font-family: var(--mono) !important;
+  color: var(--warn-ink) !important;
+  font-size: 9px !important;
   font-weight: 600 !important;
-  letter-spacing: 0 !important;
-  text-transform: none !important;
+  letter-spacing: var(--tracking-caps) !important;
+  text-transform: uppercase !important;
+  font-variant: normal !important;
+  border-bottom: 0 !important;
+  padding-bottom: 0 !important;
+  margin-bottom: 0 !important;
 }
 
-/* Grid + cards — the design's memcard treatment */
+/* Grid + cards — the DD-01 memory-card treatment */
 .kv-grid {
-  gap: 12px !important;
+  gap: 16px !important;
   padding: 2px 0 60px !important;
 }
+/* Domain section header — a micro-caps ledger rule: name + count in
+   mono over a hairline. */
 .kv-domain-header {
-  font-family: var(--sans) !important;
-  font-size: 11px !important;
+  font-family: var(--mono) !important;
+  font-size: 9px !important;
   font-weight: 600 !important;
-  color: var(--fg-2) !important;
-  letter-spacing: 0.04em !important;
+  color: var(--text-muted) !important;
+  letter-spacing: var(--tracking-caps) !important;
   text-transform: uppercase !important;
-  border-bottom: 1px solid var(--hair) !important;
+  font-variant: normal !important;
+  border-bottom: 1px solid var(--divider) !important;
   padding: 14px 0 6px !important;
   margin-top: 4px !important;
 }
 
+/* Card = sheet + hairline + quiet shadow, radius md (DD-01). No
+   coloured left borders — heat is carried by badges and meters. */
 .kv-card {
   position: relative;
-  background: var(--ink-1) !important;
-  border: 1px solid var(--line) !important;
+  background: var(--surface-card) !important;
+  border: 1px solid var(--border) !important;
   border-radius: var(--r-md) !important;
   padding: 14px 16px !important;
-  transition: border-color .15s var(--ease), background .15s var(--ease) !important;
+  box-shadow: var(--shadow-sm) !important;
+  transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease) !important;
 }
 .kv-card:hover {
-  border-color: var(--line-2) !important;
-  background: var(--ink-2) !important;
-  box-shadow: none !important;
+  border-color: var(--border-strong) !important;
+  background: var(--surface-card) !important;
+  box-shadow: var(--shadow-md) !important;
 }
-.kv-card.kv-card-hot       { border-color: color-mix(in oklab, var(--amber) 25%, var(--line)) !important; }
-.kv-card.kv-card-hot:hover { border-color: color-mix(in oklab, var(--amber) 40%, var(--line-2)) !important; }
+.kv-card.kv-card-hot       { border-color: color-mix(in oklab, var(--warn-ink) 25%, var(--border)) !important; }
+.kv-card.kv-card-hot:hover { border-color: color-mix(in oklab, var(--warn-ink) 40%, var(--border-strong)) !important; }
+.kv-card.kv-card-global       { border-color: color-mix(in oklab, var(--warn-ink) 25%, var(--border)) !important; }
+.kv-card.kv-card-global:hover { border-color: color-mix(in oklab, var(--warn-ink) 40%, var(--border-strong)) !important; }
 .kv-card .kv-card-title,
 .kv-card h3,
 .kv-card .title {
   font-family: var(--serif) !important;
-  font-size: 15.5px !important;
-  line-height: 1.35 !important;
-  color: var(--fg-0) !important;
-  font-weight: 500 !important;
+  font-size: 16px !important;
+  line-height: 1.2 !important;
+  color: var(--text) !important;
+  font-weight: 400 !important;
   letter-spacing: -0.005em !important;
 }
 .kv-card .kv-card-body,
 .kv-card p {
-  font-family: var(--sans) !important;
-  font-size: 12.5px !important;
+  font-family: var(--serif) !important;
+  font-size: 13.5px !important;
   line-height: 1.55 !important;
-  color: var(--fg-1) !important;
+  color: var(--text-secondary) !important;
 }
 .kv-card .kv-meta,
 .kv-card .kv-tag,
@@ -1921,167 +2212,128 @@ figure figcaption, .wiki-caption {
 .kv-card .kv-time {
   font-family: var(--mono) !important;
   font-size: 10.5px !important;
-  color: var(--fg-3) !important;
+  color: var(--text-faint) !important;
 }
 
-/* Expanded modal */
+/* Card badges — DS Badge micro-caps (components/core/core.css
+   .aia-badge); stage colour comes from the data tokens set on
+   .kv-badge-new/-growing/-strong/-stable/-updating above. */
+.kv-badge {
+  font-family: var(--mono) !important;
+  font-size: 9px !important;
+  font-weight: 600 !important;
+  letter-spacing: var(--tracking-caps) !important;
+  text-transform: uppercase !important;
+  padding: 2px 7px !important;
+  border-radius: var(--radius-xs) !important;
+}
+.kv-card-domain,
+.kv-card-store,
+.kv-card-date {
+  font-family: var(--mono) !important;
+  font-size: 9.5px !important;
+  color: var(--text-muted) !important;
+}
+.kv-card-domain {
+  border: 1px solid var(--divider) !important;
+  border-radius: var(--radius-xs) !important;
+  padding: 1px 6px !important;
+}
+.kv-card-heat,
+.kv-card-emotion {
+  font-family: var(--mono) !important;
+  font-size: 9.5px !important;
+  font-weight: 600 !important;
+}
+.kv-card-protected {
+  font-family: var(--mono) !important;
+  font-size: 9.5px !important;
+  color: var(--warn-ink) !important;
+}
+
+/* Capture-tag / provenance footer — DD-01: micro-caps mono over a
+   hairline rule (cards/data-memory-card.html .ftags). */
+.kv-card-tags {
+  margin-top: 8px !important;
+  padding-top: 8px !important;
+  border-top: 1px solid var(--divider) !important;
+  gap: 6px !important;
+}
+.kv-card-tag {
+  font-family: var(--mono) !important;
+  font-size: 9px !important;
+  letter-spacing: 0.08em !important;
+  color: var(--text-faint) !important;
+  border: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+}
+.kv-card-symchip:hover { color: var(--accent-ink) !important; }
+
+/* Load-more strip — mono micro-caps status + a secondary button
+   (DS core.css .aia-btn--secondary). */
+.kv-load-sentinel {
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.kv-load-more {
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  padding: 5px 12px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.kv-load-more:hover { background: var(--surface-chip); border-color: var(--border-strong); }
+
+/* Detail inspector re-skin — right-docked, border-left only (no radius:
+   a dock is a wall of the stage, not a floating card). */
 .kv-expanded,
-.kv-expanded-modal,
 #kv-expanded {
-  background: var(--ink-1) !important;
-  border: 1px solid var(--line-2) !important;
-  border-radius: var(--r-lg) !important;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.5) !important;
+  background: color-mix(in oklab, var(--surface) 97%, transparent) !important;
+  border: none !important;
+  border-left: 1px solid var(--border) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
 }
 .kv-expanded-title {
   font-family: var(--serif) !important;
-  color: var(--fg-0) !important;
-  font-weight: 500 !important;
-  letter-spacing: -0.01em !important;
-}
-#kv-backdrop { background: rgba(0,0,0,0.6) !important;  }
-
-/* ─── Wiki view ───────────────────────────────────────────────── */
-#wiki-container {
-  background: var(--ink-0) !important;
-  color: var(--fg-0) !important;
-  font-family: var(--sans) !important;
-}
-.wiki-layout {
-  height: 100% !important;
-  display: grid !important;
-  grid-template-columns: 240px 1fr 240px !important;
-}
-.wiki-tree,
-#wiki-tree,
-.wiki-sidebar {
-  background: color-mix(in oklab, var(--ink-0) 96%, transparent) !important;
-  border-right: 1px solid var(--line) !important;
-  color: var(--fg-1) !important;
-  font-family: var(--sans) !important;
-  font-size: 13px !important;
-  padding: 16px 10px !important;
-}
-.wiki-tree .tree-item,
-.wiki-nav-item,
-.tree-item {
-  padding: 5px 8px !important;
-  border-radius: var(--r-sm) !important;
-  color: var(--fg-1) !important;
-  font-size: 12.5px !important;
-}
-.wiki-tree .tree-item:hover,
-.tree-item:hover {
-  background: var(--ink-2) !important;
-  color: var(--fg-0) !important;
-}
-.wiki-tree .tree-item.active,
-.tree-item.active {
-  background: var(--ink-2) !important;
-  color: var(--fg-0) !important;
-  position: relative;
-}
-.wiki-tree .tree-item.active::before,
-.tree-item.active::before {
-  content: ""; position: absolute; left: 0; top: 6px; bottom: 6px;
-  width: 2px; background: var(--amber); border-radius: 2px;
-}
-
-.wiki-doc,
-.wiki-main,
-#wiki-main,
-.wiki-content,
-.wiki-article {
-  background: var(--ink-0) !important;
-  color: var(--fg-0) !important;
-  font-family: var(--serif) !important;
-  font-size: 16px !important;
-  line-height: 1.7 !important;
-  padding: 44px 64px 120px !important;
-  overflow-y: auto !important;
-}
-.wiki-doc h1, .wiki-article h1, .wiki-main h1,
-.wiki-doc .doc-title, .wiki-main .doc-title,
-.wiki-title {
-  font-family: var(--serif) !important;
-  font-size: 34px !important;
-  font-weight: 500 !important;
-  letter-spacing: -0.02em !important;
-  line-height: 1.15 !important;
-  color: var(--fg-0) !important;
-  margin-bottom: 14px !important;
-}
-.wiki-doc h2, .wiki-article h2, .wiki-main h2 {
-  font-family: var(--serif) !important;
-  font-size: 22px !important;
+  color: var(--text) !important;
   font-weight: 600 !important;
   letter-spacing: -0.01em !important;
-  color: var(--fg-0) !important;
-  margin: 36px 0 12px !important;
 }
-.wiki-doc h3, .wiki-article h3, .wiki-main h3 {
-  font-family: var(--serif) !important;
-  font-size: 17px !important;
-  font-weight: 600 !important;
-  color: var(--fg-0) !important;
-  margin: 24px 0 8px !important;
-}
-.wiki-doc p, .wiki-article p, .wiki-main p {
-  font-family: var(--serif) !important;
-  font-size: 16px !important;
-  line-height: 1.7 !important;
-  color: var(--fg-1) !important;
-}
-.wiki-doc a, .wiki-article a, .wiki-main a, .wiki-link {
-  color: var(--fg-0) !important;
-  text-decoration: none !important;
-  border-bottom: 1px solid var(--fg-3) !important;
-  transition: border-color .12s var(--ease) !important;
-}
-.wiki-doc a:hover, .wiki-article a:hover, .wiki-main a:hover, .wiki-link:hover {
-  border-bottom-color: var(--amber) !important;
-}
-.wiki-code-block, .wiki-doc pre, .wiki-doc code {
-  font-family: var(--mono) !important;
-  background: var(--ink-2) !important;
-  border: 1px solid var(--hair) !important;
-  border-radius: var(--r-sm) !important;
-  color: var(--fg-1) !important;
-}
-.wiki-doc pre { padding: 12px 14px !important; overflow-x: auto; }
-.wiki-doc code { padding: 1px 5px !important; font-size: 12.5px; }
-.wiki-doc pre code { padding: 0 !important; background: none !important; border: 0 !important; }
 
-/* Wiki right rail */
-.wiki-meta,
-#wiki-meta,
-.wiki-right,
-.wiki-toc {
-  border-left: 1px solid var(--line) !important;
-  background: var(--ink-0) !important;
-  padding: 44px 18px 40px !important;
-  overflow-y: auto !important;
-  font-size: 12px !important;
-  font-family: var(--sans) !important;
-  color: var(--fg-2) !important;
-}
-.toc-item {
-  display: block;
-  padding: 4px 0;
-  color: var(--fg-2);
-  font-size: 12px;
-  border-left: 1px solid var(--line);
-  padding-left: 10px;
-}
-.toc-item:hover { color: var(--fg-0); }
-.toc-item.active { color: var(--fg-0); border-left-color: var(--amber); }
-
-/* Breadcrumbs inside wiki */
-.wiki-breadcrumb-sep { color: var(--fg-3) !important; }
+/* NOTE: a legacy generic "Wiki view" re-skin block previously lived here
+   (#wiki-container / .wiki-layout / .wiki-tree / .wiki-sidebar / .wiki-doc
+   / .wiki-meta / .toc-item, etc., !important). It targeted classes the
+   actual wiki.js DOM never emits (.tree-item, .wiki-doc, .wiki-content,
+   .wiki-meta, .wiki-right, .wiki-toc, .toc-item) and, worse, redeclared
+   #wiki-container/.wiki-layout/.wiki-tree/.wiki-sidebar/.wiki-breadcrumb-sep
+   with conflicting !important values (a phantom 240px 1fr 240px 3-column
+   grid; --canvas instead of --surface backgrounds) that WON the cascade
+   over the correct DD-06 rules earlier in this file, because it was
+   appended later. Root cause of the 2nd DD-06 rejection (2026-07-05):
+   removed rather than patched — the earlier, already-DD-06-annotated
+   rules (search this file for "wiki-layout", "wiki-sidebar", "wiki-main")
+   are the single source of truth for this view now. */
 
 /* ─── Board view (timeline/kanban) ────────────────────────────── */
 #timeline-container {
-  background: var(--ink-0) !important;
+  background: var(--canvas) !important;
   padding: 16px 20px 40px !important;
   font-family: var(--sans) !important;
 }
@@ -2090,14 +2342,14 @@ figure figcaption, .wiki-caption {
   gap: 10px !important;
 }
 .kb-col, .col {
-  background: var(--ink-1) !important;
-  border: 1px solid var(--line) !important;
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
   border-radius: var(--r-md) !important;
   overflow: hidden !important;
 }
 .kb-col-header, .col-head {
   padding: 12px 14px 10px !important;
-  border-bottom: 1px solid var(--line) !important;
+  border-bottom: 1px solid var(--border) !important;
   display: flex; align-items: center; gap: 8px;
   background: transparent !important;
 }
@@ -2105,14 +2357,14 @@ figure figcaption, .wiki-caption {
   font-family: var(--sans) !important;
   font-size: 12.5px !important;
   font-weight: 600 !important;
-  color: var(--fg-0) !important;
+  color: var(--text) !important;
   letter-spacing: -0.005em !important;
   text-transform: none !important;
 }
 .kb-col-count, .col-head .cnt, .col-head .count {
   font-family: var(--mono) !important;
   font-size: 11px !important;
-  color: var(--fg-2) !important;
+  color: var(--text-muted) !important;
   margin-left: auto !important;
 }
 .kb-col-cards, .col-body {
@@ -2121,18 +2373,18 @@ figure figcaption, .wiki-caption {
 }
 
 .kb-card, .bcard {
-  background: var(--ink-0) !important;
-  border: 1px solid var(--line) !important;
+  background: var(--canvas) !important;
+  border: 1px solid var(--border) !important;
   border-radius: var(--r-sm) !important;
   padding: 10px 12px !important;
   transition: border-color .15s var(--ease) !important;
 }
-.kb-card:hover, .bcard:hover { border-color: var(--line-2) !important; }
+.kb-card:hover, .bcard:hover { border-color: var(--border-strong) !important; }
 .kb-card__title, .bcard-title, .kb-card .title {
   font-family: var(--serif) !important;
   font-size: 13.5px !important;
   line-height: 1.35 !important;
-  color: var(--fg-0) !important;
+  color: var(--text) !important;
   font-weight: 500 !important;
   margin-bottom: 4px !important;
 }
@@ -2140,82 +2392,58 @@ figure figcaption, .wiki-caption {
   display: flex; align-items: center; gap: 6px;
   font-family: var(--mono) !important;
   font-size: 10px !important;
-  color: var(--fg-3) !important;
+  color: var(--text-faint) !important;
 }
 .kb-card__meta-badge, .em-tag, .bcard-meta .em-tag {
   padding: 1px 5px !important;
   border-radius: 2px !important;
-  border: 1px solid var(--hair) !important;
-  color: var(--fg-2) !important;
+  border: 1px solid var(--divider) !important;
+  color: var(--text-muted) !important;
   background: transparent !important;
 }
 .kb-card__bar, .kb-card__bar-track {
-  background: var(--ink-2) !important;
+  background: var(--surface-card) !important;
   border-radius: 2px !important;
 }
-.kb-card__bar-fill, .kb-flow-metric-fill, .kb-flow-pct-fill {
-  background: linear-gradient(90deg, var(--heat-f), var(--heat-0)) !important;
+.kb-card__bar-fill {
+  background: var(--heat-warm) !important; /* source: DS tokens/colors.css --heat-warm — flat fill; gradients forbidden; legacy --heat-f/--heat-0 were undefined */
 }
 
-/* Board flow header strip */
-.kb-flow-strip {
-  background: var(--ink-1) !important;
-  border: 1px solid var(--line) !important;
-  border-radius: var(--r-md) !important;
-  padding: 14px 16px !important;
-  margin-bottom: 14px !important;
-  font-family: var(--sans) !important;
-}
-.kb-flow-node {
-  background: var(--ink-0) !important;
-  border: 1px solid var(--line) !important;
-  border-radius: var(--r-sm) !important;
-}
-.kb-flow-label {
-  font-family: var(--sans) !important;
-  font-size: 11px !important;
-  color: var(--fg-2) !important;
-  letter-spacing: 0 !important;
-  text-transform: none !important;
-}
-.kb-flow-count  { font-family: var(--mono) !important; color: var(--fg-0) !important; font-weight: 600 !important; }
-.kb-flow-pct    { font-family: var(--mono) !important; font-size: 10.5px !important; color: var(--fg-3) !important; }
-.kb-flow-arrow-line { background: var(--line-2) !important; }
-.kb-flow-arrow-line::after { border-color: var(--line-2) !important; }
-.kb-flow-bio-row span:first-child { color: var(--fg-2) !important; }
-.kb-flow-bio-row span:last-child  { color: var(--fg-0) !important; font-family: var(--mono) !important; }
+/* Board flow header strip: DD-02 anatomy is owned by timeline.css
+   (source: DS cards/data-board.html) — no re-skin overrides here. */
 
 /* ─── Sankey / Pipeline view ─────────────────────────────────── */
 #sankey-container {
-  background: var(--ink-0) !important;
+  background: var(--canvas) !important;
   font-family: var(--sans) !important;
 }
 .pipe-wrap, .sankey-wrap {
-  background: var(--ink-0) !important;
+  background: var(--canvas) !important;
   padding: 18px 22px !important;
 }
 .pipe-stat, .sankey-stat {
-  background: var(--ink-1) !important;
-  border: 1px solid var(--line) !important;
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
   border-radius: var(--r-md) !important;
 }
-.pipe-stat .v, .sankey-stat .v { font-family: var(--serif) !important; color: var(--fg-0) !important; font-weight: 500 !important; }
-.pipe-stat .k, .sankey-stat .k { font-family: var(--sans) !important; color: var(--fg-3) !important; text-transform: none !important; }
+.pipe-stat .v, .sankey-stat .v { font-family: var(--serif) !important; color: var(--text) !important; font-weight: 500 !important; }
+.pipe-stat .k, .sankey-stat .k { font-family: var(--sans) !important; color: var(--text-faint) !important; text-transform: none !important; }
 .pipe-canvas, .sankey-canvas {
-  background: var(--ink-1) !important;
-  border: 1px solid var(--line) !important;
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
   border-radius: var(--r-md) !important;
 }
 
 /* ─── Detail panel ────────────────────────────────────────────── */
 #detail-panel {
-  background: color-mix(in oklab, var(--ink-1) 96%, transparent) !important;
-  border: 1px solid var(--line) !important;
+  background: color-mix(in oklab, var(--surface) 96%, transparent) !important;
+  border: 1px solid var(--border) !important;
   border-radius: var(--r-lg) var(--r-lg) 0 0 !important;
-  
-  -webkit-
+  /* backdrop-filter removed — forbidden by the DS (paints a GPU-layer
+     rectangle over the graph canvas); the stray `-webkit-` fragment it
+     left behind was swallowing the font-family declaration below. */
   font-family: var(--sans) !important;
-  color: var(--fg-0) !important;
+  color: var(--text) !important;
 }
 #detail-panel h1,
 #detail-panel h2,
@@ -2224,7 +2452,7 @@ figure figcaption, .wiki-caption {
   font-family: var(--serif) !important;
   font-weight: 500 !important;
   letter-spacing: -0.01em !important;
-  color: var(--fg-0) !important;
+  color: var(--text) !important;
   text-transform: none !important;
 }
 #detail-panel h2 { font-size: 22px !important; }
@@ -2233,29 +2461,29 @@ figure figcaption, .wiki-caption {
 #detail-panel .detail-path,
 #detail-panel .detail-tag {
   font-family: var(--mono) !important;
-  color: var(--fg-2) !important;
+  color: var(--text-muted) !important;
 }
 #detail-panel .detail-peek-bar {
   font-family: var(--mono) !important;
-  color: var(--fg-2) !important;
-  border-bottom: 1px solid var(--line) !important;
+  color: var(--text-muted) !important;
+  border-bottom: 1px solid var(--border) !important;
   letter-spacing: 0.04em !important;
 }
 .detail-window-btns button,
 #close-detail,
 #minimize-detail {
   background: transparent !important;
-  border: 1px solid var(--line) !important;
-  color: var(--fg-2) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-muted) !important;
   border-radius: var(--r-sm) !important;
   transition: color .12s, border-color .12s, background .12s !important;
 }
 .detail-window-btns button:hover,
 #close-detail:hover,
 #minimize-detail:hover {
-  color: var(--fg-0) !important;
-  border-color: var(--line-2) !important;
-  background: var(--ink-2) !important;
+  color: var(--text) !important;
+  border-color: var(--border-strong) !important;
+  background: var(--surface-card) !important;
 }
 
 .tool-diff-btn {
@@ -2264,46 +2492,46 @@ figure figcaption, .wiki-caption {
   font-weight: 500 !important;
   letter-spacing: 0 !important;
   text-transform: none !important;
-  color: var(--amber) !important;
+  color: var(--warn-ink) !important;
   background: var(--amber-soft) !important;
-  border: 1px solid color-mix(in oklab, var(--amber) 30%, transparent) !important;
+  border: 1px solid color-mix(in oklab, var(--warn-ink) 30%, transparent) !important;
   padding: 5px 12px !important;
   border-radius: var(--r-sm) !important;
 }
 .tool-diff-btn:hover {
-  background: color-mix(in oklab, var(--amber) 22%, transparent) !important;
-  border-color: var(--amber) !important;
+  background: color-mix(in oklab, var(--warn-ink) 22%, transparent) !important;
+  border-color: var(--warn-ink) !important;
   box-shadow: none !important;
 }
 
 /* ─── Monitor / Glossary panels ──────────────────────────────── */
 #monitor-panel, #glossary-panel {
-  background: color-mix(in oklab, var(--ink-1) 96%, transparent) !important;
-  border: 1px solid var(--line) !important;
+  background: color-mix(in oklab, var(--surface) 96%, transparent) !important;
+  border: 1px solid var(--border) !important;
   border-radius: var(--r-md) !important;
   
   font-family: var(--sans) !important;
-  color: var(--fg-1) !important;
+  color: var(--text-secondary) !important;
 }
 #monitor-panel::after, #glossary-panel::before { display: none !important; }
 
 .mon-header, .glossary-header {
-  border-bottom: 1px solid var(--hair) !important;
+  border-bottom: 1px solid var(--divider) !important;
   padding: 12px 14px !important;
 }
 .mon-title, .glossary-title {
   font-family: var(--sans) !important;
   font-size: 12px !important;
   font-weight: 600 !important;
-  color: var(--fg-0) !important;
+  color: var(--text) !important;
   text-transform: none !important;
   letter-spacing: 0 !important;
 }
-.mon-tabs { border-bottom: 1px solid var(--hair) !important; gap: 4px; padding: 8px 12px !important; }
+.mon-tabs { border-bottom: 1px solid var(--divider) !important; gap: 4px; padding: 8px 12px !important; }
 .mon-tab {
   background: transparent !important;
-  border: 1px solid var(--line) !important;
-  color: var(--fg-2) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-muted) !important;
   font-family: var(--sans) !important;
   font-size: 11px !important;
   padding: 4px 10px !important;
@@ -2311,49 +2539,49 @@ figure figcaption, .wiki-caption {
   text-transform: none !important;
   letter-spacing: 0 !important;
 }
-.mon-tab:hover  { border-color: var(--line-2) !important; color: var(--fg-0) !important; }
-.mon-tab.active { background: var(--ink-2) !important; border-color: var(--line-2) !important; color: var(--fg-0) !important; }
+.mon-tab:hover  { border-color: var(--border-strong) !important; color: var(--text) !important; }
+.mon-tab.active { background: var(--surface-card) !important; border-color: var(--border-strong) !important; color: var(--text) !important; }
 .mon-count {
   font-family: var(--mono) !important;
   font-size: 10px !important;
-  color: var(--fg-3) !important;
+  color: var(--text-faint) !important;
   padding: 1px 5px !important;
   margin-left: 4px !important;
-  background: var(--ink-0) !important;
-  border: 1px solid var(--hair) !important;
+  background: var(--canvas) !important;
+  border: 1px solid var(--divider) !important;
   border-radius: 999px !important;
 }
 
 /* ─── Conversation + discussion modals ───────────────────────── */
 #conversation-modal .conv-modal-panel {
-  background: var(--ink-1) !important;
-  border: 1px solid var(--line) !important;
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
   border-radius: var(--r-lg) !important;
 }
-.conv-modal-header { border-bottom: 1px solid var(--hair) !important; }
+.conv-modal-header { border-bottom: 1px solid var(--divider) !important; }
 .conv-modal-title {
   font-family: var(--sans) !important;
   font-size: 12.5px !important;
   font-weight: 600 !important;
-  color: var(--fg-0) !important;
+  color: var(--text) !important;
   text-transform: none !important;
   letter-spacing: 0 !important;
 }
 .conv-msg       { border-left: 2px solid transparent !important; background: transparent !important; padding: 10px 14px !important; }
 .conv-msg-user      { border-left-color: var(--stage-labile) !important; background: color-mix(in oklab, var(--stage-labile) 6%, transparent) !important; }
 .conv-msg-assistant { border-left-color: var(--stage-late) !important; background: color-mix(in oklab, var(--stage-late) 4%, transparent) !important; }
-.conv-msg-role      { font-family: var(--mono) !important; color: var(--fg-3) !important; font-size: 10px !important; letter-spacing: 0.04em !important; text-transform: uppercase !important; }
-.conv-msg-time      { font-family: var(--mono) !important; color: var(--fg-3) !important; font-size: 10px !important; }
-.conv-msg-text      { font-family: var(--serif) !important; font-size: 14.5px !important; line-height: 1.65 !important; color: var(--fg-1) !important; }
-.conv-tool-call summary { font-family: var(--mono) !important; color: var(--amber) !important; font-size: 11px !important; letter-spacing: 0.04em !important; }
-.conv-tool-io { font-family: var(--mono) !important; font-size: 10.5px !important; background: var(--ink-2) !important; border: 1px solid var(--hair) !important; color: var(--fg-2) !important; }
+.conv-msg-role      { font-family: var(--mono) !important; color: var(--text-faint) !important; font-size: 10px !important; letter-spacing: 0.04em !important; text-transform: uppercase !important; }
+.conv-msg-time      { font-family: var(--mono) !important; color: var(--text-faint) !important; font-size: 10px !important; }
+.conv-msg-text      { font-family: var(--serif) !important; font-size: 14.5px !important; line-height: 1.65 !important; color: var(--text-secondary) !important; }
+.conv-tool-call summary { font-family: var(--mono) !important; color: var(--warn-ink) !important; font-size: 11px !important; letter-spacing: 0.04em !important; }
+.conv-tool-io { font-family: var(--mono) !important; font-size: 10.5px !important; background: var(--surface-card) !important; border: 1px solid var(--divider) !important; color: var(--text-muted) !important; }
 
 /* Graph container — pure ``--ink-0`` black. The former radial gradient
    created a brightness bias from center to edge that, combined with
    the d3-zoom transform on the SVG/canvas child, left a visible
    rectangular compositing edge over the simulation. */
 #graph-container {
-  background: var(--ink-0) !important;
+  background: var(--canvas) !important;
 }
 
 /* ─── Orbitron cleanup — everywhere it leaks in v2 CSS ───────── */
@@ -2367,4 +2595,13 @@ figure figcaption, .wiki-caption {
   letter-spacing: -0.005em !important;
   text-transform: none !important;
   text-shadow: none !important;
+}
+
+/* Command/code memories speak mono — "anything you could copy-paste and
+   run is mono" (da-anatomy-spec T-04). ID scope + !important out-specifies
+   the class-level re-skin layer above (see CASCADE NOTE in timeline.css). */
+#knowledge-container .kv-card-body--code {
+  font-family: var(--font-mono) !important;
+  font-size: 12px !important;
+  line-height: 1.55 !important;
 }
