@@ -1,0 +1,61 @@
+<!-- @dsCard group="Components" viewport="700x470" name="Verification" subtitle="ProofBadge · CitationTag · Stamp · HeatBar · Legend — the zetetic lexicon" -->
+<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../../styles.css"><link rel="stylesheet" href="../../cards/spec.css">
+<style>
+  .sec{margin-bottom:16px;}
+  .lbl{font:600 8.5px/1 var(--font-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--text-faint);margin-bottom:9px;}
+  .row{display:flex;flex-wrap:wrap;gap:12px;align-items:center;}
+  .claim{font:400 14.5px/1.6 var(--font-serif);color:var(--text);max-width:58ch;}
+</style></head><body class="spec-body" data-surface="paper">
+  <div class="spec-head"><span class="aia-exhibit">Exhibit <b>K-02</b> · Verification primitives</span><span class="spec-src">the parts that carry the proof</span></div>
+  <div id="root"></div>
+  <div class="spec-foot"><span class="n">·</span>ProofBadge for rows and inline UI; Stamp where a document is pronounced. Every claim gets a CitationTag or a footnote.</div>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script src="../../_ds_bundle.js"></script>
+  <script type="text/babel">
+    const { ProofBadge, CitationTag, HeatBar, Legend, Stamp } = window.AIArchitectDesignSystem_2ec48f;
+    function Demo(){
+      return (
+        <div>
+          <div className="sec">
+            <div className="lbl">ProofBadge — gate verdict</div>
+            <div className="row">
+              <ProofBadge status="proven"/>
+              <ProofBadge status="unsourced">1 magic number</ProofBadge>
+              <ProofBadge status="blocked">2 violations</ProofBadge>
+              <ProofBadge status="pending"/>
+            </div>
+          </div>
+          <div className="sec">
+            <div className="lbl">CitationTag — the claim carries its source</div>
+            <div className="claim">
+              Retrieved memories become labile and can be rewritten <CitationTag source="Nader et al. 2000"/>; storage is gated by prediction error <CitationTag source="Friston 2005"/>.
+            </div>
+          </div>
+          <div className="sec">
+            <div className="lbl">Stamp — the verdict made physical</div>
+            <div className="row" style={{gap:26}}>
+              <Stamp label="Proven" sub="n=500 · 2026-07-04"/>
+              <Stamp label="Blocked" tone="danger" sub="2 violations" tilt={2}/>
+              <Stamp label="Unsourced" tone="neutral" clean tilt={-1}/>
+            </div>
+          </div>
+          <div className="sec" style={{marginBottom:0}}>
+            <div className="lbl">HeatBar · Legend — the data on the record</div>
+            <div className="row" style={{gap:24}}>
+              <div style={{width:190}}><HeatBar value={0.796}/></div>
+              <div style={{width:190}}><HeatBar value={0.184} label="Saturation"/></div>
+              <Legend items={[
+                {label:'Episodic', color:'var(--stage-late)'},
+                {label:'Semantic', color:'var(--stage-recon)'},
+                {label:'Causal', color:'var(--danger)', line:true},
+              ]}/>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    ReactDOM.createRoot(document.getElementById('root')).render(<Demo/>);
+  </script>
+</body></html>

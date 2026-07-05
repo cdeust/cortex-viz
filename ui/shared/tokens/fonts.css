@@ -1,0 +1,12 @@
+/* AI Architect — webfonts
+   Inter Tight (chrome/UI), Newsreader (prose), JetBrains Mono (identifiers,
+   metrics, proof). Loaded from Google Fonts; the @import below expands to the
+   @font-face rules the compiler ships to consumers.
+   ---------------------------------------------------------------------------
+   FONT SUBSTITUTION NOTE: the source products declare these exact three
+   families and load them from Google Fonts, so there is no local binary to
+   copy — we link the same Google-hosted webfonts. If you want the files
+   vendored into assets/ instead, send them and we'll swap the @import for
+   local @font-face src: url(...) rules. */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=JetBrains+Mono:wght@400;500;700&display=swap');

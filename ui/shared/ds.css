@@ -1,0 +1,37 @@
+/* =============================================================================
+   cortex-viz × AI Architect — Design System entry (vendored)
+   Link THIS one file first, before any per-surface stylesheet. It is the
+   single source of truth for the token contract: primitives, the ink/paper
+   surface alias remap, type roles, spacing, elevation, and webfonts.
+
+   Author chrome against the SEMANTIC ALIASES (surfaces.css), never the raw
+   primitives:
+     --canvas · --surface · --surface-card · --surface-chip · --surface-input
+     --text · --text-secondary · --text-muted · --text-faint
+     --border · --border-strong · --divider
+     --accent-ink · --ok-ink · --warn-ink · --danger-ink · --info-ink
+     --heat-* · --stage-* · --emo-*   (data colours, re-inked per surface)
+
+   Surface posture: cortex-viz ships PAPER by default (see surface-toggle.js,
+   which stamps data-surface="paper" on <html>); the legacy warm-dark
+   instrument is data-surface="ink", reachable via the top-right toggle.
+
+   Vendored verbatim from "AI Architect Design System/tokens" — do not edit the
+   token files here; edit the design-system source and re-copy so the contract
+   stays identical across every ecosystem surface.
+   ============================================================================= */
+
+@import url("./tokens/fonts.css");
+@import url("./tokens/colors.css");
+@import url("./tokens/surfaces.css");
+@import url("./tokens/typography.css");
+@import url("./tokens/spacing.css");
+@import url("./tokens/elevation.css");
+
+/* Signature "science is behind everything" primitives (aia-* classes):
+   ProofBadge / Stamp / CitationTag / the appellation-ledger motifs, plus the
+   aia-tabs / aia-chip / aia-card / aia-heat / aia-cite / aia-dot contract used
+   by the unified shell and the Knowledge view. */
+@import url("./components/core/core.css");
+@import url("./components/verification/verification.css");
+@import url("./components/brand/brand.css");
