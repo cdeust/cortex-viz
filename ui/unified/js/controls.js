@@ -187,7 +187,9 @@
   }
 
   function toggleFilterBarVisibility(view) {
-    var isFullscreen = (view === 'wiki' || view === 'knowledge' || view === 'timeline' || view === 'sankey');
+    // Knowledge is fullscreen: no nav ledger, no Domains/Memories/… counters,
+    // no status strip (directive user 2026-07-04) — the exhibit grid owns the width.
+    var isFullscreen = (view === 'wiki' || view === 'timeline' || view === 'knowledge');
     var showFilters = (view === 'graph');
 
     // Hide side panels for fullscreen views — but KEEP the filter bar (it has the view toggle)
