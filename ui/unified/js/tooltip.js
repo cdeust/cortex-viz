@@ -24,26 +24,50 @@
 
   // ── Card builder ──
 
+  // Node ink: workflow-graph nodes (kind-based) colour via the live renderer
+  // palette so badge and canvas dot always agree; legacy nodes keep the old
+  // resolver.
+  function nodeInk(node) {
+    if (node.kind && JUG._wfg && JUG._wfg.nodeColor) return JUG._wfg.nodeColor(node);
+    return JUG.getNodeColor(node);
+  }
+
   function buildBadge(node) {
-    var color = JUG.getNodeColor(node);
+    var color = nodeInk(node);
     var label = resolveTypeLabel(node);
     return '<div class="tt-badge" style="border-color:' + color + '40">' +
-      '<span class="tt-badge-dot" style="background:' + color +
-      ';box-shadow:0 0 6px ' + color + '60"></span>' +
+      '<span class="tt-badge-dot" style="background:' + color + '"></span>' +
       '<span style="color:' + color + '">' + label + '</span></div>';
   }
 
   function resolveTypeLabel(node) {
-    if (node.type === 'entity' && node.entityType) {
+    var k = node.kind || node.type;
+    if (k === 'entity' && node.entityType) {
       return node.entityType.charAt(0).toUpperCase() + node.entityType.slice(1);
     }
-    return JUG.NODE_LABELS[node.type] || node.type;
+    return JUG.NODE_LABELS[k] || k;
+  }
+
+  // Heat family inks — surface-correct paper fallbacks (engine-resolved via
+  // CortexPalette, probe 2026-07-04); re-read per surface below.
+  // source: DS tokens --heat-hot/--heat-warm/--heat-cold.
+  var HEAT_INK = { hot: '#B34F2A', warm: '#B6753B', cold: '#D7D0C3' };
+  function refreshHeatInks() {
+    if (!window.CortexPalette) return;
+    var hex = window.CortexPalette.hex;
+    HEAT_INK.hot  = hex('--heat-hot')  || HEAT_INK.hot;
+    HEAT_INK.warm = hex('--heat-warm') || HEAT_INK.warm;
+    HEAT_INK.cold = hex('--heat-cold') || HEAT_INK.cold;
+  }
+  refreshHeatInks();
+  if (window.CortexSurface) {
+    window.addEventListener(window.CortexSurface.EVENT, refreshHeatInks);
   }
 
   function buildHeatGauge(node) {
     if (node.heat === undefined && node.heat !== 0) return '';
     var pct = Math.max(0, Math.min(100, (node.heat || 0) * 100));
-    var barColor = pct > 60 ? '#E05050' : pct > 30 ? '#E0B040' : '#50A0C0';
+    var barColor = pct > 60 ? HEAT_INK.hot : pct > 30 ? HEAT_INK.warm : HEAT_INK.cold;
     return '<div class="tt-heat">' +
       '<span class="tt-heat-label">HEAT</span>' +
       '<div class="tt-heat-track">' +
@@ -53,7 +77,7 @@
   }
 
   function buildKeyMetric(node) {
-    var spec = METRIC_KEY[node.type];
+    var spec = METRIC_KEY[node.kind || node.type];
     if (!spec) return '';
     var val = node[spec.field];
     if (val === undefined) return '';
@@ -94,6 +118,14 @@
     var parts = [buildBadge(node)];
     var label = (JUG._fmt && JUG._fmt.cleanLabel) ? JUG._fmt.cleanLabel(node.label || '') : (node.label || '');
     parts.push('<div class="tt-label">' + escapeHtml(label) + '</div>');
+    // DD-04 hover: the verbatim path — never truncated, never cleaned.
+    // source: DS cards/data-pointcloud.html ("tooltip = kind badge +
+    // verbatim path + heat meter with its number").
+    var vpath = node.path ||
+      ((node.kind === 'file' || node.kind === 'symbol') ? String(node.id || '') : '');
+    if (vpath && vpath !== label) {
+      parts.push('<div class="tt-path">' + escapeHtml(vpath) + '</div>');
+    }
     if (node.domain) {
       parts.push('<div class="tt-domain">' + escapeHtml(node.domain) + '</div>');
     }

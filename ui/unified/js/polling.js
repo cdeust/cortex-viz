@@ -94,6 +94,12 @@
       setText('s-disc', rc.discussion);
       setText('s-nodes', rc.nodes);
       setText('s-edge', rc.edges);
+      // Galaxy streams toward the store total; the trace streams on expand
+      // (no meaningful denominator), so its total clamps to what is shown.
+      var rcTotalN = _view === 'graph' && meta ? meta.node_count : null;
+      var rcTotalE = _view === 'graph' && meta ? meta.edge_count : null;
+      setText('sb-nodes', fmtStream(rc.nodes, rcTotalN));
+      setText('sb-edges', fmtStream(rc.edges, rcTotalE));
     } else if (d && d.nodes && d.nodes.length) {
       var c = { domain: 0, memory: 0, discussion: 0 };
       for (var i = 0; i < d.nodes.length; i++) {
@@ -120,6 +126,8 @@
       setText('s-disc', c.discussion);
       setText('s-nodes', total);
       setText('s-edge', (d.edges || d.links || []).length);
+      setText('sb-nodes', fmtStream(total, meta ? meta.node_count : null));
+      setText('sb-edges', fmtStream((d.edges || d.links || []).length, meta ? meta.edge_count : null));
     } else {
       // Pre-render: show server totals as a placeholder until nodes arrive.
       setText('s-dom', meta.domain_count || 0);
@@ -128,13 +136,19 @@
       setText('s-disc', meta.discussion_count || 0);
       setText('s-nodes', meta.node_count || 0);
       setText('s-edge', meta.edge_count || 0);
+      // Pre-render: nothing streamed yet — honest "0/total".
+      setText('sb-nodes', fmtStream(0, meta.node_count));
+      setText('sb-edges', fmtStream(0, meta.edge_count));
     }
 
     // System vitals
     var sv = meta.system_vitals;
     if (sv) {
-      var svEl = document.getElementById('system-vitals');
-      if (svEl) svEl.style.display = 'block';
+      // Vitals are opt-in: reveal the discrete "+ System Vitals" toggle when
+      // data exists, but keep the panel itself collapsed so the default rail
+      // stays clean (stats + benchmarks). The toggle opens the panel on demand.
+      var svToggle = document.getElementById('vitals-toggle');
+      if (svToggle) svToggle.style.display = '';
       setText('sv-heat', sv.mean_heat ? sv.mean_heat.toFixed(3) : '--');
       var cp = sv.consolidation_pipeline || {};
       setText('sv-labile', cp.labile || 0);
@@ -295,6 +309,20 @@
   function setText(id, val) {
     var el = document.getElementById(id);
     if (el) el.textContent = val;
+  }
+
+  // DD-04 status line: exact streamed counts, never rounded — "119 304/119 304".
+  // Thousands grouped with U+202F (narrow no-break space) so the mono strip
+  // reads like the exhibit. source: DS cards/data-pointcloud.html (Spec DD-04).
+  function fmtExact(n) {
+    return String(n == null ? 0 : n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  }
+  // "shown/total": total is the server store count when it is ahead of the
+  // stream, else the shown count itself (never display a total smaller than
+  // what is already on canvas).
+  function fmtStream(shown, total) {
+    var t = (total != null && total > shown) ? total : shown;
+    return fmtExact(shown) + '/' + fmtExact(t);
   }
 
   function setTitle(id, val) {
