@@ -4,54 +4,90 @@ window.JUG = JUG;
 
 JUG.API_URL = '/api/graph';
 
-JUG.NODE_COLORS = {
-  'root': '#FFFFFF',
-  'category': '#8B5CF6',
-  'domain': '#E8B840',
-  'agent': '#2DD4BF',
-  'type-group': '#64748B',
-  'entry-point': '#60D8F0',
-  'recurring-pattern': '#70D880',
-  'tool-preference': '#E0A840',
-  'behavioral-feature': '#B088E0',
-  'memory-episodic': '#58D888',
-  'memory-semantic': '#C070D0',
-  'entity-function': '#50D0E8',
-  'entity-dependency': '#60A0E0',
-  'entity-error': '#E07070',
-  'entity-decision': '#E0C050',
-  'entity-technology': '#9080D0',
-  'entity-file': '#7088D0',
-  'entity-variable': '#50B8D0',
-  'entity-default': '#50C8E0',
-  'topic': '#06b6d4',
-  'bridge-entity': '#ec4899',
-  'discussion': '#F43F5E',
+// ── Node colour — the DD-04 "point cloud at scale" table ───────────────────
+// (cards/data-pointcloud.html, AI Architect design gate). This graph's
+// ~119k nodes are TWO overlaid vocabularies: the raw memory-store data
+// (memory/entity/topic/bridge-entity/discussion — what DD-04 plots) and a
+// methodology skeleton laid on top (root -> category -> domain -> agent ->
+// type-group, plus its entry-point/recurring-pattern/tool-preference/
+// behavioral-feature leaves). DD-04 names exactly four hues for this view:
+// episodic memory, semantic memory, entity/file, and one olive hub per
+// domain — never a per-subtype rainbow. Structural levels above already
+// carry hierarchy via SIZE (nodeRadius, draw.js), so they share the ONE
+// hub hue rather than each getting a distinct chrome colour (backend's own
+// graph_builder_edges.py _SKELETON_TYPES groups root/category/domain/agent/
+// type-group identically, corroborating "one landmark family"). Leaf data
+// with no DS-sanctioned hue of its own (methodology leaves, entity
+// subtypes, topic, bridge-entity) shares DD-04's "entity/file" bucket
+// rather than inventing an unsourced mapping.
+//
+// Literals below are the pre-hydration fallback only (module-load-order
+// safety) — JUG._tok is re-hydrated from CortexPalette on load and on
+// every cortex:surface-change, and getNodeColor() below reads JUG._tok,
+// never these literals, once hydration has run.
+JUG._tok = {
+  hub: '#8D6D00',      // --warn-deep   — structural skeleton landmarks
+  info: '#2F4A78',     // --info-deep   — entity/file + methodology leaves
+  episodic: '#2F6B4A', // --stage-late  — episodic memory + discussion
+  semantic: '#6B4A7A', // --stage-recon — semantic memory
+  fieldPoint: '#B8AC98', // --field-point — ambient, opaque, never alpha-faded
+  accentDeep: '#A53E00', // --accent-deep — selection only (G4)
 };
 
-JUG.EDGE_COLORS = {
-  'has-category': '#B0B0B0',
-  'has-project': '#8B5CF6',
-  'has-agent': '#2DD4BF',
-  'has-group': '#64748B',
-  'groups': '#50C8E0',
-  'bridge': '#C080D0',
-  'persistent-feature': '#B070B8',
-  'co_occurrence': '#9080C0',
-  'imports': '#60A0D0',
-  'calls': '#60C0D0',
-  'caused_by': '#D07070',
-  'resolved_by': '#60C080',
-  'decided_to_use': '#D0B060',
-  'debugged_with': '#D07060',
-  'memory-entity': '#40A0B8',
-  'domain-entity': '#50B0C8',
-  'domain-contains': '#06b6d4',
-  'topic-member': '#06b6d480',
-  'co-entity': '#a78bfa',
-  'default': '#40B0C8',
-  'has-discussion': '#F43F5E60',
+JUG._hydrateGraphTokens = function () {
+  if (!window.CortexPalette) return;
+  var hex = window.CortexPalette.hex;
+  JUG._tok.hub = hex('--warn-deep') || JUG._tok.hub;
+  JUG._tok.info = hex('--info-deep') || JUG._tok.info;
+  JUG._tok.episodic = hex('--stage-late') || JUG._tok.episodic;
+  JUG._tok.semantic = hex('--stage-recon') || JUG._tok.semantic;
+  JUG._tok.fieldPoint = hex('--field-point') || JUG._tok.fieldPoint;
+  JUG._tok.accentDeep = hex('--accent-deep') || JUG._tok.accentDeep;
 };
+JUG._hydrateGraphTokens();
+if (window.CortexSurface) {
+  window.addEventListener(window.CortexSurface.EVENT, JUG._hydrateGraphTokens);
+}
+
+// Structural skeleton — landmarks, not raw data (see rationale above).
+JUG._hubTypes = {
+  'root': true, 'category': true, 'domain': true,
+  'agent': true, 'type-group': true,
+};
+
+// Edge colour — G3 ("chrome is greyscale; colour comes only from data
+// tokens or the single terracotta accent") applies here too: a link is
+// graph chrome, not a data point, so every relationship type shares ONE
+// neutral structural hairline (--border-strong) rather than an ad-hoc
+// per-relationship-type rainbow (G9). Keys preserved 1:1 for
+// detail_panel.js, which reads this table directly for its edge-type
+// swatches; only the values move to the token. Literal below is the
+// pre-hydration fallback only.
+JUG.EDGE_COLORS = (function () {
+  var keys = [
+    'has-category', 'has-project', 'has-agent', 'has-group', 'groups',
+    'bridge', 'persistent-feature', 'co_occurrence', 'imports', 'calls',
+    'caused_by', 'resolved_by', 'decided_to_use', 'debugged_with',
+    'memory-entity', 'domain-entity', 'domain-contains', 'topic-member',
+    'co-entity', 'default', 'has-discussion',
+  ];
+  var table = {};
+  keys.forEach(function (k) { table[k] = '#5A5A5A'; });
+  return table;
+})();
+
+JUG._hydrateEdgeColors = function () {
+  if (!window.CortexPalette) return;
+  var borderStrong = window.CortexPalette.hex('--border-strong');
+  if (!borderStrong) return;
+  Object.keys(JUG.EDGE_COLORS).forEach(function (k) {
+    JUG.EDGE_COLORS[k] = borderStrong;
+  });
+};
+JUG._hydrateEdgeColors();
+if (window.CortexSurface) {
+  window.addEventListener(window.CortexSurface.EVENT, JUG._hydrateEdgeColors);
+}
 
 JUG.NODE_LABELS = {
   'root': 'Cortex',
@@ -75,8 +111,27 @@ JUG.CONSOLIDATION_COLORS = {
   'early_ltp': '#60A0E0',
   'late_ltp': '#40D870',
   'consolidated': '#E8B840',
+  // 'reconsolidating' has no dedicated design-system token (README's
+  // canonical stage table only names labile/early/late/cons/semantic) —
+  // kept as a literal fallback, not hydrated below.
   'reconsolidating': '#C070D0',
 };
+
+// Hydrate labile/early/late/consolidated from the design-system stage
+// tokens (same source as JUG._hydrateStageColors above) so the
+// consolidation-stage ring drawn in draw.js re-inks per surface.
+JUG._hydrateConsolidationColors = function () {
+  if (!window.CortexPalette) return;
+  var stages = window.CortexPalette.stages();
+  JUG.CONSOLIDATION_COLORS.labile = stages['labile'] || JUG.CONSOLIDATION_COLORS.labile;
+  JUG.CONSOLIDATION_COLORS.early_ltp = stages['early-ltp'] || JUG.CONSOLIDATION_COLORS.early_ltp;
+  JUG.CONSOLIDATION_COLORS.late_ltp = stages['late-ltp'] || JUG.CONSOLIDATION_COLORS.late_ltp;
+  JUG.CONSOLIDATION_COLORS.consolidated = stages['consolidated'] || JUG.CONSOLIDATION_COLORS.consolidated;
+};
+JUG._hydrateConsolidationColors();
+if (window.CortexSurface) {
+  window.addEventListener(window.CortexSurface.EVENT, JUG._hydrateConsolidationColors);
+}
 
 JUG.CONSOLIDATION_LABELS = {
   'labile': 'Labile',
@@ -96,30 +151,30 @@ JUG.ZOOM_LEVELS = {
 // Structural types that form the tree skeleton
 JUG.STRUCTURAL_TYPES = { 'root': true, 'category': true, 'domain': true, 'agent': true, 'type-group': true, 'topic': true, 'bridge-entity': true };
 
+// DD-04 point-cloud lookup — TYPE decides colour, always, never a
+// server-baked node.color. The backend (graph_builder_nodes.py et al.)
+// bakes a static hex per node at build time; trusting it here would
+// permanently defeat G2 (survive data-surface="ink" unchanged) since a
+// baked hex can never re-resolve on toggle. This is the root-cause fix,
+// not a workaround: presentation of DS-governed data belongs to the
+// client's token layer, not the wire payload (Trace's session/prompt/
+// action nodes never reach this function — they render through their own
+// self-contained LOD canvas, workflow_graph.js — so there is no live
+// caller left that needs the old node.color short-circuit).
 JUG.getNodeColor = function(node) {
-  if (!node) return '#00d2ff';
-  // Trace nodes (session/prompt/action) carry their own color and have
-  // no isGlobal/storeType fields — short-circuit to it.
-  if (node.color) return node.color;
-  if (node.isGlobal) return '#8B6914';
-  if (node.type === 'memory') {
-    // Memory color is set by heat gradient in the backend
-    return node.color || JUG.NODE_COLORS['memory-' + (node.storeType || 'episodic')] || '#26de81';
-  }
-  if (node.type === 'entity') {
-    return JUG.NODE_COLORS['entity-' + (node.entityType || 'default')] || '#00d2ff';
-  }
-  if (node.type === 'bridge-entity') {
-    return JUG.NODE_COLORS['bridge-entity'] || '#ec4899';
-  }
-  if (node.type === 'topic') {
-    return JUG.NODE_COLORS['topic'] || '#06b6d4';
-  }
-  return node.color || JUG.NODE_COLORS[node.type] || '#00d2ff';
+  if (!node) return JUG._tok.info;
+  var t = node.type;
+  if (t === 'memory') return node.storeType === 'semantic' ? JUG._tok.semantic : JUG._tok.episodic;
+  if (t === 'discussion') return JUG._tok.episodic;
+  if (JUG._hubTypes[t]) return JUG._tok.hub;
+  // entity (any entityType) / topic / bridge-entity / entry-point /
+  // recurring-pattern / tool-preference / behavioral-feature — the
+  // informational leaf family (DD-04 "entity/file").
+  return JUG._tok.info;
 };
 
 JUG.getEdgeColor = function(edge) {
-  return edge.color || JUG.EDGE_COLORS[edge.type] || JUG.EDGE_COLORS['default'];
+  return JUG.EDGE_COLORS[edge.type] || JUG.EDGE_COLORS['default'];
 };
 
 // Clean markdown + tool captures from labels for display

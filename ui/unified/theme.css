@@ -1,94 +1,94 @@
 /* =======================================================================
-   Cortex — instrument-grade calm. Warm-neutral dark canvas, Inter Tight
-   for chrome, Newsreader for prose, JetBrains Mono for identifiers.
-   All color comes from data (heat, stage, valence), never from chrome.
+   Cortex — unified surface chrome, consuming the AI Architect design-
+   system contract (../shared/ds.css). This file does NOT redefine token
+   primitives (colours, radii, motion, fonts) — those come from ds.css
+   (tokens/colors.css, tokens/surfaces.css, tokens/typography.css,
+   tokens/elevation.css, tokens/fonts.css), loaded before this file.
 
-   This file carries the design tokens + chrome. It does NOT touch any
-   id/class the v2 JS reads — only re-skins existing ids (#info-panel,
-   #filter-bar, #status-bar, #loading, .view-btn, .filter-btn,
-   #search-box, .filter-select) and introduces the token cascade used by
-   the per-view stylesheets.
+   It does two things:
+     1. Maps the legacy v2 aliases this codebase's CSS/JS still reads
+        (--void, --card, --cyan*, --text*, --border*, --green/blue/
+        magenta/red, --sans/serif/mono, --r-sm/md/lg) onto the DS
+        semantic aliases, so every per-view stylesheet keeps cascading
+        unchanged.
+     2. Carries the chrome rules for the shared HUD/filter-bar/panel
+        furniture — authored against the semantic aliases (--canvas,
+        --surface*, --text*, --border*, --divider, --accent-ink), never
+        raw primitives, so both surfaces (paper default, ink opt-in)
+        render correctly.
+
+   All color comes from data (heat, stage, valence) or the single
+   terracotta accent — never from arbitrary chrome hexes.
    ======================================================================= */
 
 :root {
-  /* ── Warm-neutral greys (oklch, saturations ≤ 0.012) ─────────── */
-  --ink-0:  oklch(12% 0.006 60);   /* canvas */
-  --ink-1:  oklch(15% 0.008 60);   /* surface */
-  --ink-2:  oklch(18% 0.010 60);   /* elevated */
-  --ink-3:  oklch(22% 0.010 60);   /* chip */
-  --ink-4:  oklch(28% 0.010 60);   /* input */
-  --line:   oklch(30% 0.010 60 / 0.45);
-  --line-2: oklch(35% 0.010 60 / 0.22);
-  --hair:   oklch(45% 0.010 60 / 0.14);
+  /* ── Legacy v2 token aliases → DS semantic aliases (keep v2 CSS/JS
+     cascading; do not delete — other stylesheets in this codebase read
+     these names directly). ──────────────────────────────────────────── */
+  --void:           var(--canvas);
+  --card:           var(--surface-card);
 
-  --fg-0:   oklch(96% 0.005 80);   /* primary text */
-  --fg-1:   oklch(80% 0.006 70);   /* secondary */
-  --fg-2:   oklch(62% 0.006 70);   /* tertiary */
-  --fg-3:   oklch(48% 0.008 70);   /* quaternary */
+  /* Chrome accent: the v2 "cyan" identity becomes the DS single accent —
+     terracotta. --cyan-* names are kept as aliases so downstream CSS
+     using var(--cyan) etc. re-inks correctly per surface. */
+  --cyan:           var(--accent-ink);
+  --cyan-mid:       var(--accent);
+  --cyan-dim:       var(--text-muted);
+  --cyan-glow:      var(--accent-glow);
+  --cyan-subtle:    var(--accent-soft);
 
-  /* ── Single discipline accent — warm amber, lab-notebook ink ─── */
-  --amber:      oklch(78% 0.13 75);
-  --amber-soft: oklch(78% 0.13 75 / 0.14);
-  --amber-glow: oklch(78% 0.13 75 / 0.35);
+  /* --border and --text are NOT aliased here — the DS already defines
+     both names directly and identically (tokens/surfaces.css). A prior
+     pass here wrote `--border: var(--border);` / `--text: var(--text);`,
+     a self-referential custom-property cycle: per the CSS custom
+     properties spec, a variable whose own cascaded value depends on
+     itself becomes "guaranteed-invalid", so EVERY var(--border) and
+     var(--text) in the whole app silently fell back to the UA initial
+     value (border: none/0 width; color: default black). Borders vanished
+     everywhere (root cause of the DD-06 "no bordered cards" rejection,
+     2026-07-05); text still looked correct only by coincidence — black
+     text over the DS's light paper surface. Root-cause fix: delete the
+     cycle, don't re-alias it. */
+  --border-bright:  var(--border-strong);
+  --text-dim:       var(--text-muted);
+  --text-bright:    var(--text);
 
-  /* ── Data-only colors (chroma ~0.15, hue varies) ─────────────── */
-  --heat-0: oklch(78% 0.13 40);
-  --heat-m: oklch(74% 0.10 60);
-  --heat-c: oklch(64% 0.05 80);
-  --heat-f: oklch(48% 0.02 80);
-
-  --stage-labile:  oklch(78% 0.15 230);
-  --stage-early:   oklch(74% 0.14 190);
-  --stage-late:    oklch(78% 0.13 155);
-  --stage-cons:    oklch(80% 0.13 95);
-  --stage-recon:   oklch(72% 0.14 320);
-
-  --emo-urg:   oklch(68% 0.17 28);
-  --emo-fru:   oklch(72% 0.15 55);
-  --emo-sat:   oklch(76% 0.13 155);
-  --emo-dis:   oklch(74% 0.13 250);
-  --emo-con:   oklch(72% 0.13 310);
-
-  /* ── Typography ──────────────────────────────────────────────── */
-  --sans:  'Inter Tight', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --serif: 'Newsreader', 'Iowan Old Style', Georgia, 'Times New Roman', serif;
-  --mono:  'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, monospace;
-
-  /* ── Geometry + motion ───────────────────────────────────────── */
-  --rail-w:     240px;
-  --insp-w:     380px;
-  --topbar-h:   48px;
-  --substrip-h: 40px;
-  --r-sm:   4px;
-  --r-md:   6px;
-  --r-lg:   10px;
-  --ease:   cubic-bezier(.2,.7,.1,1);
-
-  /* ── Legacy v2 token aliases (keep v2 CSS cascading) ─────────── */
-  --void:           var(--ink-0);
-  --card:           var(--ink-1);
-  --cyan:           var(--amber);
-  --cyan-mid:       oklch(68% 0.11 70);
-  --cyan-dim:       oklch(45% 0.04 70);
-  --cyan-glow:      var(--amber-glow);
-  --cyan-subtle:    var(--amber-soft);
-  --border:         var(--line);
-  --border-bright:  var(--line-2);
-  --text:           var(--fg-0);
-  --text-dim:       var(--fg-2);
-  --text-bright:    var(--fg-0);
+  /* Data-family shorthands some views still read directly. */
   --green:          var(--stage-late);
   --blue:           var(--stage-labile);
   --magenta:        var(--stage-recon);
   --amber-fallback: var(--stage-cons);
-  --red:            var(--emo-urg);
+  --red:            var(--emo-urgent);
+
+  /* Amber sibling glow — DS defines --amber/--amber-soft; this codebase's
+     v2 CSS also expects a glow companion. */
+  --amber-glow:     oklch(78% 0.13 75 / 0.35);
+
+  /* ── Typography — alias legacy short names onto the DS font stack. ─── */
+  --sans:  var(--font-sans);
+  --serif: var(--font-serif);
+  --mono:  var(--font-mono);
+
+  /* ── Geometry the DS doesn't name (product-specific rail/inspector
+     widths) — kept local, no DS equivalent exists. ───────────────────── */
+  --rail-w:     240px;
+  --insp-w:     380px;
+  --topbar-h:   48px;
+  --substrip-h: 40px;
+
+  /* ── Radii — alias legacy short names onto the DS radius scale. ─────── */
+  --r-sm: var(--radius-sm);
+  --r-md: var(--radius-md);
+  --r-lg: var(--radius-lg);
+  /* --ease is defined identically by DS (tokens/elevation.css) — no
+     alias needed here. */
 }
 
 * , *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; height: 100%; }
 body {
-  background: var(--ink-0);
-  color: var(--fg-0);
+  background: var(--canvas);
+  color: var(--text);
   font-family: var(--sans);
   font-feature-settings: "ss01","cv11","ss03";
   font-size: 14px;
@@ -101,7 +101,7 @@ body {
 }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
 input, select, textarea { font: inherit; color: inherit; }
-::selection { background: var(--amber-soft); color: var(--fg-0); }
+::selection { background: var(--selection); color: var(--text); }
 
 /* Ambient grain disabled — ``mix-blend-mode: overlay`` forces a
    full-viewport compositing layer above the graph which Safari/Chrome
@@ -116,8 +116,8 @@ body::before {
 *::-webkit-scrollbar { width: 10px; height: 10px; }
 *::-webkit-scrollbar-track { background: transparent; }
 *::-webkit-scrollbar-thumb {
-  background: var(--ink-3); border-radius: 999px;
-  border: 2px solid var(--ink-0);
+  background: var(--surface-chip); border-radius: 999px;
+  border: 2px solid var(--canvas);
 }
 
 /* View containers — JS toggles visibility via display: block/none.
@@ -125,8 +125,7 @@ body::before {
    Timeline/Knowledge/Wiki start BELOW the fixed filter-bar via `top`, not
    padding — some child flex-layouts in those views don't honor container
    padding, so we offset the entire absolute box instead. */
-#graph-container,
-#sankey-container {
+#graph-container {
   position: absolute; inset: 0;
 }
 #timeline-container,
@@ -182,18 +181,20 @@ body::before {
   padding: 14px 16px 12px;
   z-index: 100;
   font-family: var(--sans);
-  color: var(--fg-1);
+  color: var(--text-secondary);
 }
 .panel-header {
   display: flex; align-items: center; gap: 10px;
   margin-bottom: 10px; padding-bottom: 10px;
-  border-bottom: 1px solid var(--hair);
+  border-bottom: 1px solid var(--divider);
 }
+/* Brand mark — a static terracotta lozenge (◆), the AI Architect signature
+   diamond. Static, not blinking: a professional instrument mark, not a live
+   telemetry dot. source: AI Architect DS brand mark. */
 .reactor-dot {
-  width: 7px; height: 7px; border-radius: 50%;
-  background: var(--amber);
-  box-shadow: 0 0 8px var(--amber-glow);
-  animation: dot-blink 2.2s ease-in-out infinite;
+  width: 8px; height: 8px; border-radius: 1px;
+  background: var(--accent);
+  transform: rotate(45deg);
 }
 @keyframes dot-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 .panel-title {
@@ -202,14 +203,14 @@ body::before {
   font-weight: 600;
   letter-spacing: -0.01em;
   text-transform: none;
-  color: var(--fg-0);
+  color: var(--text);
   text-shadow: none;
 }
 .panel-subtitle {
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 0.04em;
-  color: var(--fg-3);
+  color: var(--text-faint);
   margin-top: 2px;
 }
 
@@ -220,18 +221,64 @@ body::before {
   font-size: 11.5px;
   letter-spacing: 0.01em;
   text-transform: none;
-  color: var(--fg-2);
+  color: var(--text-muted);
 }
-.stat-row + .stat-row { border-top: 1px solid var(--hair); }
+.stat-row + .stat-row { border-top: 1px solid var(--divider); }
 .stat-row .val {
   font-family: var(--mono);
   font-size: 12px;
   font-weight: 500;
   letter-spacing: 0;
-  color: var(--fg-0);
+  color: var(--text);
   text-shadow: none;
 }
-.stat-row .bench-val { font-size: 11px; font-weight: 500; letter-spacing: 0; }
+/* Benchmark scores read as neutral proof; the headline BEAM-10M delta carries
+   the terracotta discipline accent — the one figure the eye is meant to land on.
+   source: AI Architect DS (single accent = terracotta). */
+.stat-row .bench-val { font-size: 11.5px; font-weight: 500; letter-spacing: 0; color: var(--text); }
+#b-beam { color: var(--accent-ink); font-weight: 600; }
+
+/* Sidebar sub-section: a hairline rule + a mono micro-cap label (SYSTEM
+   BENCHMARKS / SYSTEM VITALS), replacing the old inline styles. */
+.panel-block { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--divider); }
+.panel-section-label {
+  font-family: var(--mono);
+  font-size: var(--text-3xs);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  color: var(--text-faint);
+  margin-bottom: 8px;
+}
+
+/* Opt-in disclosure toggle for the secondary sidebar section (System Vitals).
+   Hidden until data exists; a quiet mono chip, not a loud button. */
+.panel-toggle {
+  display: block;
+  margin-top: 12px;
+  width: 100%;
+  padding: 5px 0;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--divider);
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: var(--text-3xs);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  text-align: left;
+  cursor: pointer;
+  transition: color .14s var(--ease);
+}
+.panel-toggle:hover { color: var(--text-secondary); }
+
+/* System Vitals is opt-in secondary detail — de-neon it. The old inline
+   neon hexes (color:#40D870 etc.) are overridden to the DS ink so the panel
+   reads as calm instrument data, never a rainbow of saturated LEDs. Override
+   requires !important only because the colours are inline on each row.
+   source: AI Architect DS (data colour comes from --stage-… and --text, not neon). */
+#system-vitals .stat-row .val { color: var(--text) !important; }
 
 /* ─── Filter bar — compact pill that sizes to its content, centered.
    Row 1: view toggle tabs + glossary (?) — always visible.
@@ -252,17 +299,16 @@ body::before {
   width: max-content;                /* shrink to fit tabs when chips hidden */
   max-width: calc(100vw - 560px);    /* keep clear of info-panel + reset/log */
   z-index: 100;
-  background: color-mix(in oklab, var(--ink-0) 88%, transparent);
-  /* backdrop-filter removed: creates a GPU layer rectangle visible over the graph canvas. */
+  background: color-mix(in oklab, var(--surface) 88%, transparent);
 
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-radius: var(--r-md);
   font-family: var(--sans);
 }
 /* View-toggle stays inline on a single row; filter chips wrap beneath when
    total content exceeds max-width. */
 #filter-bar .view-toggle { display: inline-flex; gap: 2px; }
-#filter-bar .filter-sep  { display: inline-block; width: 1px; height: 14px; background: var(--line); margin: 0 4px; }
+#filter-bar .filter-sep  { display: inline-block; width: 1px; height: 14px; background: var(--border); margin: 0 4px; }
 
 @media (max-width: 1100px) {
   #filter-bar { max-width: calc(100vw - 32px); }
@@ -271,41 +317,41 @@ body::before {
 .view-toggle { display: flex; gap: 2px; }
 
 /* View tab buttons — primary nav; match design's .view-tab */
+/* View tabs — a quiet segmented control. Inactive tabs are plain; the active
+   tab lifts into a bordered card pill (not an underline), the calm "you are
+   here" marker of a professional instrument. source: AI Architect DS segmented
+   nav. The transparent border on every tab reserves the pill's box so the row
+   never reflows when the active tab moves. */
 .view-btn {
   position: relative;
   background: transparent;
-  border: 0;
-  color: var(--fg-2);
+  border: 1px solid transparent;
+  color: var(--text-muted);
   font-family: var(--sans);
   font-size: 12.5px;
   font-weight: 500;
   letter-spacing: -0.005em;
   text-transform: none;
-  padding: 8px 12px;
+  padding: 6px 12px;
   border-radius: var(--r-sm);
   cursor: pointer;
-  transition: color .14s var(--ease), background .14s var(--ease);
+  transition: color .14s var(--ease), background .14s var(--ease), border-color .14s var(--ease);
   box-shadow: none; text-shadow: none;
 }
-.view-btn:hover { color: var(--fg-0); }
+.view-btn:hover { color: var(--text); }
 .view-btn.active {
-  color: var(--fg-0);
-  background: transparent;
-  border-color: transparent;
+  color: var(--text);
+  background: var(--surface-card);
+  border-color: var(--border);
   box-shadow: none; text-shadow: none;
-}
-.view-btn.active::after {
-  content: "";
-  position: absolute; left: 10px; right: 10px; bottom: -2px;
-  height: 1px; background: var(--fg-0);
 }
 
 /* Filter chips — match design's .chip */
 .filter-btn {
   display: inline-flex; align-items: center; gap: 6px;
   background: transparent;
-  border: 1px solid var(--line);
-  color: var(--fg-1);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
   font-family: var(--sans);
   font-size: 11.5px;
   font-weight: 500;
@@ -317,20 +363,20 @@ body::before {
   transition: background .15s var(--ease), border-color .15s var(--ease), color .15s var(--ease);
   box-shadow: none; text-shadow: none;
 }
-.filter-btn:hover   { border-color: var(--line-2); color: var(--fg-0); }
-.filter-btn.active  { background: var(--ink-2); border-color: var(--line-2); color: var(--fg-0); box-shadow: none; text-shadow: none; }
+.filter-btn:hover   { border-color: var(--border-strong); color: var(--text); }
+.filter-btn.active  { background: var(--surface-card); border-color: var(--border-strong); color: var(--text); box-shadow: none; text-shadow: none; }
 
 .filter-sep {
-  width: 1px; height: 16px; background: var(--line);
+  width: 1px; height: 16px; background: var(--border);
   margin: 0 2px;
 }
 
 /* Selects + search input — match design cmdk aesthetic */
 #search-box,
 .filter-select {
-  background: var(--ink-2);
-  border: 1px solid var(--line);
-  color: var(--fg-0);
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  color: var(--text);
   font-family: var(--mono);
   font-size: 11.5px;
   padding: 5px 10px;
@@ -344,16 +390,20 @@ body::before {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%238a8a8a'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 8px center;
 }
-.filter-select option { background: var(--ink-2); color: var(--fg-0); }
+.filter-select option { background: var(--surface-card); color: var(--text); }
 #search-box:focus,
 .filter-select:focus {
-  border-color: var(--amber);
-  background: var(--ink-1);
-  box-shadow: 0 0 0 2px var(--amber-soft);
+  border-color: var(--accent-ink);
+  background: var(--surface);
+  box-shadow: var(--shadow-focus);
 }
-#search-box::placeholder { color: var(--fg-3); }
+#search-box::placeholder { color: var(--text-faint); }
 
 /* ─── Status bar (bottom-left) ────────────────────────────────── */
+/* ─── Bottom status + compact legend strip ─────────────────────────
+   Replaces the ~40-line right-side L1–L6 legend. A single quiet mono row:
+   sync status · four family swatches (Episodic / Semantic / Entity / Causal)
+   · live counts · clock. The exhaustive vocabulary lives in the glossary "?". */
 #status-bar {
   position: fixed; bottom: 14px; left: 16px;
   padding: 6px 12px;
@@ -361,32 +411,53 @@ body::before {
   font-size: 10.5px;
   letter-spacing: 0.04em;
   text-transform: none;
-  color: var(--fg-2);
-  display: flex; align-items: center; gap: 8px;
-  background: color-mix(in oklab, var(--ink-1) 92%, transparent);
-  /* backdrop-filter removed: creates a GPU layer rectangle visible over the graph canvas. */
+  color: var(--text-muted);
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: 4px 10px;
+  max-width: calc(100vw - 32px);
+  background: color-mix(in oklab, var(--surface) 92%, transparent);
 
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-radius: var(--r-md);
   z-index: 100;
 }
 #status-bar .status-dot {
   width: 6px; height: 6px; border-radius: 50%;
   background: var(--stage-late);
-  box-shadow: 0 0 6px oklch(78% 0.13 155 / .5);
   animation: dot-blink 2.2s ease-in-out infinite;
 }
+.sb-cell { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.sb-status { color: var(--text-secondary); }
+.sb-sep { width: 1px; height: 12px; background: var(--border); }
+.sb-sw { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.sb-sw--diamond { border-radius: 1px; transform: rotate(45deg); }
+/* Causal-edge swatch is a structural indicator, not a selection state —
+   G4 reserves --accent-ink for selection only. Neutral chrome grey. */
+.sb-sw--line {
+  width: 12px; height: 0; border-radius: 0;
+  border-top: 2px solid var(--text-muted); background: none;
+}
+.sb-cell b { font-family: var(--mono); font-weight: 600; color: var(--text); }
+.sb-time { color: var(--text-faint); }
 
-/* ─── Reset / Monitor toggle buttons (top-right) ──────────────── */
+/* ─── Top-right action toolbar — one neat button cluster ──────────
+   surface toggle · reset · monitor, laid out in a fixed flex row so the three
+   chrome actions read as a single control group (the mockup's
+   "Ink surface | Reset | Monitor" strip) instead of three loose absolutely
+   positioned buttons with hand-tuned `right:` offsets. */
+#top-actions {
+  position: fixed; top: 16px; right: 16px;
+  display: flex; align-items: center; gap: 8px;
+  z-index: 101;
+}
 #reset-btn,
-#monitor-toggle {
-  position: fixed; top: 16px;
+#monitor-toggle,
+#surface-toggle {
+  position: static; top: auto; right: auto;
   padding: 6px 12px;
-  background: color-mix(in oklab, var(--ink-1) 92%, transparent);
-  /* backdrop-filter removed: creates a GPU layer rectangle visible over the graph canvas. */
-
-  border: 1px solid var(--line);
-  color: var(--fg-1);
+  background: color-mix(in oklab, var(--surface) 92%, transparent);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
   font-family: var(--sans);
   font-size: 11.5px;
   font-weight: 500;
@@ -394,21 +465,19 @@ body::before {
   text-transform: none;
   border-radius: var(--r-md);
   cursor: pointer;
-  z-index: 100;
   transition: color .14s var(--ease), border-color .14s var(--ease), background .14s var(--ease);
 }
-#reset-btn       { right: 144px; }
-#monitor-toggle  { right: 16px; }
 #reset-btn:hover,
-#monitor-toggle:hover { color: var(--fg-0); border-color: var(--line-2); }
+#monitor-toggle:hover,
+#surface-toggle:hover { color: var(--text); border-color: var(--border-strong); }
 #monitor-badge {
   display: inline-block;
   margin-left: 6px;
   padding: 1px 6px;
   font-family: var(--mono);
   font-size: 10px;
-  background: var(--ink-3);
-  color: var(--fg-2);
+  background: var(--surface-chip);
+  color: var(--text-muted);
   border-radius: 999px;
 }
 
@@ -419,52 +488,54 @@ body::before {
   font-weight: 500;
 }
 
+/* Surface toggle (paper/ink) is styled with reset/monitor in the
+   #top-actions cluster above — it now reads as a full-word sans button
+   ("Ink surface" / "Paper surface"), not an uppercase mono state chip. */
+
 /* ─── Loading overlay — calm, not neon ────────────────────────── */
 #loading {
   position: fixed; inset: 0;
   display: flex; align-items: center; justify-content: center;
-  background: var(--ink-0); z-index: 9999;
+  background: var(--canvas); z-index: 9999;
   transition: opacity .3s var(--ease);
   flex-direction: column; gap: 14px;
 }
 #loading .loader-ring {
   width: 38px; height: 38px; border-radius: 50%;
-  border: 2px solid var(--line); border-top-color: var(--amber);
+  border: 2px solid var(--border); border-top-color: var(--accent-ink);
   animation: spin 1.1s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 #loading .loader-title {
   font-family: var(--sans); font-size: 14px; font-weight: 600;
-  letter-spacing: -0.01em; color: var(--fg-0);
+  letter-spacing: -0.01em; color: var(--text);
 }
 #loading .loader-sub {
-  font-family: var(--mono); font-size: 10.5px; color: var(--fg-3);
+  font-family: var(--mono); font-size: 10.5px; color: var(--text-faint);
   letter-spacing: 0.04em;
 }
 #loading.done { opacity: 0; pointer-events: none; }
 
 /* ─── Tooltip (inherits from panels.css but skin here) ────────── */
 #tooltip {
-  background: color-mix(in oklab, var(--ink-1) 92%, transparent) !important;
-  border: 1px solid var(--line) !important;
+  background: color-mix(in oklab, var(--surface) 92%, transparent) !important;
+  border: 1px solid var(--border) !important;
   border-radius: var(--r-md) !important;
-  color: var(--fg-1) !important;
+  color: var(--text-secondary) !important;
   font-family: var(--mono) !important;
   font-size: 11px !important;
-  /* backdrop-filter removed: creates a GPU layer rectangle visible over the graph canvas. */
-
 }
 
 /* ─── Toast helper (design-style) ─────────────────────────────── */
 .toast {
   position: fixed; bottom: 18px; left: 50%;
   transform: translateX(-50%);
-  background: var(--ink-2);
-  border: 1px solid var(--line-2);
+  background: var(--surface-card);
+  border: 1px solid var(--border-strong);
   border-radius: var(--r-md);
   padding: 8px 14px;
   font-size: 12px;
-  color: var(--fg-0);
+  color: var(--text);
   z-index: 1200;
   opacity: 0; pointer-events: none;
   transition: opacity .2s var(--ease);

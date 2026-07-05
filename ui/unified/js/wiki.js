@@ -137,22 +137,16 @@
 
   // ── Mode toolbar + cross-lens graph (additive) ──
   function buildModeToolbar() {
+    // DD-06 tree rail: Tree/Graph lens chips + cross-lens toggles. Styling
+    // lives in knowledge.css (paper chips, active = accent) — the old inline
+    // rgba-white/cyan literals were dark-surface leftovers, illegible on paper.
     var bar = el('div', 'wiki-mode-toolbar');
-    bar.style.cssText =
-      'display:flex;align-items:center;gap:10px;padding:8px 10px;' +
-      'flex-wrap:wrap;border-bottom:1px solid rgba(255,255,255,0.08);';
 
     var seg = el('div', 'wiki-mode-seg');
-    seg.style.cssText = 'display:flex;gap:4px;';
     ['tree', 'graph'].forEach(function (m) {
-      var btn = el('button', 'wiki-mode-btn');
+      var btn = el('button', 'wiki-mode-btn' + (wikiMode === m ? ' active' : ''));
       btn.type = 'button';
       btn.textContent = m === 'tree' ? 'Tree' : 'Graph';
-      btn.style.cssText =
-        'cursor:pointer;padding:4px 10px;border-radius:6px;font-size:12px;' +
-        'border:1px solid rgba(255,255,255,0.15);background:' +
-        (wikiMode === m ? 'rgba(80,176,200,0.35)' : 'transparent') +
-        ';color:inherit;';
       btn.addEventListener('click', function () {
         if (wikiMode === m) return;
         wikiMode = m;
@@ -177,8 +171,6 @@
 
   function _toggleBox(label, checked, onChange) {
     var wrap = el('label', 'wiki-toggle');
-    wrap.style.cssText =
-      'display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;';
     var cb = el('input');
     cb.type = 'checkbox';
     cb.checked = !!checked;
@@ -386,7 +378,7 @@
 
         kindContainer.appendChild(kindHeader);
         _renderCollapsedList(kindPages).forEach(function(row) {
-          kindItems.appendChild(buildTreeItem(row));
+          kindItems.appendChild(buildTreeItem(row, domain));
         });
         kindContainer.appendChild(kindItems);
       });
@@ -438,14 +430,29 @@
     return m ? parseInt(m[1], 10) : 0;
   }
 
-  function buildTreeItem(p) {
+  // Rail rows show the TOPIC only: page titles are "domain — topic"
+  // (DD-06 title anatomy) and the row already sits under its domain's
+  // section, so repeating the domain per row is noise. The mockup rows
+  // read "— security", "— observability" — the leading dash is CSS
+  // (.wiki-tree-item-label::before). source: user mockup 2026-07-05
+  // (Wiki page reader — anatomy, tree rail).
+  function _topicOf(title, domain) {
+    var t = String(title == null ? '' : title);
+    if (!domain) return t;
+    // Tolerate em/en/hyphen dashes between domain and topic.
+    var m = t.match(/^(.+?)\s+[—–-]\s+(.+)$/);
+    if (m && m[1].toLowerCase() === String(domain).toLowerCase()) return m[2];
+    return t;
+  }
+
+  function buildTreeItem(p, domain) {
     var item = el('div', 'wiki-tree-item');
     item.dataset.path = p.path;
     if (p.path === activePath) {
       item.classList.add('active');
     }
     var name = el('span', 'wiki-tree-item-label');
-    name.textContent = p.title || p.path;
+    name.textContent = _topicOf(p.title, domain) || p.path;
     item.appendChild(name);
     if (p.duplicates && p.duplicates > 1) {
       var badge = el('span', 'wiki-tree-dup-badge');
@@ -867,25 +874,19 @@
       var totalSections = 14;  // matches FILE_DOC_SECTIONS (incl. sequence-diagram + flow-diagram + parameters + request/response-example)
       var coveredCount = Math.max(0, totalSections - gaps.length);
       var pct = Math.round(100 * coveredCount / totalSections);
+      // Warn-ink banner, styled in knowledge.css — no pictograph, status is
+      // text + ink (DS lexicon rule); the old #b58900 literal was off-token.
       var banner = el('aside', 'wiki-curation-banner');
-      banner.style.cssText = (
-        'border:1px solid #b58900;background:rgba(181,137,0,0.08);' +
-        'padding:14px 18px;border-radius:6px;margin:14px 0 18px;' +
-        'font-size:14px;line-height:1.55;'
-      );
       var summary = el('div', 'wiki-curation-summary');
-      summary.style.cssText = 'margin-bottom:8px;color:#b58900;font-weight:600;';
       summary.textContent =
-        '⚠ Page ' + pct + '% curated — ' + gaps.length + ' of ' +
+        'Page ' + pct + '% curated — ' + gaps.length + ' of ' +
         totalSections + ' canonical sections are still missing or thin.';
       banner.appendChild(summary);
-      var listIntro = el('div');
-      listIntro.style.cssText = 'opacity:0.85;margin-bottom:6px;';
+      var listIntro = el('div', 'wiki-curation-intro');
       listIntro.textContent =
         'The autonomous re-author loop will fill these; a human author can also write them now:';
       banner.appendChild(listIntro);
-      var ul = el('ul');
-      ul.style.cssText = 'margin:0;padding-left:22px;';
+      var ul = el('ul', 'wiki-curation-list');
       var gapLabels = {
         purpose:            'Purpose — what this file is responsible for',
         'public-api':       'Public API — semantics of each exported symbol',
@@ -1121,8 +1122,14 @@
 
   // ── Mermaid lazy-loader ──
   // Loaded once per page session via dynamic import from esm.sh.
-  // Themed to match the wiki's dark background; arrows / nodes use the
-  // gold accent that the rest of the UI uses.
+  // Themed against the DS semantic aliases (var(--x)) rather than fixed
+  // hex — mermaid's `theme: 'base'` hands full control to themeVariables,
+  // and SVG presentation attributes resolve CSS custom properties at
+  // paint time just like any stylesheet, so the diagram re-inks itself
+  // automatically when data-surface flips paper/ink (G2), with no
+  // re-init needed. source: mermaid.js docs, theming (base theme +
+  // themeVariables); AI Architect DS G3/G9 (alias-only colour, no
+  // ad-hoc hex tables).
   var _mermaidPromise = null;
   function _ensureMermaid() {
     if (_mermaidPromise) return _mermaidPromise;
@@ -1131,33 +1138,31 @@
         var mermaid = mod.default || mod;
         mermaid.initialize({
           startOnLoad: false,
-          theme: 'dark',
+          theme: 'base',
           themeVariables: {
-            primaryColor: '#1a1a1a',
-            primaryTextColor: '#f0e6d2',
-            primaryBorderColor: '#c9a96e',
-            lineColor: '#daa520',
-            secondaryColor: '#2a2a2a',
-            secondaryTextColor: '#f0e6d2',
-            secondaryBorderColor: '#c9a96e',
-            tertiaryColor: '#0f0f0f',
-            tertiaryTextColor: '#f0e6d2',
-            tertiaryBorderColor: '#c9a96e',
-            background: '#0a0a0a',
-            mainBkg: '#1a1a1a',
-            secondBkg: '#2a2a2a',
-            // Edge label readability — opaque dark pill behind the
-            // gold text so the label never blends into a node fill.
-            edgeLabelBackground: '#0a0a0a',
+            primaryColor: 'var(--surface-chip)',
+            primaryTextColor: 'var(--text)',
+            primaryBorderColor: 'var(--border-strong)',
+            lineColor: 'var(--accent-ink)',
+            secondaryColor: 'var(--surface)',
+            secondaryTextColor: 'var(--text)',
+            secondaryBorderColor: 'var(--border-strong)',
+            tertiaryColor: 'var(--canvas)',
+            tertiaryTextColor: 'var(--text)',
+            tertiaryBorderColor: 'var(--border-strong)',
+            background: 'var(--canvas)',
+            mainBkg: 'var(--surface-chip)',
+            secondBkg: 'var(--surface)',
+            // Edge label readability — opaque canvas pill behind the
+            // accent text so the label never blends into a node fill.
+            edgeLabelBackground: 'var(--canvas)',
             // For nodes whose mermaid source forces a light fill via
             // `style X fill:#ffe4b5`, the LLM-authored diagrams need
-            // the node text to stay readable. We bump font size and
-            // weight globally and use a high-contrast text colour
-            // that works on both dark and light fills (CSS layer
-            // overrides below tighten this further).
-            fontFamily: 'system-ui, -apple-system, sans-serif',
-            fontSize: '18px',
-            nodeTextColor: '#1a1a1a',
+            // the node text to stay readable regardless of surface
+            // (CSS layer overrides below tighten this further).
+            fontFamily: 'var(--sans)',
+            fontSize: '16px',
+            nodeTextColor: 'var(--text)',
           },
           flowchart: { htmlLabels: true, curve: 'basis', useMaxWidth: false },
           sequence: { mirrorActors: false, actorMargin: 60, messageFontSize: 15 },
@@ -1172,10 +1177,13 @@
           style.textContent = [
             '.wiki-mermaid svg { font-size: 16px !important; }',
             '.wiki-mermaid .nodeLabel, .wiki-mermaid .label foreignObject div',
-            '  { color: #f0e6d2 !important; font-weight: 500; }',
+            '  { color: var(--text) !important; font-weight: 500; }',
             // Light-fill nodes (orange / pale-green custom styles) get
             // dark text for contrast. Mermaid sets these via inline
-            // style attribute; we target them with attribute selectors.
+            // style attribute on arbitrary LLM-authored diagram source —
+            // an externally supplied literal fill, not a brand colour
+            // choice — so the contrast-safety ink here is the `black`
+            // keyword (never a hex literal) rather than a DS alias.
             '.wiki-mermaid g.node[style*="fill:#ff"] .nodeLabel,',
             '.wiki-mermaid g.node[style*="fill:#dd"] .nodeLabel,',
             '.wiki-mermaid g.node[style*="fill:#ee"] .nodeLabel,',
@@ -1185,22 +1193,22 @@
             '.wiki-mermaid g.node[style*="fill:#cc"] .nodeLabel,',
             '.wiki-mermaid g.node[style*="fill:#bb"] .nodeLabel,',
             '.wiki-mermaid g.node[style*="fill:#aa"] .nodeLabel',
-            '  { color: #0a0a0a !important; font-weight: 600 !important; }',
-            // Edge labels — solid dark pill with gold text for contrast.
+            '  { color: black !important; font-weight: 600 !important; }',
+            // Edge labels — solid canvas pill with accent text for contrast.
             '.wiki-mermaid .edgeLabel, .wiki-mermaid .edgeLabel span,',
             '.wiki-mermaid .edgeLabel foreignObject div',
-            '  { background: #0a0a0a !important; color: #daa520 !important;',
+            '  { background: var(--canvas) !important; color: var(--accent-ink) !important;',
             '    padding: 2px 6px !important; border-radius: 3px !important;',
             '    font-size: 14px !important; font-weight: 500 !important; }',
             // Sequence-diagram message text + actor labels.
-            '.wiki-mermaid .messageText { fill: #daa520 !important; font-size: 14px !important; }',
-            '.wiki-mermaid .actor { stroke: #c9a96e !important; }',
+            '.wiki-mermaid .messageText { fill: var(--accent-ink) !important; font-size: 14px !important; }',
+            '.wiki-mermaid .actor { stroke: var(--border-strong) !important; }',
             '.wiki-mermaid text.actor, .wiki-mermaid .actor text',
-            '  { fill: #f0e6d2 !important; font-size: 15px !important;',
+            '  { fill: var(--text) !important; font-size: 15px !important;',
             '    font-weight: 600 !important; }',
             // Lens hint that the inline diagram is interactive.
-            '.wiki-mermaid { padding: 8px; border: 1px solid rgba(218,165,32,0.15);',
-            '  border-radius: 6px; background: rgba(10,10,10,0.4); }',
+            '.wiki-mermaid { padding: 8px; border: 1px solid var(--divider);',
+            '  border-radius: 6px; background: var(--surface); }',
           ].join('\n');
           document.head.appendChild(style);
         }
@@ -1238,8 +1246,8 @@
       btn.style.cssText = (
         'position:absolute;top:8px;right:8px;z-index:2;' +
         'width:32px;height:32px;border-radius:6px;' +
-        'border:1px solid rgba(218,165,32,0.4);' +
-        'background:rgba(20,20,20,0.85);color:#daa520;' +
+        'border:1px solid var(--border-strong);' +
+        'background:var(--surface-card);color:var(--accent-ink);' +
         'cursor:pointer;display:flex;align-items:center;' +
         'justify-content:center;font-size:16px;line-height:1;' +
         'transition:background 0.15s;'
@@ -1255,10 +1263,10 @@
         '</svg>'
       );
       btn.addEventListener('mouseenter', function() {
-        btn.style.background = 'rgba(40,40,40,0.95)';
+        btn.style.background = 'var(--surface-chip)';
       });
       btn.addEventListener('mouseleave', function() {
-        btn.style.background = 'rgba(20,20,20,0.85)';
+        btn.style.background = 'var(--surface-card)';
       });
       btn.addEventListener('click', function(ev) {
         ev.preventDefault();
@@ -1278,7 +1286,7 @@
     var overlay = document.createElement('div');
     overlay.className = 'wiki-mermaid-lens-overlay';
     overlay.style.cssText = (
-      'position:fixed;inset:0;background:rgba(0,0,0,0.92);' +
+      'position:fixed;inset:0;background:color-mix(in oklab, var(--canvas) 92%, transparent);' +
       'z-index:9999;display:none;cursor:grab;' +
       'align-items:center;justify-content:center;'
     );
@@ -1296,16 +1304,16 @@
     toolbar.className = 'wiki-mermaid-lens-toolbar';
     toolbar.style.cssText = (
       'position:absolute;top:18px;right:18px;display:flex;gap:8px;' +
-      'background:rgba(20,20,20,0.92);padding:8px 10px;border-radius:8px;' +
-      'border:1px solid rgba(218,165,32,0.3);'
+      'background:var(--surface-card);padding:8px 10px;border-radius:8px;' +
+      'border:1px solid var(--border-strong);'
     );
     function ctrlBtn(label, title, onClick) {
       var b = document.createElement('button');
       b.textContent = label;
       b.title = title;
       b.style.cssText = (
-        'background:transparent;border:1px solid rgba(218,165,32,0.4);' +
-        'color:#daa520;width:32px;height:32px;border-radius:4px;' +
+        'background:transparent;border:1px solid var(--border-strong);' +
+        'color:var(--accent-ink);width:32px;height:32px;border-radius:4px;' +
         'cursor:pointer;font-size:16px;font-family:monospace;'
       );
       b.addEventListener('click', function(ev) {
@@ -1318,8 +1326,8 @@
     var btnOut = ctrlBtn('−', 'Zoom out', function() { _lensZoom(0.8); });
     var btnReset = ctrlBtn('⟲', 'Reset zoom / pan', _lensReset);
     var btnClose = ctrlBtn('×', 'Close (Esc)', _lensClose);
-    btnClose.style.color = '#ff6b6b';
-    btnClose.style.borderColor = 'rgba(255,107,107,0.4)';
+    btnClose.style.color = 'var(--danger-ink)';
+    btnClose.style.borderColor = 'color-mix(in oklab, var(--danger-ink) 40%, transparent)';
     toolbar.appendChild(btnOut);
     toolbar.appendChild(btnIn);
     toolbar.appendChild(btnReset);
@@ -1331,7 +1339,7 @@
     hint.textContent = 'Drag to pan · scroll to zoom · Esc to close';
     hint.style.cssText = (
       'position:absolute;bottom:18px;left:50%;transform:translateX(-50%);' +
-      'color:rgba(218,165,32,0.7);font-size:12px;font-family:monospace;'
+      'color:var(--text-faint);font-size:12px;font-family:monospace;'
     );
     overlay.appendChild(hint);
 
@@ -1982,7 +1990,13 @@
 
   async function applyAcademicPasses(bodyEl, meta) {
     if (!bodyEl) return;
-    var sectionNums = meta && meta.section_numbering === true;
+    // Section numbering is a DD-06 default for every live page (serif
+    // "1. Heading" prefix). No page in the corpus ever sets
+    // `section_numbering: true` in its frontmatter — the flag was an
+    // opt-in that nothing opted into, so the pass silently never ran.
+    // Root fix: numbering is on by default; a page can still opt out
+    // with `section_numbering: false` in frontmatter.
+    var sectionNums = !(meta && meta.section_numbering === false);
 
     // 1. Section numbers
     _numberHeadings(bodyEl, sectionNums);

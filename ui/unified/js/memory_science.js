@@ -1,58 +1,22 @@
-// Cortex — Memory Science Panel
-// Renders every scientific measurement Cortex tracks per memory as a
-// compact labelled grid. Used by both the Knowledge card and the Board
-// (Kanban) card so the two views stay consistent and any new instrument
-// added to the memory table surfaces in both places at once.
+// Cortex — Memory Science components
+// Shared measurement primitives for the memory card exhibit (Knowledge +
+// Board) and the right-dock detail inspector. Renders the AI Architect
+// design-system vocabulary verbatim (aia-heat / aia-ledger / aia-chip /
+// aia-footnotes) — no invented widgets, no plain-English explainer boxes.
+//
+// Authority: AI Architect Design System / cards/data-memory-card.html
+// (spec DD-01, "the memory card") for the card-level feel/meaning/meters,
+// and da-anatomy-spec.md §2.12 (Ledger) for the detail-panel PROPERTIES.
 //
 // Conventions:
 //   * Reads fields in both snake_case (native) and camelCase (legacy
 //     alias) so the layer stays robust across schema drift.
 //   * Falls back silently when a field is absent — memories written
 //     before a given instrument existed remain renderable.
-//   * Numeric values get a tiny progress bar proportional to their
-//     canonical 0..1 range. Counters are printed raw. Timestamps are
-//     rendered as "Nd ago" / "Nh ago" / "Nm ago".
+//   * Every displayed number is the measured value, never rounded for
+//     effect (zetetic discipline, da-anatomy-spec.md §0.8).
 (function () {
   var JUG = window.JUG = window.JUG || {};
-
-  // Canonical field-descriptor list. Order here IS the display order.
-  // Each entry: { keys: [snake, camel], label, kind, range, unit }.
-  //   kind ∈ "bar"|"count"|"pct"|"flag"|"text"|"age"
-  //   range only meaningful for "bar" and "pct".
-  var FIELDS = [
-    { keys: ["heat"],                   label: "Heat",          kind: "bar",  range: [0, 1] },
-    { keys: ["heat_base", "heatBase"],  label: "Heat base",     kind: "bar",  range: [0, 1] },
-    { keys: ["importance"],             label: "Importance",    kind: "bar",  range: [0, 1] },
-    { keys: ["surprise_score", "surpriseScore"], label: "Surprise", kind: "bar", range: [0, 1] },
-    { keys: ["emotional_valence", "emotionalValence"], label: "Valence", kind: "bipolar", range: [-1, 1] },
-    { keys: ["arousal"],                label: "Arousal",       kind: "bar",  range: [0, 1] },
-    { keys: ["confidence"],             label: "Confidence",    kind: "bar",  range: [0, 1] },
-    { keys: ["plasticity"],             label: "Plasticity",    kind: "bar",  range: [0, 1] },
-    { keys: ["stability"],              label: "Stability",     kind: "bar",  range: [0, 1] },
-    { keys: ["excitability"],           label: "Excitability",  kind: "bar",  range: [0, 1] },
-    { keys: ["hippocampal_dependency", "hippocampalDependency"], label: "Hippo-dep", kind: "bar", range: [0, 1] },
-    { keys: ["encoding_strength", "encodingStrength"], label: "Encoding", kind: "bar", range: [0, 1] },
-    { keys: ["separation_index", "separationIndex"],   label: "Separation", kind: "bar", range: [0, 1] },
-    { keys: ["interference_score", "interferenceScore"], label: "Interference", kind: "bar", range: [0, 1] },
-    { keys: ["schema_match_score", "schemaMatchScore"], label: "Schema match", kind: "bar", range: [0, 1] },
-    { keys: ["access_count", "accessCount"],     label: "Access",   kind: "count" },
-    { keys: ["useful_count", "usefulCount"],     label: "Useful",   kind: "count" },
-    { keys: ["replay_count", "replayCount"],     label: "Replays",  kind: "count" },
-    { keys: ["reconsolidation_count", "reconsolidationCount"], label: "Reconsol", kind: "count" },
-    { keys: ["hours_in_stage", "hoursInStage"],  label: "In stage", kind: "count", unit: "h" },
-    { keys: ["compression_level", "compressionLevel"], label: "Compression", kind: "count" },
-    { keys: ["dominant_emotion", "dominantEmotion"],  label: "Emotion",  kind: "text" },
-    { keys: ["store_type", "storeType"],         label: "Store",    kind: "text" },
-    { keys: ["schema_id", "schemaId"],           label: "Schema",   kind: "text" },
-    { keys: ["is_protected", "isProtected"],     label: "Protected", kind: "flag" },
-    { keys: ["no_decay", "noDecay"],             label: "No-decay",  kind: "flag" },
-    { keys: ["is_stale", "isStale"],             label: "Stale",     kind: "flag" },
-    { keys: ["is_benchmark", "isBenchmark"],     label: "Benchmark", kind: "flag" },
-    { keys: ["is_global", "isGlobal"],           label: "Global",    kind: "flag" },
-    { keys: ["stage_entered_at", "stageEnteredAt"], label: "Stage age", kind: "age" },
-    { keys: ["last_accessed", "lastAccessed"],   label: "Accessed",  kind: "age" },
-    { keys: ["created_at", "createdAt"],         label: "Created",   kind: "age" },
-  ];
 
   function pick(mem, keys) {
     for (var i = 0; i < keys.length; i++) {
@@ -84,123 +48,125 @@
     return Math.round(delta / 86400 / 30) + "mo";
   }
 
-  // ── Row factories — one per kind ────────────────────────────────
+  // Drop tool-capture boilerplate tags to find the tags that carry actual
+  // meaning (schema/topic words), used as a Meaning-quote fallback.
+  function meaningfulTags(tags) {
+    return (tags || []).filter(function (t) {
+      var s = String(t).toLowerCase();
+      return s !== "auto-captured" && s.indexOf("_") !== 0
+        && s.indexOf("tool:") !== 0 && s.indexOf("project:") !== 0;
+    });
+  }
 
-  function rowShell(label) {
+  // First non-boilerplate line of the body — the shortest textual handle
+  // on what the memory is about (used by the Meaning quote).
+  function extractGist(body) {
+    if (!body) return "";
+    var lines = String(body).split(/\r?\n/);
+    for (var i = 0; i < lines.length; i++) {
+      var ln = lines[i].trim();
+      if (!ln) continue;
+      if (ln.indexOf("# Tool:") === 0) continue;
+      if (ln.indexOf("**Command:**") === 0) continue;
+      if (ln.indexOf("**File:**") === 0) continue;
+      if (ln.indexOf("**Read:**") === 0) continue;
+      if (ln.indexOf("**Output:**") === 0) continue;
+      if (ln.indexOf("```") === 0) continue;
+      if (ln.length < 8) continue;
+      return ln.length > 160 ? ln.slice(0, 160) + "…" : ln;
+    }
+    return "";
+  }
+
+  // ── aia-heat block (label + value + full-track gradient fill) ───────
+  // source: AI Architect DS components/verification/HeatBar.jsx — the
+  // ONE licensed gradient in the system (a data scale, not decoration).
+  function buildHeatBar(label, value) {
+    var v = clamp01(Number(value) || 0);
+    var wrap = document.createElement("div");
+    wrap.className = "aia-heat";
+    var meta = document.createElement("div");
+    meta.className = "aia-heat__meta";
+    var lab = document.createElement("span");
+    lab.textContent = label;
+    meta.appendChild(lab);
+    var val = document.createElement("span");
+    val.className = "aia-heat__val";
+    val.textContent = v.toFixed(3);
+    meta.appendChild(val);
+    wrap.appendChild(meta);
+    var track = document.createElement("div");
+    track.className = "aia-heat__track";
+    var fill = document.createElement("div");
+    fill.className = "aia-heat__fill";
+    fill.style.setProperty("--heat-scale", Math.max(v, 0.001));
+    fill.style.width = (v * 100).toFixed(1) + "%";
+    track.appendChild(fill);
+    wrap.appendChild(track);
+    return wrap;
+  }
+
+  // Inline bar for a ledger value slot: track+fill only, mono value at
+  // the end. Visually consistent with aia-heat but without the repeated
+  // label row (the ledger key column already carries the label).
+  function buildInlineBar(value, lo, hi, signed) {
+    var n = Number(value);
+    var pct = isFinite(n) ? clamp01((n - lo) / (hi - lo)) : 0;
+    var holder = document.createElement("span");
+    holder.className = "ms-ledger-bar";
+    var track = document.createElement("span");
+    track.className = "aia-heat__track ms-ledger-track";
+    var fill = document.createElement("span");
+    fill.className = "aia-heat__fill";
+    fill.style.setProperty("--heat-scale", Math.max(pct, 0.001));
+    fill.style.width = (pct * 100).toFixed(0) + "%";
+    track.appendChild(fill);
+    holder.appendChild(track);
+    var num = document.createElement("span");
+    num.className = "ms-ledger-val";
+    num.textContent = (signed && n > 0 ? "+" : "") + fmtNum(n);
+    holder.appendChild(num);
+    return holder;
+  }
+
+  // Fixed-order meter row (DD-01 ".meter"): label + track+fill, amber
+  // ink, no numeric readout — matches the blueprint literally (the
+  // number lives in the ledger/detail panel, not the card meter).
+  function buildMeterRow(label, value, lo, hi) {
     var row = document.createElement("div");
-    row.className = "ms-row";
+    row.className = "ms-meter";
     var k = document.createElement("span");
-    k.className = "ms-k";
+    k.className = "ms-meter-k";
     k.textContent = label;
     row.appendChild(k);
+    var track = document.createElement("span");
+    track.className = "ms-meter-track";
+    var fill = document.createElement("span");
+    fill.className = "ms-meter-fill";
+    var n = Number(value);
+    var pct = isFinite(n) ? clamp01((n - lo) / (hi - lo)) : 0;
+    fill.style.width = (pct * 100).toFixed(0) + "%";
+    track.appendChild(fill);
+    row.appendChild(track);
     return row;
   }
 
-  function appendBarRow(wrap, label, v, range) {
-    if (v === undefined) return;
-    var n = Number(v);
-    if (!isFinite(n)) return;
-    var lo = range[0], hi = range[1];
-    var pct = hi === lo ? 0 : clamp01((n - lo) / (hi - lo));
-    var row = rowShell(label);
-    var bar = document.createElement("span");
-    bar.className = "ms-bar";
-    var fill = document.createElement("span");
-    fill.className = "ms-bar-fill";
-    fill.style.width = (pct * 100).toFixed(0) + "%";
-    bar.appendChild(fill);
-    row.appendChild(bar);
-    var val = document.createElement("span");
-    val.className = "ms-v ms-v-num";
-    val.textContent = fmtNum(n);
-    row.appendChild(val);
+  function appendKv(wrap, k, v) {
+    var row = document.createElement("div");
+    row.className = "ms-kv";
+    var kEl = document.createElement("span");
+    kEl.textContent = k;
+    row.appendChild(kEl);
+    var vEl = document.createElement("b");
+    vEl.textContent = v;
+    row.appendChild(vEl);
     wrap.appendChild(row);
   }
 
-  function appendBipolarRow(wrap, label, v, range) {
-    if (v === undefined) return;
-    var n = Number(v);
-    if (!isFinite(n)) return;
-    var pct = clamp01((n - range[0]) / (range[1] - range[0]));  // 0..1 with 0.5 = neutral
-    var row = rowShell(label);
-    var bar = document.createElement("span");
-    bar.className = "ms-bar ms-bar-bipolar";
-    var marker = document.createElement("span");
-    marker.className = "ms-bar-marker";
-    marker.style.left = (pct * 100).toFixed(0) + "%";
-    bar.appendChild(marker);
-    row.appendChild(bar);
-    var val = document.createElement("span");
-    val.className = "ms-v ms-v-num";
-    val.textContent = (n > 0 ? "+" : "") + fmtNum(n);
-    row.appendChild(val);
-    wrap.appendChild(row);
-  }
-
-  function appendCountRow(wrap, label, v, unit) {
-    if (v === undefined || v === null) return;
-    var n = Number(v);
-    if (!isFinite(n) || n === 0) return;  // drop zeros
-    var row = rowShell(label);
-    var val = document.createElement("span");
-    val.className = "ms-v ms-v-count";
-    val.textContent = fmtNum(n) + (unit || "");
-    row.appendChild(val);
-    wrap.appendChild(row);
-  }
-
-  function appendTextRow(wrap, label, v) {
-    if (v === undefined || v === null || v === "") return;
-    var s = String(v);
-    if (!s.trim()) return;
-    var row = rowShell(label);
-    var val = document.createElement("span");
-    val.className = "ms-v ms-v-text";
-    val.textContent = s;
-    row.appendChild(val);
-    wrap.appendChild(row);
-  }
-
-  function appendFlagRow(wrap, label, v) {
-    if (!v) return;  // only render when true
-    var row = rowShell(label);
-    var val = document.createElement("span");
-    val.className = "ms-v ms-v-flag";
-    val.textContent = "✓";
-    row.appendChild(val);
-    wrap.appendChild(row);
-  }
-
-  function appendAgeRow(wrap, label, v) {
-    var age = fmtAge(v);
-    if (!age) return;
-    var row = rowShell(label);
-    var val = document.createElement("span");
-    val.className = "ms-v ms-v-age";
-    val.textContent = age + " ago";
-    row.appendChild(val);
-    wrap.appendChild(row);
-  }
-
-  // ── Emotion + Meaning prominent chips ───────────────────────────
-  // These two dimensions are the first thing a reader cares about when
-  // scanning a memory; burying them in the measurement grid hides the
-  // signal. We surface them as separate chips above the grid.
-
-  // The Cortex backend can only emit these six dominant_emotion values
-  // (pg_schema.py dominant_emotion CHECK). Colors below match that closed set.
-  var EMOTION_COLORS = {
-    urgency:      "#EF4444",  // red
-    frustration:  "#F59E0B",  // amber
-    satisfaction: "#10B981",  // emerald
-    discovery:    "#60A5FA",  // sky
-    confusion:    "#A78BFA",  // violet
-    neutral:      "#9CA3AF",  // slate
-    // Reserved / not currently emitted by Cortex (kept for forward-compat):
-    // joy "#FCD34D", fear "#F472B6", surprise "#06B6D4",
-    // anger "#DC2626", sadness "#3B82F6", disgust "#84CC16"
-  };
-
+  // ── Feeling line — dot + emotion word + signed valence + arousal,
+  // mono, never colour-only (da-anatomy-spec.md §4: "Feeling" row).
+  // The dot is chrome-neutral: emotion category is not itself a P-01
+  // data channel here (heat/stage/valence are); it is a mono word.
   function buildEmotionChip(mem) {
     var emo = pick(mem, ["dominant_emotion", "dominantEmotion", "emotion"]);
     var valence = pick(mem, ["emotional_valence", "emotionalValence"]);
@@ -210,429 +176,173 @@
     var chip = document.createElement("div");
     chip.className = "ms-emotion";
 
-    var label = String(emo || "neutral").toLowerCase();
-    var color = EMOTION_COLORS[label] || "#9CA3AF";
-
     var dot = document.createElement("span");
     dot.className = "ms-emotion-dot";
-    dot.style.background = color;
     chip.appendChild(dot);
 
-    var name = document.createElement("span");
-    name.className = "ms-emotion-name";
-    name.textContent = label;
-    name.style.color = color;
-    chip.appendChild(name);
-
+    var parts = [String(emo || "neutral").toLowerCase()];
     if (valence !== undefined && valence !== null) {
       var v = Number(valence);
-      if (isFinite(v)) {
-        var val = document.createElement("span");
-        val.className = "ms-emotion-val";
-        val.textContent = (v > 0 ? "↑" : v < 0 ? "↓" : "◦")
-          + " " + fmtNum(Math.abs(v));
-        val.title = "valence";
-        chip.appendChild(val);
-      }
+      if (isFinite(v)) parts.push((v >= 0 ? "↑" : "↓") + " " + fmtNum(Math.abs(v)));
     }
     if (arousal !== undefined && arousal !== null) {
-      var ar = Number(arousal);
-      if (isFinite(ar)) {
-        var arEl = document.createElement("span");
-        arEl.className = "ms-emotion-arousal";
-        arEl.textContent = "⚡ " + fmtNum(ar);
-        arEl.title = "arousal";
-        chip.appendChild(arEl);
-      }
+      var a = Number(arousal);
+      if (isFinite(a)) parts.push("↑ " + fmtNum(a));
     }
+    var text = document.createElement("span");
+    text.className = "ms-emotion-text";
+    text.textContent = parts.join(" · ");
+    chip.appendChild(text);
     return chip;
   }
 
-  // Build a "Meaning" section — the semantic layer: what this memory
-  // MEANS relative to the system's schemas, stores, and tags. Distinct
-  // from the raw content preview above it.
+  // ── Meaning — kind + verbatim excerpt in one italic mono quote line
+  // (da-anatomy-spec.md §4 / DD-01 ledger row "Meaning"). No icon grid,
+  // no plain-English gloss — the quote IS the content, verbatim.
   function buildMeaningSection(mem) {
     var store = pick(mem, ["store_type", "storeType"]);
-    var schemaId = pick(mem, ["schema_id", "schemaId"]);
-    var schemaMatch = pick(mem, ["schema_match_score", "schemaMatchScore"]);
-    var tags = mem.tags || [];
-    var body = mem.body || mem.content || "";
+    var body = mem.body || mem.content || mem.label || "";
+    var gist = extractGist(body);
+    var fallback = meaningfulTags(mem.tags)[0];
+    var excerpt = gist || fallback;
+    if (!excerpt) return null;
 
-    var hasAny = store || schemaId
-      || (schemaMatch !== undefined && schemaMatch !== null && Number(schemaMatch) > 0)
-      || (tags && tags.length);
-    if (!hasAny) return null;
+    var kind = store === "semantic" ? "Knowledge" : "Experience";
 
     var section = document.createElement("div");
     section.className = "ms-meaning";
-
     var header = document.createElement("div");
     header.className = "ms-meaning-header";
     header.textContent = "Meaning";
     section.appendChild(header);
-
-    var grid = document.createElement("div");
-    grid.className = "ms-meaning-grid";
-
-    // Store type — episodic (experience) vs semantic (knowledge).
-    if (store) {
-      var storeRow = document.createElement("div");
-      storeRow.className = "ms-meaning-row";
-      var storeIcon = document.createElement("span");
-      storeIcon.className = "ms-meaning-icon ms-meaning-store-" + String(store).toLowerCase();
-      storeIcon.textContent = store === "semantic" ? "◆" : "●";
-      var storeLabel = document.createElement("span");
-      storeLabel.className = "ms-meaning-label";
-      storeLabel.textContent = store === "semantic" ? "Knowledge (semantic)" : "Experience (episodic)";
-      storeRow.appendChild(storeIcon);
-      storeRow.appendChild(storeLabel);
-      grid.appendChild(storeRow);
-    }
-
-    // Schema alignment.
-    if (schemaId) {
-      var schemaRow = document.createElement("div");
-      schemaRow.className = "ms-meaning-row";
-      var icon = document.createElement("span");
-      icon.className = "ms-meaning-icon ms-meaning-schema";
-      icon.textContent = "⌬";
-      var lbl = document.createElement("span");
-      lbl.className = "ms-meaning-label";
-      var match = Number(schemaMatch || 0);
-      lbl.textContent = "Schema · " + schemaId
-        + (match > 0 ? " · " + Math.round(match * 100) + "% match" : "");
-      schemaRow.appendChild(icon);
-      schemaRow.appendChild(lbl);
-      grid.appendChild(schemaRow);
-    }
-
-    // Tag-derived meaning categories. Filter to the meaningful ones
-    // (drop auto-captured noise tags).
-    var meaningTags = (tags || []).filter(function (t) {
-      var s = String(t).toLowerCase();
-      return s !== "auto-captured"
-        && !s.startsWith("_")
-        && !s.startsWith("tool:")
-        && !s.startsWith("project:");
-    });
-    if (meaningTags.length) {
-      var tagRow = document.createElement("div");
-      tagRow.className = "ms-meaning-row ms-meaning-tags-row";
-      var tIcon = document.createElement("span");
-      tIcon.className = "ms-meaning-icon ms-meaning-tags";
-      tIcon.textContent = "#";
-      tagRow.appendChild(tIcon);
-      var tagsWrap = document.createElement("span");
-      tagsWrap.className = "ms-meaning-tags-wrap";
-      meaningTags.slice(0, 8).forEach(function (t) {
-        var chip = document.createElement("span");
-        chip.className = "ms-meaning-tag";
-        chip.textContent = String(t);
-        tagsWrap.appendChild(chip);
-      });
-      tagRow.appendChild(tagsWrap);
-      grid.appendChild(tagRow);
-    }
-
-    // Gist: first meaningful line of the body, stripped of tool-capture
-    // boilerplate. This gives the reader a "what it meant" anchor.
-    var gist = extractGist(body);
-    if (gist) {
-      var gistRow = document.createElement("div");
-      gistRow.className = "ms-meaning-row ms-meaning-gist-row";
-      var gIcon = document.createElement("span");
-      gIcon.className = "ms-meaning-icon ms-meaning-gist";
-      gIcon.textContent = "“";
-      var gText = document.createElement("span");
-      gText.className = "ms-meaning-gist-text";
-      gText.textContent = gist;
-      gistRow.appendChild(gIcon);
-      gistRow.appendChild(gText);
-      grid.appendChild(gistRow);
-    }
-
-    section.appendChild(grid);
+    var quote = document.createElement("div");
+    quote.className = "ms-meaning-quote";
+    quote.textContent = "“ " + kind + " · " + excerpt + " ”";
+    section.appendChild(quote);
     return section;
   }
 
-  // Extract the first non-boilerplate line of a memory body — the
-  // shortest textual handle on what the memory is about.
-  function extractGist(body) {
-    if (!body) return "";
-    var lines = String(body).split(/\r?\n/);
-    for (var i = 0; i < lines.length; i++) {
-      var ln = lines[i].trim();
-      if (!ln) continue;
-      // Drop the standard post_tool_capture prefixes.
-      if (ln.startsWith("# Tool:")) continue;
-      if (ln.startsWith("**Command:**")) continue;
-      if (ln.startsWith("**File:**")) continue;
-      if (ln.startsWith("**Read:**")) continue;
-      if (ln.startsWith("**Output:**")) continue;
-      if (ln.startsWith("```")) continue;
-      if (ln.length < 8) continue;
-      // Truncate for card display.
-      return ln.length > 240 ? ln.slice(0, 240) + "…" : ln;
-    }
-    return "";
-  }
-
-  // ── Public API ──────────────────────────────────────────────────
-
-  // Build a full panel — every field present on `mem` gets rendered.
-  // The caller supplies `variant`:
-  //   "full"    — every row, no truncation           (Knowledge card)
-  //   "compact" — drop bipolar/text/age + less common fields (Board card)
+  // ── Card-level measurement block ────────────────────────────────────
+  //   "compact" (Board kb-card)   — single Heat aia-heat footer (the
+  //                                 SATURATION exhibit convention already
+  //                                 verified on the Knowledge card).
+  //   "full"    (Knowledge kv-card) — DD-01's four fixed meters (Heat /
+  //                                 Importance / Valence / Arousal) plus
+  //                                 the three provenance rows (Emotion·
+  //                                 Store, Accessed, Created).
   function buildSciencePanel(mem, variant) {
     if (!mem) return null;
-    var wrap = document.createElement("div");
-    wrap.className = "ms-panel" + (variant === "compact" ? " ms-panel-compact" : "");
+    var heat = pick(mem, ["heat"]);
 
-    var limit = variant === "compact" ? 6 : FIELDS.length;
-    var printed = 0;
-    for (var i = 0; i < FIELDS.length && printed < limit; i++) {
-      var f = FIELDS[i];
-      var v = pick(mem, f.keys);
-      if (v === undefined || v === null) continue;
-      // In compact mode, hide text/age/flag-unless-protected to keep the
-      // card dense. Always keep bars + counts which carry the signal.
-      if (variant === "compact") {
-        if (f.kind === "text" || f.kind === "age") continue;
-        if (f.kind === "flag" && f.label !== "Protected" && f.label !== "No-decay") continue;
-      }
-      var before = wrap.childElementCount;
-      if (f.kind === "bar")      appendBarRow(wrap, f.label, v, f.range);
-      else if (f.kind === "bipolar") appendBipolarRow(wrap, f.label, v, f.range);
-      else if (f.kind === "count")   appendCountRow(wrap, f.label, v, f.unit);
-      else if (f.kind === "pct")     appendBarRow(wrap, f.label, v, [0, 1]);
-      else if (f.kind === "text")    appendTextRow(wrap, f.label, v);
-      else if (f.kind === "flag")    appendFlagRow(wrap, f.label, v);
-      else if (f.kind === "age")     appendAgeRow(wrap, f.label, v);
-      if (wrap.childElementCount > before) printed++;
+    if (variant === "compact") {
+      if (heat === undefined || heat === null) return null;
+      var footer = document.createElement("div");
+      footer.className = "ms-heat-footer";
+      footer.appendChild(buildHeatBar("Heat", heat));
+      return footer;
     }
+
+    var wrap = document.createElement("div");
+    wrap.className = "ms-panel-full";
+
+    var meters = document.createElement("div");
+    meters.className = "ms-meters";
+    meters.appendChild(buildMeterRow("Heat", heat, 0, 1));
+    meters.appendChild(buildMeterRow("Importance", pick(mem, ["importance"]), 0, 1));
+    meters.appendChild(buildMeterRow("Valence", pick(mem, ["emotional_valence", "emotionalValence"]), -1, 1));
+    meters.appendChild(buildMeterRow("Arousal", pick(mem, ["arousal"]), 0, 1));
+    wrap.appendChild(meters);
+
+    var prov = document.createElement("div");
+    prov.className = "ms-provenance";
+    var store = pick(mem, ["store_type", "storeType"]);
+    var emo = pick(mem, ["dominant_emotion", "dominantEmotion"]) || "neutral";
+    var storeLabel = store === "semantic" ? "Semantic" : "Episodic";
+    appendKv(prov, "Emotion", emo + " · " + storeLabel);
+    var accessedAge = fmtAge(pick(mem, ["last_accessed", "lastAccessed"]));
+    if (accessedAge) appendKv(prov, "Accessed", accessedAge + " ago");
+    var createdAge = fmtAge(pick(mem, ["created_at", "createdAt"]));
+    if (createdAge) appendKv(prov, "Created", createdAge + " ago");
+    if (prov.childElementCount) wrap.appendChild(prov);
+
     return wrap.childElementCount ? wrap : null;
   }
 
-  // ── Explained panel (for detail modals) ─────────────────────────
-  // Same fields as buildSciencePanel, but each row gets a plain-English
-  // one-sentence explanation so a non-technical reader can grasp the
-  // number without a neuroscience glossary. Designed for the detail
-  // modal (openExpanded in knowledge.js), where real estate is generous.
-  //
-  // Explanations intentionally avoid jargon: no "LTP", no "synaptic",
-  // no Greek letters. They describe the PRACTICAL effect of the value.
-
-  var EXPLAIN = {
-    heat: "How active this memory is right now. Hot means it was used recently; Cold means it's drifting toward being forgotten.",
-    heat_base: "The underlying activity level before today's decay is applied. Think of it as the memory's baseline temperature.",
-    importance: "How much Cortex judges this memory matters. High importance means keep it forever; low means it's disposable.",
-    surprise_score: "How unexpected this memory was when it arrived. Surprises stick in the mind better than routine events.",
-    emotional_valence: "The emotional tone of the memory. Positive feelings score above zero, negative below, neutral at the midline.",
-    arousal: "How intensely emotional this memory is, regardless of direction. Urgent or vivid events score high.",
-    confidence: "How certain Cortex is about what this memory says. Low confidence means the content may be partly speculation.",
-    plasticity: "How easily this memory can still change. Fresh memories are plastic; old well-worn ones stiffen into final shape.",
-    stability: "How resistant this memory is to being overwritten or forgotten. Stable memories survive competing information.",
-    excitability: "How easily this memory gets pulled into related thinking. High excitability means it primes nearby memories.",
-    hippocampal_dependency: "How much this memory still depends on fast, fragile short-term storage. It drops toward zero as the memory moves into permanent storage.",
-    encoding_strength: "How cleanly the memory was written down the first time. Weak encoding produces blurry or incomplete recall.",
-    separation_index: "How distinct this memory is from its neighbours. Well-separated memories don't blur into each other.",
-    interference_score: "How much nearby memories are competing with this one. High interference makes recall harder.",
-    schema_match_score: "How well this memory fits an existing mental structure. Higher match means easier to integrate with what's already known.",
-    access_count: "How many times you've pulled this memory up. Each access reinforces it a little.",
-    useful_count: "How many times you confirmed this memory was useful when it came back. Direct feedback that keeps it alive.",
-    replay_count: "How many sleep-like replay cycles have rehearsed this memory. Replay is how the system moves it from short-term to long-term storage.",
-    reconsolidation_count: "How many times this memory has been modified on retrieval. Every recall is a chance to update or correct it.",
-    hours_in_stage: "How long the memory has sat in its current consolidation stage. Long stays can indicate it's stuck.",
-    compression_level: "How much the original content has been summarised into a gist. Zero means full original text.",
-    dominant_emotion: "Which emotional category best describes the content: urgency, frustration, satisfaction, discovery, confusion, or neutral.",
-    store_type: "Episodic = a specific experience (what happened). Semantic = extracted general knowledge (what it means).",
-    schema_id: "The name of the knowledge structure this memory has been slotted into.",
-    is_protected: "Marked as must-keep. The decay and eviction processes skip over this memory.",
-    no_decay: "Exempt from the normal cooling process. Usually used for benchmark fixtures or explicit anchors.",
-    is_stale: "Flagged as outdated. The content no longer matches reality and should be refreshed or retired.",
-    is_benchmark: "Loaded as part of an evaluation test set, not from everyday work.",
-    is_global: "Applies across every project, not just one domain. Cortex carries it everywhere.",
-    stage_entered_at: "When the memory most recently moved into its current consolidation stage.",
-    last_accessed: "The last time this memory was recalled or referenced.",
-    created_at: "When Cortex first wrote this memory down.",
-    stage: "Where this memory sits in the consolidation pipeline: New, Growing, Strong, Stable, or Updating.",
-  };
-
-  // Short human label for each field — matches EXPLAIN keys.
-  var FRIENDLY_LABEL = {
-    heat: "Activity (heat)",
-    heat_base: "Baseline activity",
-    importance: "Importance",
-    surprise_score: "Surprise",
-    emotional_valence: "Emotional tone",
-    arousal: "Emotional intensity",
-    confidence: "Confidence",
-    plasticity: "Plasticity",
-    stability: "Stability",
-    excitability: "Excitability",
-    hippocampal_dependency: "Short-term dependency",
-    encoding_strength: "Encoding strength",
-    separation_index: "Distinctness",
-    interference_score: "Interference",
-    schema_match_score: "Schema match",
-    access_count: "Times recalled",
-    useful_count: "Times useful",
-    replay_count: "Sleep replays",
-    reconsolidation_count: "Updates on recall",
-    hours_in_stage: "Hours in current stage",
-    compression_level: "Compression level",
-    dominant_emotion: "Dominant emotion",
-    store_type: "Memory store",
-    schema_id: "Knowledge schema",
-    is_protected: "Protected",
-    no_decay: "Exempt from decay",
-    is_stale: "Marked stale",
-    is_benchmark: "Benchmark fixture",
-    is_global: "Global (all projects)",
-    stage_entered_at: "Entered current stage",
-    last_accessed: "Last accessed",
-    created_at: "Created",
-    stage: "Consolidation stage",
-  };
-
+  // ── Detail-panel PROPERTIES ledger ──────────────────────────────────
+  // Replaces the old plain-English "Scientific measurements" explainer
+  // boxes. Ruled ledger (aia-ledger), continuous metrics get an inline
+  // HeatBar-style fill + exact mono value; discrete fields are plain
+  // mono/text. TAGS render as outline chips; an honest footnote states
+  // capture provenance when the memory is auto-captured.
   function buildExplainedPanel(mem) {
     if (!mem) return null;
-    var wrap = document.createElement("div");
-    wrap.className = "ms-explain";
 
-    var header = document.createElement("div");
-    header.className = "ms-explain-header";
-    header.textContent = "Scientific measurements";
-    wrap.appendChild(header);
+    var stage = mem.stage || mem.consolidation_stage || mem.consolidationStage;
+    var rows = [];
+    if (stage) rows.push({ k: "Stage", v: String(stage) });
+    var heat = pick(mem, ["heat"]);
+    if (heat != null) rows.push({ k: "Heat", bar: true, v: heat, lo: 0, hi: 1 });
+    var imp = pick(mem, ["importance"]);
+    if (imp != null) rows.push({ k: "Importance", bar: true, v: imp, lo: 0, hi: 1 });
+    var val = pick(mem, ["emotional_valence", "emotionalValence"]);
+    if (val != null) rows.push({ k: "Valence", bar: true, v: val, lo: -1, hi: 1, signed: true });
+    var aro = pick(mem, ["arousal"]);
+    if (aro != null) rows.push({ k: "Arousal", bar: true, v: aro, lo: 0, hi: 1 });
+    var emo = pick(mem, ["dominant_emotion", "dominantEmotion"]);
+    if (emo) rows.push({ k: "Emotion", v: String(emo) });
+    var created = fmtAge(pick(mem, ["created_at", "createdAt"]));
+    if (created) rows.push({ k: "Created", v: created + " ago" });
+    var accessed = fmtAge(pick(mem, ["last_accessed", "lastAccessed"]));
+    if (accessed) rows.push({ k: "Accessed", v: accessed + " ago" });
+    if (!rows.length) return null;
 
-    var subheader = document.createElement("div");
-    subheader.className = "ms-explain-subheader";
-    subheader.textContent =
-      "Every number Cortex tracks about this memory, with plain-language explanations.";
-    wrap.appendChild(subheader);
+    var container = document.createElement("div");
+    container.className = "ms-properties-wrap";
 
-    // Include `stage` as an explicit item (not in FIELDS).
-    var entries = [];
-    if (mem.stage || mem.consolidation_stage || mem.consolidationStage) {
-      entries.push({
-        snake: "stage",
-        label: FRIENDLY_LABEL.stage,
-        explain: EXPLAIN.stage,
-        kind: "text",
-        value: mem.stage || mem.consolidation_stage || mem.consolidationStage,
-      });
-    }
-    for (var i = 0; i < FIELDS.length; i++) {
-      var f = FIELDS[i];
-      var v = pick(mem, f.keys);
-      if (v === undefined || v === null || v === "") continue;
-      if (f.kind === "flag" && !v) continue;
-      // Don't bother showing zero-value counters.
-      if (f.kind === "count" && Number(v) === 0) continue;
-      var snake = f.keys[0];
-      entries.push({
-        snake: snake,
-        label: FRIENDLY_LABEL[snake] || f.label,
-        explain: EXPLAIN[snake] || "",
-        kind: f.kind,
-        range: f.range,
-        unit: f.unit,
-        value: v,
-      });
-    }
-
-    var list = document.createElement("div");
-    list.className = "ms-explain-list";
-
-    entries.forEach(function (e) {
+    var ledger = document.createElement("div");
+    ledger.className = "aia-ledger ms-properties";
+    rows.forEach(function (r) {
       var row = document.createElement("div");
-      row.className = "ms-explain-row";
-
-      var head = document.createElement("div");
-      head.className = "ms-explain-row-head";
-
-      var label = document.createElement("span");
-      label.className = "ms-explain-label";
-      label.textContent = e.label;
-      head.appendChild(label);
-
-      var valEl = document.createElement("span");
-      valEl.className = "ms-explain-value";
-      valEl.appendChild(buildValueRepresentation(e));
-      head.appendChild(valEl);
-
-      row.appendChild(head);
-
-      if (e.explain) {
-        var note = document.createElement("div");
-        note.className = "ms-explain-note";
-        note.textContent = e.explain;
-        row.appendChild(note);
-      }
-      list.appendChild(row);
+      row.className = "aia-ledger__row";
+      var k = document.createElement("span");
+      k.className = "aia-ledger__k";
+      k.textContent = r.k;
+      row.appendChild(k);
+      var v = document.createElement("span");
+      v.className = "aia-ledger__v";
+      if (r.bar) v.appendChild(buildInlineBar(r.v, r.lo, r.hi, r.signed));
+      else v.textContent = r.v;
+      row.appendChild(v);
+      ledger.appendChild(row);
     });
+    container.appendChild(ledger);
 
-    wrap.appendChild(list);
-    return wrap;
-  }
-
-  function buildValueRepresentation(e) {
-    var frag = document.createElement("span");
-    frag.className = "ms-explain-value-inner";
-    var v = e.value;
-    if (e.kind === "bar") {
-      var lo = (e.range || [0, 1])[0], hi = (e.range || [0, 1])[1];
-      var n = Number(v);
-      var pct = hi === lo ? 0 : clamp01((n - lo) / (hi - lo));
-      var bar = document.createElement("span");
-      bar.className = "ms-bar ms-explain-bar";
-      var fill = document.createElement("span");
-      fill.className = "ms-bar-fill";
-      fill.style.width = (pct * 100).toFixed(0) + "%";
-      bar.appendChild(fill);
-      frag.appendChild(bar);
-      var num = document.createElement("span");
-      num.className = "ms-v ms-v-num";
-      num.textContent = fmtNum(n);
-      frag.appendChild(num);
-    } else if (e.kind === "bipolar") {
-      var lo2 = (e.range || [-1, 1])[0], hi2 = (e.range || [-1, 1])[1];
-      var n2 = Number(v);
-      var pct2 = clamp01((n2 - lo2) / (hi2 - lo2));
-      var bar2 = document.createElement("span");
-      bar2.className = "ms-bar ms-bar-bipolar ms-explain-bar";
-      var marker = document.createElement("span");
-      marker.className = "ms-bar-marker";
-      marker.style.left = (pct2 * 100).toFixed(0) + "%";
-      bar2.appendChild(marker);
-      frag.appendChild(bar2);
-      var num2 = document.createElement("span");
-      num2.className = "ms-v ms-v-num";
-      num2.textContent = (n2 > 0 ? "+" : "") + fmtNum(n2);
-      frag.appendChild(num2);
-    } else if (e.kind === "count") {
-      var count = document.createElement("span");
-      count.className = "ms-v ms-v-count";
-      count.textContent = fmtNum(Number(v)) + (e.unit || "");
-      frag.appendChild(count);
-    } else if (e.kind === "flag") {
-      var flag = document.createElement("span");
-      flag.className = "ms-v ms-v-flag";
-      flag.textContent = "Yes";
-      frag.appendChild(flag);
-    } else if (e.kind === "age") {
-      var age = fmtAge(v);
-      var at = document.createElement("span");
-      at.className = "ms-v ms-v-age";
-      at.textContent = age ? age + " ago" : String(v);
-      frag.appendChild(at);
-    } else {
-      var t = document.createElement("span");
-      t.className = "ms-v ms-v-text";
-      t.textContent = String(v);
-      frag.appendChild(t);
+    var tags = mem.tags || [];
+    if (tags.length) {
+      var tagsWrap = document.createElement("div");
+      tagsWrap.className = "ms-tags";
+      tags.slice(0, 8).forEach(function (t) {
+        var chip = document.createElement("span");
+        chip.className = "aia-chip ms-tag-chip";
+        chip.textContent = String(t);
+        tagsWrap.appendChild(chip);
+      });
+      container.appendChild(tagsWrap);
     }
-    return frag;
+
+    var isAutoCaptured = tags.some(function (t) { return String(t).toLowerCase() === "auto-captured"; });
+    if (isAutoCaptured) {
+      var toolTag = tags.filter(function (t) { return String(t).toLowerCase().indexOf("tool:") === 0; })[0];
+      var fn = document.createElement("div");
+      fn.className = "aia-footnotes";
+      var item = document.createElement("div");
+      item.className = "aia-footnotes__item";
+      item.textContent = "· auto-captured" + (toolTag ? " " + toolTag : "");
+      fn.appendChild(item);
+      container.appendChild(fn);
+    }
+
+    return container;
   }
 
   JUG._memSci = {
@@ -640,9 +350,5 @@
     buildEmotionChip: buildEmotionChip,
     buildMeaningSection: buildMeaningSection,
     buildExplainedPanel: buildExplainedPanel,
-    FIELDS: FIELDS,
-    EMOTION_COLORS: EMOTION_COLORS,
-    EXPLAIN: EXPLAIN,
-    FRIENDLY_LABEL: FRIENDLY_LABEL,
   };
 })();

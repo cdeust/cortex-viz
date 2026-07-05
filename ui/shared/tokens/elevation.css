@@ -1,0 +1,43 @@
+/* =============================================================================
+   AI Architect — SHAPE, ELEVATION & MOTION
+   Corners are small and technical (4–10px) — this is an instrument, not a
+   consumer app. Elevation is carried by hairline borders and quiet shadow,
+   never by heavy drop-shadows or glow. Motion is short and eased; the accent
+   "reactor dot" is the only thing that loops.
+   ============================================================================= */
+
+:root {
+  /* ── Radii ────────────────────────────────────────────────────────────── */
+  --radius-xs:  3px;    /* inputs, small chips            */
+  --radius-sm:  4px;    /* buttons, tabs                  */
+  --radius-md:  6px;    /* cards, panels, selects         */
+  --radius-lg:  10px;   /* large surfaces, dialogs        */
+  --radius-pill:999px;  /* filter chips, badges           */
+
+  /* ── Borders ──────────────────────────────────────────────────────────── */
+  --border-width: 1px;
+  --border-hair:  1px;
+
+  /* ── Elevation — quiet. Shadows are for lifted surfaces only. ─────────── */
+  --shadow-none: none;
+  --shadow-sm:   0 1px 2px oklch(0% 0 0 / 0.30);
+  --shadow-md:   0 6px 18px oklch(0% 0 0 / 0.34);
+  --shadow-lg:   0 18px 48px oklch(0% 0 0 / 0.44);
+  /* Focus is a soft accent halo, not a hard outline */
+  --shadow-focus:0 0 0 2px var(--accent-soft);
+  /* The reactor-dot / live-indicator glow */
+  --glow-accent: 0 0 8px var(--accent-glow);
+  --glow-ok:     0 0 6px oklch(76% 0.13 155 / 0.5);
+
+  /* ── Motion ───────────────────────────────────────────────────────────── */
+  --ease:        cubic-bezier(.2,.7,.1,1); /* @kind other */
+  --ease-panel:  cubic-bezier(.16,1,.3,1); /* @kind other */
+  --dur-fast:    140ms; /* @kind other */
+  --dur-base:    200ms; /* @kind other */
+  --dur-panel:   300ms; /* @kind other */
+  --dur-slow:    450ms; /* @kind other */
+}
+
+/* The one looping animation in the system — the "live" reactor dot. */
+@keyframes dot-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes spin { to { transform: rotate(360deg); } }

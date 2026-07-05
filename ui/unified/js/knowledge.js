@@ -42,10 +42,12 @@
     reconsolidating: { label: 'Updating', cls: 'kv-badge-updating' },
   };
 
+  // Emotion inks — DS data tokens (tokens/colors.css --emo-*); the paper
+  // surface remaps them to deep re-inked variants via tokens/surfaces.css.
   var EMO_COLORS = {
-    urgency: '#ff3366', frustration: '#ef4444',
-    satisfaction: '#22c55e', discovery: '#f59e0b',
-    confusion: '#8b5cf6',
+    urgency: 'var(--emo-urgent)', frustration: 'var(--emo-frustr)',
+    satisfaction: 'var(--emo-satisf)', discovery: 'var(--emo-discov)',
+    confusion: 'var(--emo-conflct)',
   };
 
   // ── Title extraction ──
@@ -267,9 +269,9 @@
     container.appendChild(searchRow);
 
     // Filter chip row (server-side facets). Rebuilt once facets load.
+    // Layout + colour live in knowledge.css (.kv-filter-row) — paper chips.
     var filterRow = el('div', 'kv-filter-row');
     filterRow.id = 'kv-filter-row';
-    filterRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:0 14px 10px;font-size:11px';
     container.appendChild(filterRow);
     _refreshFilterRow();
 
@@ -285,14 +287,14 @@
     grid.id = 'kv-grid';
     container.appendChild(grid);
 
+    // Styling lives in knowledge.css (.kv-load-sentinel / .kv-load-more)
+    // — mono micro-caps status + DS secondary button on paper.
     var sentinel = el('div', 'kv-load-sentinel');
     sentinel.id = 'kv-load-sentinel';
-    sentinel.style.cssText = 'min-height:60px;display:flex;align-items:center;justify-content:center;gap:12px;color:#7a8e9c;font-size:11px;letter-spacing:1px;text-transform:uppercase';
     var sentinelText = el('span'); sentinelText.id = 'kv-load-text'; sentinelText.textContent = 'Loading more memories…';
     sentinel.appendChild(sentinelText);
     var loadMoreBtn = el('button', 'kv-load-more');
     loadMoreBtn.id = 'kv-load-more';
-    loadMoreBtn.style.cssText = 'background:rgba(80,210,235,0.15);border:1px solid rgba(120,200,220,0.4);color:#80d2e0;padding:6px 14px;border-radius:3px;cursor:pointer;font:inherit;letter-spacing:1.2px';
     loadMoreBtn.textContent = 'Load more';
     loadMoreBtn.addEventListener('click', function(){
       scrolledSinceFetch = true;   // explicit user intent
@@ -322,9 +324,9 @@
     var bar = document.getElementById('kv-domain-bar');
     if (!bar) return;
     bar.innerHTML = '';
-    bar.appendChild(domainPill('All' + (facets ? ' (' + facets.total + ')' : ''), 'all'));
+    bar.appendChild(domainPill('All', 'all', false, facets ? facets.total : null));
     if (!facets || facets.global > 0) {
-      bar.appendChild(domainPill('Global' + (facets ? ' (' + facets.global + ')' : ''), 'global', true));
+      bar.appendChild(domainPill('Global', 'global', true, facets ? facets.global : null));
     }
     // Server-known domains beat the accumulated set — even if you've
     // only paged through 50 of 179k memories, every domain pill is
@@ -335,7 +337,7 @@
           return { name: name, count: domainsSeen[name] };
         });
     serverDomains.forEach(function(d) {
-      bar.appendChild(domainPill(shortDomain(d.name) + ' (' + d.count + ')', d.name));
+      bar.appendChild(domainPill(shortDomain(d.name), d.name, false, d.count));
     });
   }
 
@@ -345,8 +347,8 @@
     if (!row) return;
     row.innerHTML = '';
 
-    var label = el('span'); label.textContent = 'Filter:';
-    label.style.cssText = 'color:#7a8e9c;letter-spacing:1px;text-transform:uppercase;font-size:9px;margin-right:4px';
+    var label = el('span', 'kv-filter-label');
+    label.textContent = 'Filter';
     row.appendChild(label);
 
     // Stage chips (consolidation pipeline).
@@ -360,51 +362,50 @@
     ];
     stageOpts.forEach(function(opt) {
       var c = facets && opt.v ? facets.stages[opt.v] : (opt.v == null ? (facets ? facets.total : '') : '');
-      row.appendChild(_chip(opt.t + (c !== '' ? ' (' + c + ')' : ''),
+      row.appendChild(_chip(opt.t,
         filterStage === opt.v,
-        function() { filterStage = opt.v; _resetAndFetch(); }));
+        function() { filterStage = opt.v; _resetAndFetch(); }, null, c));
     });
 
-    var sep1 = el('span'); sep1.textContent = '·';
-    sep1.style.cssText = 'color:#5a6e7c;margin:0 6px';
+    var sep1 = el('span', 'kv-filter-sep'); sep1.textContent = '·';
     row.appendChild(sep1);
 
-    // Emotion chips.
+    // Emotion chips — ink comes from the DS data tokens (--emo-*),
+    // deep re-inked on paper via tokens/surfaces.css.
     var emoOpts = [
       { v: null,       t: 'Any feel' },
-      { v: 'urgent',   t: 'Urgent', color: '#ff3366' },
-      { v: 'positive', t: 'Positive', color: '#22c55e' },
-      { v: 'negative', t: 'Negative', color: '#ef4444' },
+      { v: 'urgent',   t: 'Urgent', color: 'var(--emo-urgent)' },
+      { v: 'positive', t: 'Positive', color: 'var(--emo-satisf)' },
+      { v: 'negative', t: 'Negative', color: 'var(--emo-frustr)' },
       { v: 'neutral',  t: 'Neutral' },
     ];
     emoOpts.forEach(function(opt) {
       var c = facets && opt.v ? facets.emotions[opt.v] : '';
-      row.appendChild(_chip(opt.t + (c !== '' ? ' (' + c + ')' : ''),
+      row.appendChild(_chip(opt.t,
         filterEmotion === opt.v,
-        function() { filterEmotion = opt.v; _resetAndFetch(); }, opt.color));
+        function() { filterEmotion = opt.v; _resetAndFetch(); }, opt.color, c));
     });
 
-    var sep2 = el('span'); sep2.textContent = '·';
-    sep2.style.cssText = 'color:#5a6e7c;margin:0 6px';
+    var sep2 = el('span', 'kv-filter-sep'); sep2.textContent = '·';
     row.appendChild(sep2);
 
-    // Boolean toggles.
+    // Boolean toggles — heat / protection inks from the DS data tokens.
     row.appendChild(_chip(
-      'Hot' + (facets ? ' (' + facets.hot + ')' : ''),
+      'Hot',
       filterMinHeat != null,
       function() { filterMinHeat = filterMinHeat != null ? null : 0.5; _resetAndFetch(); },
-      '#E07070'));
+      'var(--heat-hot)', facets ? facets.hot : ''));
     row.appendChild(_chip(
-      'Protected' + (facets ? ' (' + facets.protected + ')' : ''),
+      'Protected',
       filterProtected,
       function() { filterProtected = !filterProtected; _resetAndFetch(); },
-      '#E0B040'));
+      'var(--warn-ink)', facets ? facets.protected : ''));
 
-    // Reset button if anything is active.
+    // Reset button if anything is active. Styled by .kv-clear-btn
+    // (DS secondary button on paper).
     if (filterStage || filterEmotion || filterMinHeat != null || filterProtected
         || currentDomain !== 'all' || searchQuery) {
-      var clr = el('button'); clr.textContent = 'Clear all';
-      clr.style.cssText = 'margin-left:auto;background:transparent;border:1px solid rgba(224,176,64,0.4);color:#E0B040;padding:3px 10px;border-radius:3px;cursor:pointer;font:inherit;letter-spacing:0.6px;text-transform:uppercase;font-size:9px';
+      var clr = el('button', 'kv-clear-btn'); clr.textContent = 'Clear all';
       clr.addEventListener('click', function() {
         filterStage = null; filterEmotion = null; filterMinHeat = null;
         filterProtected = false; currentDomain = 'all'; searchQuery = '';
@@ -414,16 +415,21 @@
     }
   }
 
-  function _chip(label, active, onClick, accent) {
-    var b = el('button');
-    b.textContent = label;
-    var fg = active ? '#04080F' : (accent || '#c4d4dc');
-    var bg = active ? (accent || '#80d2e0') : 'rgba(120,200,220,0.06)';
-    var bd = active ? (accent || '#80d2e0') : 'rgba(120,200,220,0.25)';
-    b.style.cssText =
-      'background:' + bg + ';color:' + fg + ';border:1px solid ' + bd + ';' +
-      'padding:3px 10px;border-radius:11px;cursor:pointer;font:inherit;font-size:11px;letter-spacing:0.4px;' +
-      (active ? 'font-weight:600;' : '');
+  // Filter chip — DS Chip spec via .kv-chip in knowledge.css. `accent`
+  // is a DS data-token string (e.g. 'var(--emo-urgent)') exposed to CSS
+  // as --chip-ink; `count` renders in mono per the DS chip spec.
+  function _chip(label, active, onClick, accent, count) {
+    var b = el('button', 'kv-chip' + (active ? ' active' : ''));
+    if (accent) {
+      b.style.setProperty('--chip-ink', accent);
+      b.appendChild(el('span', 'kv-chip-dot'));
+    }
+    var t = el('span'); t.textContent = label;
+    b.appendChild(t);
+    if (count !== '' && count != null) {
+      var n = el('span', 'kv-chip-count'); n.textContent = String(count);
+      b.appendChild(n);
+    }
     b.addEventListener('click', onClick);
     return b;
   }
@@ -472,26 +478,18 @@
     }
 
     grid.innerHTML = '';
-    if (globals.length > 0 && (currentDomain === 'all' || currentDomain === 'global')) {
-      var banner = el('div', 'kv-global-banner');
-      var bannerTitle = el('div', 'kv-global-title');
-      bannerTitle.textContent = 'Rules That Apply Everywhere';
-      banner.appendChild(bannerTitle);
-      grid.appendChild(banner);
-      globals.forEach(function(m) { grid.appendChild(buildCard(m, memoriesAccum)); });
-    }
+    // Flat 2-column exhibit grid — Réf A shows no domain group headers or
+    // banners; each card's exhibit header already carries its category slot.
+    var flat;
     if (currentDomain === 'all' || currentDomain === 'global') {
-      var keys = Object.keys(byDomain).sort();
-      keys.forEach(function(d) {
-        var header = el('div', 'kv-domain-header');
-        header.textContent = shortDomain(d) + ' (' + byDomain[d].length + ')';
-        grid.appendChild(header);
-        byDomain[d].forEach(function(m) { grid.appendChild(buildCard(m, memoriesAccum)); });
+      flat = globals.slice();
+      Object.keys(byDomain).sort().forEach(function(d) {
+        flat = flat.concat(byDomain[d]);
       });
     } else {
-      var arr = byDomain[currentDomain] || [];
-      arr.forEach(function(m) { grid.appendChild(buildCard(m, memoriesAccum)); });
+      flat = byDomain[currentDomain] || [];
     }
+    flat.forEach(function(m) { grid.appendChild(buildCard(m, memoriesAccum)); });
 
     if (memoriesAccum.length === 0 && pageDone) {
       var empty = el('div', 'kv-empty');
@@ -633,137 +631,157 @@
   window.JUG = window.JUG || {};
   window.JUG._kvResolve = resolveMemorySymbols;
 
-  // ── Build a memory card ──
+  // ── Build a memory card — Spec DD-01 anatomy, zone by zone ──
+  // source: DS cards/data-memory-card.html ("Memory card — anatomy").
+  // Title (the source, serif) · Feeling (emotion word + signed valence and
+  // arousal, mono, never colour-only) · excerpt · MEANING (verbatim excerpt
+  // in italic mono quotes) · badges (stage · domain · Hot) + relative time ·
+  // meters (fixed order Heat · Importance · Valence · Arousal, amber fill,
+  // zero = empty track, never hidden) · provenance rows · capture tags.
+
+  // Verbatim meaning excerpt: the record's first inline-code span joined
+  // with its most specific capture tag — mirrors the DD-01 example
+  // (“ cargo test --lib graph_store · test-result ”). Nothing invented:
+  // both halves are verbatim from the record; absent halves are omitted.
+  function meaningExcerpt(mem) {
+    var raw = mem.content || mem.label || '';
+    var m = raw.match(/`([^`\n]{3,90})`/);
+    var frag = m ? m[1] : '';
+    var tags = (mem.tags || []).filter(function(t) { return t !== 'auto-captured'; });
+    var tag = tags.length ? tags[tags.length - 1] : '';
+    if (frag && tag) return frag + ' · ' + tag;
+    return frag || tag;
+  }
+
   function buildCard(mem, allMems) {
     var heat = mem.heat || 0;
-    var card = el('div', 'kv-card');
+    var storeType = (mem.storeType || mem.store_type) === 'semantic' ? 'semantic' : 'episodic';
+    var emotion = mem.emotion || mem.dominant_emotion || 'neutral';
+    var valence = typeof mem.valence === 'number' ? mem.valence
+      : (typeof mem.emotional_valence === 'number' ? mem.emotional_valence : null);
+    var arousal = typeof mem.arousal === 'number' ? mem.arousal : null;
+    var importance = typeof mem.importance === 'number' ? mem.importance : null;
+    var stage = mem.consolidationStage || mem.stage || '';
+
+    var card = el('div', 'kv-card aia-card');
     if (mem.isGlobal) card.classList.add('kv-card-global');
     if (heat >= 0.5) card.classList.add('kv-card-hot');
 
-    // Use the pre-computed color from the graph node (heat gradient + emotion)
-    var nodeColor = mem.color || heatColor(heat);
-    card.style.borderLeftColor = nodeColor;
-
-    // Title
+    // Title — the source, serif.
     var title = extractTitle(mem.content || mem.label || '');
-    var titleEl = el('div', 'kv-card-title');
+    var titleEl = el('h3', 'kv-mc-title');
     titleEl.textContent = title;
     card.appendChild(titleEl);
 
-    // Emotion chip — prominent, at top. Carries the affective signal.
-    if (window.JUG && JUG._memSci && typeof JUG._memSci.buildEmotionChip === 'function') {
-      var emoChip = JUG._memSci.buildEmotionChip(mem);
-      if (emoChip) card.appendChild(emoChip);
-    }
+    // Feeling — dot + emotion word + signed valence (the arrow carries the
+    // sign, magnitude verbatim) + arousal; mono, never colour-only.
+    var feel = el('div', 'kv-mc-feel');
+    feel.appendChild(el('span', 'kv-mc-feel-dot'));
+    var feelText = emotion.charAt(0).toUpperCase() + emotion.slice(1);
+    if (valence !== null) feelText += ' · ' + (valence < 0 ? '↓' : '↑') + ' ' + Math.abs(valence).toFixed(2);
+    if (arousal !== null) feelText += ' · ↑ ' + arousal.toFixed(2);
+    feel.appendChild(document.createTextNode(feelText));
+    card.appendChild(feel);
 
-    // Body preview
-    var preview = extractPreview(mem.content || mem.label || '', title);
-    if (preview) {
-      var bodyEl = el('div', 'kv-card-body');
-      bodyEl.textContent = preview;
-      card.appendChild(bodyEl);
-    }
-
-    // Meaning section — store type, schema alignment, semantic tags, gist.
-    if (window.JUG && JUG._memSci && typeof JUG._memSci.buildMeaningSection === 'function') {
-      var meaning = JUG._memSci.buildMeaningSection(mem);
-      if (meaning) card.appendChild(meaning);
-    }
-
-    // Metadata row: stage badge + domain + store type + heat + date
-    var metaRow = el('div', 'kv-card-meta');
-
-    var stage = mem.consolidationStage || 'labile';
-    var sm = STAGE_MAP[stage] || STAGE_MAP.labile;
-    var badge = el('span', 'kv-badge ' + sm.cls);
-    badge.textContent = sm.label;
-    metaRow.appendChild(badge);
-
-    if (mem.domain) {
-      var domChip = el('span', 'kv-card-domain');
-      domChip.textContent = shortDomain(mem.domain);
-      metaRow.appendChild(domChip);
-    }
-
-    var storeLabel = el('span', 'kv-card-store');
-    storeLabel.textContent = (mem.storeType === 'semantic') ? 'Knowledge' : 'Experience';
-    metaRow.appendChild(storeLabel);
-
-    if (mem.emotion && mem.emotion !== 'neutral') {
-      var emo = el('span', 'kv-card-emotion');
-      emo.textContent = mem.emotion;
-      emo.style.color = EMO_COLORS[mem.emotion] || '#A0B8C8';
-      metaRow.appendChild(emo);
-    }
-
-    if (mem.isProtected) {
-      var prot = el('span', 'kv-card-protected');
-      prot.textContent = 'Protected';
-      metaRow.appendChild(prot);
-    }
-
-    // Heat indicator — use the node's actual color
-    var heatEl = el('span', 'kv-card-heat');
-    heatEl.textContent = heat >= 0.7 ? 'Hot' : heat >= 0.4 ? 'Warm' : heat >= 0.15 ? 'Cool' : 'Cold';
-    heatEl.style.color = nodeColor;
-    metaRow.appendChild(heatEl);
-
-    // Date
-    var dateStr = formatDate(mem.createdAt || mem.lastAccessed);
-    if (dateStr !== '--') {
-      var dateEl = el('span', 'kv-card-date');
-      dateEl.textContent = dateStr;
-      metaRow.appendChild(dateEl);
-    }
-
-    card.appendChild(metaRow);
-
-    // Scientific measurements — every instrumented field Cortex tracks
-    // per memory (heat, importance, surprise, valence, plasticity,
-    // hippo-dep, access/useful/replay counts, schema, flags, …).
-    if (JUG._memSci && typeof JUG._memSci.buildSciencePanel === 'function') {
-      var sci = JUG._memSci.buildSciencePanel(mem, 'full');
-      if (sci) card.appendChild(sci);
-    }
-
-    // Tags
-    var tags = mem.tags || [];
-    if (tags.length > 0) {
-      var tagsRow = el('div', 'kv-card-tags');
-      tags.slice(0, 6).forEach(function(t) {
-        var tag = el('span', 'kv-card-tag');
-        tag.textContent = t;
-        tagsRow.appendChild(tag);
-      });
-      if (tags.length > 6) {
-        var more = el('span', 'kv-card-tag kv-tag-more');
-        more.textContent = '+' + (tags.length - 6);
-        tagsRow.appendChild(more);
+    // Excerpt — the record's first passage after the title, sans voice.
+    var prev = extractPreview(mem.content || mem.label || '', title).replace(/\s+/g, ' ').trim();
+    if (prev) {
+      var cmd = el('div', 'kv-mc-cmd');
+      if (prev.length > 140) {
+        var cut = prev.slice(0, 140);
+        var sp = cut.lastIndexOf(' ');
+        if (sp > 70) cut = cut.slice(0, sp);
+        prev = cut + '…';
       }
-      card.appendChild(tagsRow);
+      cmd.textContent = prev;
+      card.appendChild(cmd);
     }
 
-    // Code impact — symbols whose file or name connects to this memory.
-    // Clicking a chip focuses the symbol in the Graph view.
-    var syms = resolveMemorySymbols(mem, 8);
-    if (syms.length) {
-      var symRow = el('div', 'kv-card-tags');
-      symRow.title = 'Code symbols that impact this memory';
-      syms.forEach(function (ref) {
-        var chip = el('span', 'kv-card-tag kv-card-symchip');
-        chip.textContent = (ref.via === 'file' ? 'in ' : '') + (ref.node.label || ref.node.id);
-        chip.style.cursor = 'pointer';
-        chip.addEventListener('click', function (ev) {
-          ev.stopPropagation();
-          if (window.JUG && JUG.emit) JUG.emit('graph:selectNode', ref.node);
-          if (JUG.state) JUG.state.activeView = 'graph';
-        });
-        symRow.appendChild(chip);
+    // MEANING — micro-label + verbatim excerpt in italic mono quotes.
+    var quote = meaningExcerpt(mem);
+    if (quote) {
+      var ml = el('div', 'kv-mc-ml');
+      ml.textContent = 'Meaning';
+      card.appendChild(ml);
+      var q = el('div', 'kv-mc-quote');
+      q.textContent = '“ ' + quote + ' ”';
+      card.appendChild(q);
+    }
+
+    // Badges — stage · domain · Hot in amber; relative time right-aligned.
+    var brow = el('div', 'kv-mc-brow');
+    if (stage) {
+      var stBadge = el('span', 'aia-badge aia-badge--info');
+      stBadge.textContent = stage.charAt(0).toUpperCase() + stage.slice(1);
+      brow.appendChild(stBadge);
+    }
+    if (mem.domain) {
+      var domBadge = el('span', 'aia-badge');
+      domBadge.textContent = shortDomain(mem.domain);
+      brow.appendChild(domBadge);
+    }
+    if (heat >= 0.5) {
+      var hotBadge = el('span', 'aia-badge aia-badge--warn');
+      hotBadge.textContent = 'Hot';
+      brow.appendChild(hotBadge);
+    }
+    var when = el('span', 'kv-mc-when');
+    when.textContent = formatDate(mem.lastAccessed || mem.last_accessed || mem.createdAt || mem.created_at);
+    brow.appendChild(when);
+    card.appendChild(brow);
+
+    // Meters — fixed order Heat · Importance · Valence · Arousal; amber
+    // fill; a zero or absent value shows an empty track — never hidden.
+    // Valence is signed: the track carries its magnitude, the Feeling
+    // line carries its sign.
+    [
+      ['Heat', heat],
+      ['Importance', importance],
+      ['Valence', valence === null ? null : Math.abs(valence)],
+      ['Arousal', arousal]
+    ].forEach(function(f) {
+      var v = (typeof f[1] === 'number' && isFinite(f[1])) ? Math.max(0, Math.min(1, f[1])) : 0;
+      var row = el('div', 'kv-mc-meter');
+      var k = el('span', 'kv-mc-meter-k');
+      k.textContent = f[0];
+      var track = el('span', 'kv-mc-meter-track');
+      var fill = el('span', 'kv-mc-meter-fill');
+      fill.style.width = (v * 100) + '%';
+      track.appendChild(fill);
+      row.appendChild(k);
+      row.appendChild(track);
+      card.appendChild(row);
+    });
+
+    // Provenance — Emotion→Store, Accessed, Created ledger rows.
+    [
+      ['Emotion', emotion + ' · Store'],
+      [storeType, 'Accessed · ' + formatDate(mem.lastAccessed || mem.last_accessed)],
+      ['Created', formatDate(mem.createdAt || mem.created_at)]
+    ].forEach(function(pair) {
+      var kv = el('div', 'kv-mc-kv');
+      var k = el('span');
+      k.textContent = pair[0];
+      var v = el('b');
+      v.textContent = pair[1];
+      kv.appendChild(k);
+      kv.appendChild(v);
+      card.appendChild(kv);
+    });
+
+    // Capture tags — footer, only when the record carries any.
+    var ftagList = (mem.tags || []).slice(0, 4);
+    if (ftagList.length > 0) {
+      var ftags = el('div', 'kv-mc-ftags');
+      ftagList.forEach(function(t) {
+        var s = el('span');
+        s.textContent = t;
+        ftags.appendChild(s);
       });
-      card.appendChild(symRow);
+      card.appendChild(ftags);
     }
 
-    // Click to expand
+    // Click → the complete inspector (contract unchanged).
     card.addEventListener('click', function() {
       openExpanded(mem, allMems);
     });
@@ -771,186 +789,190 @@
     return card;
   }
 
-  // ── Expanded card modal ──
+  // ── Detail inspector — right-docked 380px panel, kit-detail anatomy:
+  // header chip+close, title, domain label, CONTENT (serif+citation),
+  // PROPERTIES (ledger), CLASSIFIERS (tags), PROXIMAL LINKS (entities/
+  // symbols/related memories), SATURATION (HeatBar).
+  // source: da-user-addendum.md Ref A "Panneau détail droit (inspector)".
+  function sectionLabel(text) {
+    var l = el('div', 'kv-detail__label');
+    l.textContent = text;
+    return l;
+  }
+
   function openExpanded(mem, allMems) {
     closeExpanded();
     expandedCardId = mem.id;
 
-    var backdrop = el('div', 'kv-backdrop');
-    backdrop.id = 'kv-backdrop';
-    backdrop.addEventListener('click', closeExpanded);
-    document.body.appendChild(backdrop);
-
     var heat = mem.heat || 0;
-    var nodeColor = mem.color || heatColor(heat);
-    var stage = mem.consolidationStage || 'labile';
-    var sm = STAGE_MAP[stage] || STAGE_MAP.labile;
-    var stageColor = JUG.CONSOLIDATION_COLORS ? (JUG.CONSOLIDATION_COLORS[stage] || '#50D0E8') : '#50D0E8';
+    var storeType = mem.storeType === 'semantic' ? 'semantic' : 'episodic';
 
-    var panel = el('div', 'kv-expanded');
+    var panel = el('aside', 'kv-expanded open');
     panel.id = 'kv-expanded';
-    // Use the node color as top accent border
-    panel.style.borderTop = '4px solid ' + nodeColor;
 
-    // Close button
     var closeBtn = el('button', 'kv-expanded-close');
     closeBtn.innerHTML = '&#x2715;';
+    closeBtn.setAttribute('aria-label', 'Close');
     closeBtn.addEventListener('click', closeExpanded);
     panel.appendChild(closeBtn);
 
-    // Title — colored by node color
+    // Header chip — dot + type, data-coloured (episodic/semantic).
+    var chip = el('span', 'aia-badge ' + (storeType === 'semantic' ? 'aia-badge--accent' : 'aia-badge--ok'));
+    chip.appendChild(el('span', 'aia-badge__dot'));
+    chip.appendChild(document.createTextNode(storeType.toUpperCase()));
+    panel.appendChild(chip);
+
+    // Title (serif) + domain label directly under it.
     var title = extractTitle(mem.content || mem.label || '');
     var titleEl = el('h2', 'kv-expanded-title');
     titleEl.textContent = title;
-    titleEl.style.color = nodeColor;
     panel.appendChild(titleEl);
+    var domainLabel = el('div', 'kv-expanded-domain');
+    domainLabel.textContent = mem.domain ? shortDomain(mem.domain) : 'uncategorized';
+    panel.appendChild(domainLabel);
 
-    // Metadata row — use all the color systems
-    var metaRow = el('div', 'kv-expanded-meta-row');
-
-    // Consolidation badge with its color
-    var badge = el('span', 'kv-badge ' + sm.cls);
-    badge.textContent = sm.label;
-    badge.style.color = stageColor;
-    badge.style.borderColor = stageColor + '40';
-    metaRow.appendChild(badge);
-
-    if (mem.domain) {
-      var domChip = el('span', 'kv-card-domain');
-      domChip.textContent = shortDomain(mem.domain);
-      metaRow.appendChild(domChip);
-    }
-
-    // Store type
-    var st = el('span', 'kv-card-store');
-    st.textContent = (mem.storeType === 'semantic') ? 'Knowledge' : 'Experience';
-    metaRow.appendChild(st);
-
-    // Emotion with its specific color
-    if (mem.emotion && mem.emotion !== 'neutral') {
-      var emoChip = el('span', 'kv-card-emotion');
-      emoChip.textContent = mem.emotion.charAt(0).toUpperCase() + mem.emotion.slice(1);
-      emoChip.style.color = EMO_COLORS[mem.emotion] || '#c0c8d8';
-      emoChip.style.borderColor = (EMO_COLORS[mem.emotion] || '#c0c8d8') + '40';
-      metaRow.appendChild(emoChip);
-    }
-
-    // Heat with gradient color
-    var heatChip = el('span', 'kv-card-heat');
-    heatChip.textContent = heat >= 0.7 ? 'Hot' : heat >= 0.4 ? 'Warm' : heat >= 0.15 ? 'Cool' : 'Cold';
-    heatChip.style.color = nodeColor;
-    metaRow.appendChild(heatChip);
-
-    panel.appendChild(metaRow);
-
-    // Prominent emotion + meaning (same as card, no duplication).
-    if (window.JUG && JUG._memSci) {
-      if (typeof JUG._memSci.buildEmotionChip === 'function') {
-        var detailEmo = JUG._memSci.buildEmotionChip(mem);
-        if (detailEmo) {
-          detailEmo.classList.add('ms-emotion--detail');
-          panel.appendChild(detailEmo);
-        }
-      }
-      if (typeof JUG._memSci.buildMeaningSection === 'function') {
-        var detailMeaning = JUG._memSci.buildMeaningSection(mem);
-        if (detailMeaning) panel.appendChild(detailMeaning);
-      }
-    }
-
-    // Full content — rendered with basic markdown formatting
+    // CONTENT — full text, serif, markdown-rendered.
+    var contentSec = el('div', 'kv-section');
+    contentSec.appendChild(sectionLabel('Content'));
     var contentBlock = el('div', 'kv-expanded-content');
     contentBlock.innerHTML = renderMemoryContent(mem.content || mem.label || '');
-    panel.appendChild(contentBlock);
+    contentSec.appendChild(contentBlock);
+    panel.appendChild(contentSec);
 
-    // Explained scientific panel — every instrumented field with a
-    // non-technical explanation. Superset of the summary card's grid.
-    if (window.JUG && JUG._memSci && typeof JUG._memSci.buildExplainedPanel === 'function') {
-      var explained = JUG._memSci.buildExplainedPanel(mem);
-      if (explained) panel.appendChild(explained);
+    // PROPERTIES — ledger grid (key micro-caps / value mono), matching
+    // the kit's kit-props dl exactly (Heat/Type/Domain/Source/Created/Links).
+    var links = findRelatedEntities(mem, allMems).length
+      + resolveMemorySymbols(mem, 999).length
+      + findRelatedMemories(mem, allMems).length;
+    var propsSec = el('div', 'kv-section');
+    propsSec.appendChild(sectionLabel('Properties'));
+    var dl = el('dl', 'kv-props');
+    [
+      ['Heat', heat.toFixed(3)],
+      ['Type', storeType.charAt(0).toUpperCase() + storeType.slice(1)],
+      ['Stage', mem.consolidationStage || '--'],
+      ['Domain', mem.domain ? shortDomain(mem.domain) : '--'],
+      ['Emotion', mem.emotion || '--'],
+      ['Source', mem.isGlobal ? 'global' : (mem.isProtected ? 'protected' : 'user')],
+      ['Created', formatDate(mem.createdAt || mem.lastAccessed)],
+      ['Accessed', formatDate(mem.lastAccessed) + (mem.accessCount ? ' · ×' + mem.accessCount : '')],
+      ['Links', String(links)],
+    ].forEach(function(pair) {
+      var row = el('div', 'kv-prop');
+      var dt = el('dt'); dt.textContent = pair[0];
+      var dd = el('dd'); dd.textContent = pair[1];
+      row.appendChild(dt); row.appendChild(dd);
+      dl.appendChild(row);
+    });
+    propsSec.appendChild(dl);
+    panel.appendChild(propsSec);
+
+    // MEASUREMENTS — every continuous instrumented field actually present
+    // on the memory, fixed DD-01 order (Heat · Importance · Valence ·
+    // Arousal · Plasticity · Stability); a zero value shows an empty
+    // track, never hidden. Values verbatim, never rounded flatteringly.
+    var meterFields = [
+      ['Importance', mem.importance],
+      ['Valence', mem.valence],
+      ['Arousal', mem.arousal],
+      ['Plasticity', mem.plasticity],
+      ['Stability', mem.stability],
+    ].filter(function(f) { return typeof f[1] === 'number' && isFinite(f[1]); });
+    if (meterFields.length > 0) {
+      var mSec = el('div', 'kv-section');
+      mSec.appendChild(sectionLabel('Measurements'));
+      meterFields.forEach(function(f) {
+        var v = Math.max(0, Math.min(1, f[1]));
+        var wrap = el('div', 'aia-heat');
+        var meta = el('div', 'aia-heat__meta');
+        var k = el('span'); k.textContent = f[0];
+        var val = el('span', 'aia-heat__val'); val.textContent = f[1].toFixed(3);
+        meta.appendChild(k); meta.appendChild(val);
+        var track = el('div', 'aia-heat__track');
+        var fill = el('div', 'aia-heat__fill');
+        fill.style.setProperty('--heat-scale', v || 0.001);
+        fill.style.width = (v * 100) + '%';
+        track.appendChild(fill);
+        wrap.appendChild(meta); wrap.appendChild(track);
+        mSec.appendChild(wrap);
+      });
+      panel.appendChild(mSec);
     }
 
-    // Tags
-    var allTags = mem.tags || [];
+    // CLASSIFIERS — tags as outline chips (mem.emotion folded in as a
+    // classifier, matching the card's affective signal).
+    var allTags = (mem.tags || []).slice();
+    if (mem.emotion && mem.emotion !== 'neutral') allTags.unshift(mem.emotion);
     if (allTags.length > 0) {
-      var tagSec = el('div', 'kv-expanded-section');
-      tagSec.textContent = 'Tags';
-      panel.appendChild(tagSec);
-      var tagsRow = el('div', 'kv-card-tags');
+      var classSec = el('div', 'kv-section');
+      classSec.appendChild(sectionLabel('Classifiers'));
+      var tagsRow = el('div', 'kv-tags');
       allTags.forEach(function(t) {
-        var tag = el('span', 'kv-card-tag');
+        var tag = el('span', 'aia-badge');
         tag.textContent = t;
         tagsRow.appendChild(tag);
       });
-      panel.appendChild(tagsRow);
+      classSec.appendChild(tagsRow);
+      panel.appendChild(classSec);
     }
 
-    // Related entities (from graph edges)
-    var entities = findRelatedEntities(mem, allMems);
-    if (entities.length > 0) {
-      var entSec = el('div', 'kv-expanded-section');
-      entSec.textContent = 'Entities';
-      panel.appendChild(entSec);
-      var entRow = el('div', 'kv-expanded-entities');
-      entities.forEach(function(e) {
-        var chip = el('span', 'kv-entity-chip');
-        chip.textContent = e.label || e.id;
-        chip.style.borderColor = JUG.getNodeColor(e) + '40';
-        entRow.appendChild(chip);
+    // PROXIMAL LINKS — entities, code symbols, and related memories in
+    // one dot+label+metric list (honest: only rendered when non-empty).
+    var proximal = [];
+    findRelatedEntities(mem, allMems).forEach(function(e) {
+      proximal.push({ label: e.label || e.id, metric: 'entity', dotVar: '--kind-entity', onClick: function() {
+        if (window.JUG && JUG.emit) JUG.emit('graph:selectNode', e);
+        if (JUG.state) JUG.state.activeView = 'graph';
+      }});
+    });
+    resolveMemorySymbols(mem, 12).forEach(function(ref) {
+      proximal.push({ label: (ref.via === 'file' ? 'in ' : '') + (ref.node.label || ref.node.id), metric: 'symbol', dotVar: '--accent-ink', onClick: function() {
+        if (window.JUG && JUG.emit) JUG.emit('graph:selectNode', ref.node);
+        if (JUG.state) JUG.state.activeView = 'graph';
+      }});
+    });
+    findRelatedMemories(mem, allMems).forEach(function(r) {
+      proximal.push({ label: extractTitle(r.content || r.label || ''), metric: (r.heat || 0).toFixed(2), dotVar: r.storeType === 'semantic' ? '--accent-ink' : '--ok-ink', onClick: function() {
+        openExpanded(r, allMems);
+      }});
+    });
+    if (proximal.length > 0) {
+      var linkSec = el('div', 'kv-section');
+      linkSec.appendChild(sectionLabel('Proximal links'));
+      proximal.forEach(function(p) {
+        var row = el('div', 'kv-link');
+        var dot = el('span', 'kv-link__dot');
+        dot.style.background = 'var(' + p.dotVar + ')';
+        var name = el('span', 'kv-link__name');
+        name.textContent = p.label;
+        var w = el('span', 'kv-link__w');
+        w.textContent = p.metric;
+        row.appendChild(dot); row.appendChild(name); row.appendChild(w);
+        row.addEventListener('click', function(e) { e.stopPropagation(); p.onClick(); });
+        linkSec.appendChild(row);
       });
-      panel.appendChild(entRow);
+      panel.appendChild(linkSec);
     }
 
-    // Code impact — AST symbols that connect to this memory.
-    var symRefs = resolveMemorySymbols(mem, 30);
-    if (symRefs.length > 0) {
-      var symSec = el('div', 'kv-expanded-section');
-      symSec.textContent = 'Code impact';
-      panel.appendChild(symSec);
-      var symRow = el('div', 'kv-expanded-entities');
-      symRefs.forEach(function (ref) {
-        var chip = el('span', 'kv-entity-chip');
-        var pfx = ref.via === 'file' ? 'in ' : '';
-        chip.textContent = pfx + (ref.node.label || ref.node.id);
-        chip.title = (ref.node.path || '') + (ref.node.symbol_type ? ' · ' + ref.node.symbol_type : '');
-        chip.style.cursor = 'pointer';
-        chip.addEventListener('click', function () {
-          if (window.JUG && JUG.emit) JUG.emit('graph:selectNode', ref.node);
-          if (JUG.state) JUG.state.activeView = 'graph';
-        });
-        symRow.appendChild(chip);
-      });
-      panel.appendChild(symRow);
-    }
-
-    // Related memories (same domain, high similarity by shared tags)
-    var related = findRelatedMemories(mem, allMems);
-    if (related.length > 0) {
-      var relSec = el('div', 'kv-expanded-section');
-      relSec.textContent = 'Related Memories';
-      panel.appendChild(relSec);
-      related.slice(0, 5).forEach(function(r) {
-        var item = el('div', 'kv-related-item');
-        var rTitle = el('div', 'kv-related-title');
-        rTitle.textContent = extractTitle(r.content || r.label || '');
-        item.appendChild(rTitle);
-        var rPreview = extractPreview(r.content || r.label || '', rTitle.textContent);
-        if (rPreview) {
-          var rBody = el('div', 'kv-related-preview');
-          rBody.textContent = rPreview.substring(0, 100);
-          item.appendChild(rBody);
-        }
-        item.addEventListener('click', function(e) {
-          e.stopPropagation();
-          openExpanded(r, allMems);
-        });
-        panel.appendChild(item);
-      });
-    }
+    // SATURATION — HeatBar footer, the shipped aia-heat primitive.
+    var satSec = el('div', 'kv-section');
+    satSec.appendChild(sectionLabel('Saturation'));
+    var heatBlock = el('div', 'aia-heat');
+    var heatMeta = el('div', 'aia-heat__meta');
+    var hl = el('span'); hl.textContent = 'Heat';
+    var hv = el('span', 'aia-heat__val'); hv.textContent = heat.toFixed(3);
+    heatMeta.appendChild(hl); heatMeta.appendChild(hv);
+    var heatTrack = el('div', 'aia-heat__track');
+    var heatFill = el('div', 'aia-heat__fill');
+    heatFill.style.setProperty('--heat-scale', heat || 0.001);
+    heatFill.style.width = (heat * 100) + '%';
+    heatTrack.appendChild(heatFill);
+    heatBlock.appendChild(heatMeta); heatBlock.appendChild(heatTrack);
+    satSec.appendChild(heatBlock);
+    panel.appendChild(satSec);
 
     document.body.appendChild(panel);
 
-    // Esc to close
     panel._escHandler = function(e) {
       if (e.key === 'Escape') closeExpanded();
     };
@@ -959,14 +981,16 @@
 
   function closeExpanded() {
     var panel = document.getElementById('kv-expanded');
-    var backdrop = document.getElementById('kv-backdrop');
     if (panel) {
       if (panel._escHandler) window.removeEventListener('keydown', panel._escHandler);
       panel.remove();
     }
-    if (backdrop) backdrop.remove();
     expandedCardId = null;
   }
+
+  // The inspector docks to document.body, so any view can open it — the
+  // Board reuses it as its click target (minimal card, complete inspector).
+  if (window.JUG) JUG._kvOpenMemory = openExpanded;
 
   // ── Helpers ──
   function findRelatedEntities(mem, allMems) {
@@ -1018,13 +1042,6 @@
     if (!d) return 'unknown';
     var parts = d.replace(/\\/g, '/').split('/').filter(Boolean);
     return parts.length > 0 ? parts[parts.length - 1] : d;
-  }
-
-  function heatColor(h) {
-    if (h >= 0.7) return '#E07070';
-    if (h >= 0.4) return '#E0B840';
-    if (h >= 0.1) return '#50D0E8';
-    return '#607080';
   }
 
   function formatDate(iso) {
@@ -1161,11 +1178,18 @@
     return html.join('');
   }
 
-  function domainPill(label, value, isGlobal) {
+  // Domain tab — DS Chip spec via .kv-domain-pill in knowledge.css;
+  // the count renders in mono (.kv-chip-count) per the DS chip spec.
+  function domainPill(label, value, isGlobal, count) {
     var pill = el('button', 'kv-domain-pill');
     if (isGlobal) pill.classList.add('kv-pill-global');
     if (value === currentDomain) pill.classList.add('active');
-    pill.textContent = label;
+    var t = el('span'); t.textContent = label;
+    pill.appendChild(t);
+    if (count != null && count !== '') {
+      var n = el('span', 'kv-chip-count'); n.textContent = String(count);
+      pill.appendChild(n);
+    }
     pill.addEventListener('click', function() {
       currentDomain = value;
       _resetAndFetch();

@@ -26,7 +26,7 @@
     var el = document.getElementById('timeline-container');
     var memories = data.recent_memories || [];
     if (!memories.length) {
-      el.innerHTML = '<div style="padding:40px;color:#3a4a5a;text-align:center">No memories stored yet</div>';
+      el.innerHTML = '<div style="padding:40px;color:var(--text-faint);text-align:center">No memories stored yet</div>';
       return;
     }
 

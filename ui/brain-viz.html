@@ -1,57 +1,99 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-surface="paper">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cortex — 3D Brain</title>
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<!-- Surface toggle FIRST, classic script: stamps data-surface on <html>
+     before first paint (paper by default — no black backgrounds). -->
+<script src="/shared/surface-toggle.js"></script>
+<link rel="stylesheet" href="/shared/ds.css">
 <!-- Reuse the galaxy's detail-panel styling so a picked brain node shows the
-     SAME card. theme.css carries the design tokens (:root) the others read; its
-     global body/button rules are harmless because the brain's own <style>
-     below re-asserts this page's chrome. -->
+     SAME card. theme.css carries legacy tokens the others read; its global
+     body/button rules are harmless because the brain's own <style> below
+     re-asserts this page's chrome against the shared design-system aliases. -->
 <link rel="stylesheet" href="/css/theme.css">
 <link rel="stylesheet" href="/css/panels.css">
 <link rel="stylesheet" href="/css/detail.css">
 <link rel="stylesheet" href="/css/knowledge.css">
 <link rel="stylesheet" href="/css/memory_science.css">
 <style>
-  :root { --cyan:#5fd0e0; --dim:#6a8090; --bg:#05070d; }
+  /* Vital-row tint tokens (vitals_spec.js) — each --vital-* is an ALIAS onto a
+     canonical DS data token (heat, stage, emo, or an -ink status alias),
+     chosen by the MEANING of the vital, not a hand-picked hex. Every aliased token
+     already re-inks itself per data-surface (tokens/colors.css + surfaces.css),
+     so these need only ONE definition — no separate paper block. G3/G9: no
+     ad-hoc hex table; G1/G2: both surfaces resolve automatically.
+       --vital-orange (Skills, procedural_skills)        -> --heat-hot   (frequently-reactivated = "hot" in the heat/decay model)
+       --vital-red    (Inferred + Confabulated)          -> --danger-ink (reality-monitoring risk / crystallized error, Johnson 1993)
+       --vital-purple (Habituated, habituated_repeats)   -> --stage-recon (repeated-trace, reconsolidation-adjacent)
+       --vital-magenta(Extinguished)                     -> --emo-conflct (inhibitory conflict/extinction, Bouton 2004)
+       --vital-amber  (Conflicts, conflicting_claim_pairs)-> --warn-ink   (literal: a conflict is a warning)
+       --vital-cyan   (Familiar, familiarity_resolvable)  -> --stage-early (cheap early-path retrieval)
+       --vital-blue-sleep (Sleep NREM/REM)                -> --stage-labile (consolidation moves memory OUT of the labile stage)
+       --vital-green  (TMR cue, targeted_reactivation)    -> --ok-ink     (successful reactivation)
+       --vital-stress (Stress gain, stress_modulation)    -> --emo-frustr (arousal/stress valence)
+       --vital-blue-goal (Active goal)                    -> --emo-discov (goal-driven discovery)
+       --vital-teal   (Forward model)                     -> --stage-late (late-stage predictive calibration)
+       --vital-pink   (Attn focus, attentional_salience)  -> --heat-warm  (a warm attentional spotlight, distinct from Skills' hot)
+       --vital-fallback (unspecced payload field)         -> --text-muted (no data classification = neutral chrome grey) */
+  :root {
+    --vital-orange:     var(--heat-hot);
+    --vital-red:        var(--danger-ink);
+    --vital-purple:     var(--stage-recon);
+    --vital-magenta:    var(--emo-conflct);
+    --vital-amber:      var(--warn-ink);
+    --vital-cyan:       var(--stage-early);
+    --vital-blue-sleep: var(--stage-labile);
+    --vital-green:      var(--ok-ink);
+    --vital-stress:     var(--emo-frustr);
+    --vital-blue-goal:  var(--emo-discov);
+    --vital-teal:       var(--stage-late);
+    --vital-pink:       var(--heat-warm);
+    --vital-fallback:   var(--text-muted);
+  }
   * { box-sizing: border-box; }
-  html, body { margin:0; height:100%; background:var(--bg); color:#dfe8f0;
-    font-family:'JetBrains Mono', ui-monospace, monospace; overflow:hidden; }
+  html, body { margin:0; height:100%; background:var(--canvas); color:var(--text);
+    font-family:var(--font-mono); overflow:hidden; }
   #view { position:fixed; inset:0; }
   #view canvas { display:block; }
 
   #loading { position:fixed; inset:0; display:flex; flex-direction:column;
-    align-items:center; justify-content:center; gap:10px; background:var(--bg);
+    align-items:center; justify-content:center; gap:10px; background:var(--canvas);
     z-index:50; transition:opacity .6s ease; }
   #loading.gone { opacity:0; pointer-events:none; }
-  #loading.error #loading-title { color:#ff6b6b; }
-  .loader-ring { width:54px; height:54px; border:3px solid #ffffff14;
-    border-top-color:var(--cyan); border-radius:50%; animation:spin 1s linear infinite; }
+  #loading.error #loading-title { color:var(--danger-ink); }
+  .loader-ring { width:54px; height:54px; border:3px solid var(--border);
+    border-top-color:var(--accent-ink); border-radius:50%; animation:spin 1s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
-  #loading-title { font-family:'Orbitron', sans-serif; letter-spacing:.22em;
-    font-size:18px; color:#cfe6ee; }
-  #loading-sub { color:var(--dim); font-size:12px; }
+  /* G13: UPPERCASE is reserved for mono micro-labels — this is Inter Tight
+     chrome, so it takes sentence case (no text-transform, no caps tracking). */
+  #loading-title { font-family:var(--font-sans); font-weight:var(--weight-semibold);
+    font-size:14px; color:var(--text); }
+  #loading-sub { color:var(--text-muted); font-size:12px; }
 
-  .hud { position:fixed; background:#0a0f18cc; border:1px solid #ffffff14;
-    border-radius:10px; padding:12px 14px; backdrop-filter:blur(8px); z-index:20; }
+  /* Lift from a hairline border + quiet shadow only — no blur, no glow
+     (README doctrine: avoid backdrop-filter, drop box-shadow glows). */
+  .hud { position:fixed; background:var(--surface-card); border:1px solid var(--border);
+    border-radius:var(--radius-lg); padding:12px 14px; box-shadow:var(--shadow-sm);
+    z-index:20; }
   /* Capped + scrollable: the memory-science list grows as Claude Science adds
      vitals, so the panel must never run off the bottom of the screen. */
   #info { top:16px; left:16px; min-width:178px; max-width:300px;
     max-height:calc(100vh - 32px); overflow-y:auto; overflow-x:hidden;
     scrollbar-width:thin; }
   #info .stat { font-size:11.5px; }
-  #info .title { font-family:'Orbitron',sans-serif; letter-spacing:.16em;
-    font-size:13px; color:#cfe6ee; }
+  /* G13: same rule — sentence case in Inter Tight, not uppercase chrome. */
+  #info .title { font-family:var(--font-sans); font-weight:var(--weight-semibold);
+    font-size:12px; color:var(--text); }
   #info .sub { font-size:9px; text-transform:uppercase; letter-spacing:.18em;
-    color:var(--dim); margin-bottom:8px; }
-  .galaxy-back { color:var(--cyan,#6cf); text-decoration:none; }
-  .galaxy-back:hover { color:#fff; }
+    color:var(--text-muted); margin-bottom:8px; }
+  .galaxy-back { color:var(--accent-ink); text-decoration:none; }
+  .galaxy-back:hover { color:var(--text); }
   .stat { display:flex; justify-content:space-between; gap:18px; font-size:12px;
     padding:2px 0; }
-  .stat span:first-child { color:var(--dim); }
-  .stat .v { color:#dfe8f0; }
+  .stat span:first-child { color:var(--text-muted); }
+  .stat .v { color:var(--text); }
 
   /* display:block OVERRIDES the galaxy panels.css #legend rule, which sets
      display:grid with two 140px-min columns — that 2-column grid needed
@@ -63,58 +105,72 @@
      never stack on one side and clip each other. left:auto !important
      overrides panels.css's left:24px. */
   /* Bottom-right, CAPPED so the (now exhaustive, tall) legend never rises
-     into the reset button at top-right: max-height leaves ~92px clear at the
-     top (reset button + gap); if content is still taller it scrolls inside.
-     Compact type keeps every row readable without dominating the view. */
+     into the top-right chrome cluster (toggle + reset button): max-height
+     leaves clear room at the top; if content is still taller it scrolls
+     inside. Compact type keeps every row readable without dominating the view. */
+  /* G12 floor: 11px for sentence-case body text; the 9px micro-cap allowance
+     (+12% tracking) is reserved for true UPPERCASE micro-labels (.leg-head
+     below) — every other legend row here is sentence/lowercase prose or a
+     plain digit count, so it takes the full 11px floor, not the micro-cap
+     exception. The panel scrolls (max-height + overflow-y) to absorb the
+     extra height rather than shrinking text under the floor. */
   #legend { display:block !important; grid-template-columns:none !important;
     bottom:16px; right:16px; left:auto !important; top:auto; width:222px;
-    box-sizing:border-box; font-size:9.5px; line-height:1.34;
+    box-sizing:border-box; font-size:11px; line-height:1.34;
     max-height:calc(100vh - 92px); overflow-y:auto; overflow-x:hidden;
     padding:9px 11px; scrollbar-width:thin; }
-  .leg-head { font-size:8.5px; text-transform:uppercase; letter-spacing:.12em;
-    color:var(--dim); margin-bottom:4px; }
-  .leg-more { color:var(--dim); font-size:9px; margin-top:3px; }
-  .leg-note { color:var(--dim); font-size:8.5px; line-height:1.4; margin:6px 0;
+  .leg-head { font-size:9px; text-transform:uppercase; letter-spacing:.12em;
+    color:var(--text-muted); margin-bottom:4px; }
+  .leg-note { color:var(--text-muted); font-size:11px; line-height:1.4; margin:6px 0;
     font-style:italic; opacity:.82; }
   /* align-items flex-start + a shrinkable label (min-width:0) makes long
      labels wrap under the dot instead of forcing the row wider than the box. */
-  .leg-item { display:flex; align-items:flex-start; gap:6px; color:#b8c6d2;
-    margin:1px 0; }
+  .leg-item { display:flex; align-items:flex-start; gap:6px; color:var(--text-secondary);
+    font-size:11px; margin:1px 0; }
+  /* Flat filled disc — no glow (README: "a legend dot is a flat filled disc"). */
   .leg-dot { width:7px; height:7px; border-radius:50%; flex:0 0 auto;
-    margin-top:2.5px; box-shadow:0 0 5px currentColor; }
+    margin-top:2.5px; }
   .leg-label { flex:1 1 auto; min-width:0; word-break:break-word; }
-  .leg-n { flex:0 0 auto; margin-left:6px; color:var(--dim); font-size:9px;
+  .leg-n { flex:0 0 auto; margin-left:6px; color:var(--text-muted); font-size:11px;
     font-variant-numeric:tabular-nums; }
   /* Graded-kind header (e.g. "memory  108,952") above its per-colour rows. */
   .leg-subhead { display:flex; justify-content:space-between; align-items:baseline;
-    margin:4px 0 1px; color:#cdd8e2; text-transform:capitalize; font-size:9.5px; }
-  .leg-subhead .leg-n { color:#8fa0ad; }
+    margin:4px 0 1px; color:var(--text); text-transform:capitalize; font-size:11px; }
+  .leg-subhead .leg-n { color:var(--text-muted); }
   /* Indented per-colour sub-row under a graded kind. */
-  .leg-item.sub { margin-left:12px; font-size:9px; }
-  .leg-item.sub .leg-label { color:var(--dim); }
+  .leg-item.sub { margin-left:12px; font-size:11px; }
+  .leg-item.sub .leg-label { color:var(--text-muted); }
 
   /* Impact box whose target file isn't a node in this graph — not clickable. */
   .impact-box--dead { opacity:.5; cursor:default !important; }
-  .impact-box[data-file]:not(.impact-box--dead):hover { background:rgba(120,200,220,0.10); }
+  .impact-box[data-file]:not(.impact-box--dead):hover { background:var(--selection); }
 
   /* Hover tooltip — shows the node label before you click it. */
   #brain-tip { position:fixed; display:none; z-index:300; pointer-events:none;
-    background:#0a0f18ee; border:1px solid #ffffff20; border-radius:6px;
-    padding:5px 9px; font-size:11px; color:#dfe8f0; max-width:340px;
+    background:var(--surface-card); border:1px solid var(--border); border-radius:var(--radius-md);
+    padding:5px 9px; font-size:11px; color:var(--text); max-width:340px;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-    box-shadow:0 4px 16px #000a; }
+    box-shadow:var(--shadow-md); }
 
-  /* Compact pill, top-right corner (out of the way of the legend and the
-     detail panel that slides in from the right edge). */
-  #reset-btn { position:fixed; top:16px; right:16px; z-index:30;
-    background:#0a0f18cc; color:#cfe6ee; border:1px solid #ffffff20;
-    border-radius:8px; padding:7px 12px; font-family:'Orbitron',sans-serif;
-    font-size:10px; letter-spacing:.12em; text-transform:uppercase;
-    cursor:pointer; backdrop-filter:blur(8px); }
-  #reset-btn:hover { border-color:var(--cyan); color:#fff; }
+  /* Top-right chrome cluster: surface toggle + reset, out of the way of the
+     legend and the detail panel that slides in from the right edge. */
+  #chrome-top-right { position:fixed; top:16px; right:16px; z-index:30;
+    display:flex; gap:8px; }
+  #reset-btn, #surface-toggle-btn { background:var(--surface-card); color:var(--text);
+    border:1px solid var(--border); border-radius:var(--radius-sm); padding:7px 12px;
+    font-family:var(--font-mono); font-weight:var(--weight-medium);
+    font-size:10px; letter-spacing:var(--tracking-caps); text-transform:uppercase;
+    cursor:pointer; }
+  #reset-btn:hover, #surface-toggle-btn:hover { border-color:var(--border-strong); color:var(--accent-ink); }
+  #surface-toggle-btn:focus-visible, #reset-btn:focus-visible { outline:none; box-shadow:var(--shadow-focus); }
+  /* Micro-label text driven by CortexSurface.bindButton's data-surface-state
+     (set to the CURRENT posture — "paper" or "ink"), no emoji. */
+  #surface-toggle-btn::after { content: attr(data-surface-state); }
+  /* G12 floor: sentence-case attribution text is not a micro-cap, so it takes
+     the 11px body floor, not the 9px uppercase-only allowance. */
   #attrib { position:fixed; bottom:4px; left:50%; transform:translateX(-50%);
-    font-size:9px; color:#43525e; z-index:20; }
-  #attrib a { color:#5a6f7c; }
+    font-size:11px; color:var(--text-faint); z-index:20; }
+  #attrib a { color:var(--text-muted); }
 </style>
 </head>
 <body>
@@ -122,12 +178,12 @@
 
   <div id="loading">
     <div class="loader-ring"></div>
-    <div id="loading-title">CORTEX · BRAIN</div>
+    <div id="loading-title">Cortex · Brain</div>
     <div id="loading-sub">initializing…</div>
   </div>
 
   <div id="info" class="hud">
-    <div class="title">CORTEX</div>
+    <div class="title">Cortex</div>
     <div class="sub">3D Brain · <a href="/" class="galaxy-back" title="Back to the 2D galaxy graph">⟵ Galaxy</a></div>
     <!-- Store truth — the same /api/stats totals the galaxy sidebar shows
          ("counters must reflect the whole memory system, NOT just the nodes
@@ -141,7 +197,7 @@
     <!-- Rendered graph — what THIS view actually draws from the snapshot
          (more than the galaxy: it defers AST symbols; the brain shows them).
          Filled by boot.js once the stream lands. -->
-    <div id="brain-rendered" style="margin-top:8px; border-top:1px solid #ffffff14; padding-top:6px;">
+    <div id="brain-rendered" style="margin-top:8px; border-top:1px solid var(--divider); padding-top:6px;">
       <div class="sub" style="margin-bottom:4px;">Rendered graph</div>
       <div class="stat" title="Nodes drawn in this view — every snapshot node, including the AST symbols the galaxy defers."><span>In view</span><span class="v" id="r-nodes">--</span></div>
       <div class="stat" title="Graph edges routed as synapses along the white-matter tracts."><span>Edges</span><span class="v" id="r-edges">--</span></div>
@@ -152,7 +208,7 @@
          the live payload (not hardcoded), so every vital Claude Science adds to
          the backend appears here automatically — no stale hand-mirrored copies.
          Hidden until the first payload arrives. -->
-    <div id="brain-vitals" style="display:none; margin-top:8px; border-top:1px solid #ffffff14; padding-top:6px;">
+    <div id="brain-vitals" style="display:none; margin-top:8px; border-top:1px solid var(--divider); padding-top:6px;">
       <div class="sub" style="margin-bottom:4px;">Memory science</div>
       <div id="brain-vitals-rows"></div>
     </div>
@@ -209,17 +265,30 @@
     <div id="flow-content"></div>
   </div>
 
-  <button id="reset-btn">Reset view</button>
+  <div id="chrome-top-right">
+    <button id="surface-toggle-btn" title="Toggle paper / ink surface"></button>
+    <button id="reset-btn">Reset view</button>
+  </div>
   <div id="attrib">Brain mesh © dgallichan ·
     <a href="http://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC-BY-4.0</a>
     · via NIH 3D</div>
+  <script>
+    // Bound immediately — CortexSurface is already on window (loaded in
+    // <head>). Label text comes from CSS (content: attr(data-surface-state))
+    // so bindButton's DOM-only sync is the single source of truth.
+    window.CortexSurface.bindButton(document.getElementById('surface-toggle-btn'));
+  </script>
 
   <!-- three.js r137 + addons (global THREE.*). EffectComposer is NOT used
-       here; the neural glow comes from additive points, so no post-processing
-       chain (and no Pass-ordering footgun). -->
+       here; nodes read as flat data-coloured ink, so no post-processing
+       chain (and no Pass-ordering footgun, no bloom). -->
   <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
   <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
   <script src="https://unpkg.com/three@0.137.0/examples/js/loaders/GLTFLoader.js"></script>
+  <!-- Surface-correct sRGB reader for the Three.js/WebGL renderers below —
+       must load after ds.css (tokens resolved) and before any script that
+       bakes colour. -->
+  <script src="/shared/palette.js"></script>
 
   <!-- Galaxy detail subsystem, reused as-is (same files the unified view
        serves at /js/*). They self-register on the JUG namespace; the brain's

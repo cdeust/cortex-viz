@@ -1,5 +1,6 @@
-// Cortex Memory Dashboard — Edge Rendering
+// Cortex Atom Memory Graph — Edge Rendering
 // Relationship lines, fiber tracts for strong connections, flow particles.
+// Colours are the data-family edge tokens (JMD.EDGE_COLORS, config.js).
 
 (function() {
   var scene = JMD.scene;
@@ -182,13 +183,14 @@
     });
 
     // Color edges
-    var causalColor = new THREE.Color(0xff4444);
-    var defaultColor = new THREE.Color(0x90a4ae);
-    var coOccColor = new THREE.Color(0xd946ef);
+    var causalColor = new THREE.Color(JMD.EDGE_COLORS.causal);
+    var defaultColor = new THREE.Color(JMD.EDGE_COLORS['default']);
+    var coOccColor = new THREE.Color(JMD.EDGE_COLORS.co_occurrence);
 
+    var virtualColor = new THREE.Color(JMD.EDGE_COLORS.virtual);
     activeEdges.forEach(function(e, i) {
       if (i >= MAX_EDGES) return;
-      var color = e.isVirtual ? new THREE.Color(0x556677) : (e.isCausal ? causalColor : (e.type === 'co_occurrence' ? coOccColor : defaultColor));
+      var color = e.isVirtual ? virtualColor : (e.isCausal ? causalColor : (e.type === 'co_occurrence' ? coOccColor : defaultColor));
       var dim = e.isVirtual ? 0.06 + e.weight * 0.12 : 0.15 + e.weight * 0.35;
       edgeColors[i*6]   = color.r * dim;
       edgeColors[i*6+1] = color.g * dim;
@@ -252,9 +254,9 @@
       var curve = new THREE.CatmullRomCurve3([start, mid, end]);
       var radius = 0.15 + e.weight * 0.25;
       var tubeGeo = new THREE.TubeGeometry(curve, 12, radius, 4, false);
-      var color = e.isCausal ? 0xff4444 : 0x00d2ff;
+      var color = e.isCausal ? JMD.EDGE_COLORS.causal : JMD.EDGE_COLORS['default'];
       var tubeMat = new THREE.MeshStandardMaterial({
-        color: color, emissive: color, emissiveIntensity: 0.3,
+        color: color, emissive: color, emissiveIntensity: 0.12,
         transparent: true, opacity: 0.15, roughness: 0.6, metalness: 0.2,
       });
       fiberGroup.add(new THREE.Mesh(tubeGeo, tubeMat));

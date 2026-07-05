@@ -7,7 +7,7 @@
     var el = document.getElementById('categories-container');
     var memories = data.recent_memories || [];
     if (!memories.length) {
-      el.innerHTML = '<div style="padding:40px;color:#3a4a5a;text-align:center;grid-column:1/-1">No memories stored yet</div>';
+      el.innerHTML = '<div style="padding:40px;color:var(--text-faint);text-align:center;grid-column:1/-1">No memories stored yet</div>';
       return;
     }
 

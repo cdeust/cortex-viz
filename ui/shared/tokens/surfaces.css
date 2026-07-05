@@ -1,0 +1,152 @@
+/* =============================================================================
+   AI Architect — SURFACES
+   Two surfaces, one system. Author against these aliases, never the primitives.
+
+   · INK   (`data-surface="ink"`) — the DARK MODE of the brand: the night
+     record. A lamp-lit desk, not a void — warm dark tones (never #000), the
+     same dossier language (sheets, ledgers, stamps, footnotes), data in the
+     bright palette. Also the home of data-dense instrument UIs. The raw
+     --ink-* primitives below it remain for exact legacy product recreations.
+   · PAPER (`data-surface="paper"`) — the brand's face. Dossiers, reports,
+     decks, docs, marketing, print. Cream desk, whiter sheets, warm ink,
+     ruled hairlines; the terracotta reads as stamped ink.
+
+   Every alias is remapped per surface so the same component renders correctly
+   on both. Scope a subtree with:  <body data-surface="paper">  (or any element;
+   nest data-surface="ink" to re-enter the instrument, e.g. a chart on a sheet).
+   ============================================================================= */
+
+:root,
+[data-surface="ink"] {
+  /* Night-record surfaces — the brand's dark mode. Warmer and slightly
+     lifted vs the legacy product greys (chroma .014–.016 vs .006–.010):
+     a lamp-lit study, never a black dashboard. WCAG on night-0: fg-0 17.2 ·
+     fg-1 10.4 · fg-2 5.3 · accent 5.5 · ok 9.5 · danger 5.8; fg-2 on the
+     night sheet 5.0. */
+  --night-0: oklch(16% 0.014 55);   /* desk                        */
+  --night-1: oklch(20% 0.016 55);   /* sheet / card                */
+  --night-2: oklch(24% 0.016 55);   /* chip / pressed              */
+  --night-3: oklch(28% 0.015 55);   /* input                       */
+
+  --canvas:        var(--night-0);
+  --surface:       var(--night-1);
+  --surface-card:  var(--night-1);
+  --surface-chip:  var(--night-2);
+  --surface-input: var(--night-3);
+
+  --border:        var(--line);
+  --border-strong: var(--line-2);
+  --divider:       var(--hair);
+
+  --text:          var(--fg-0);
+  --text-secondary:var(--fg-1);
+  --text-muted:    var(--fg-2);
+  --text-faint:    var(--fg-3);
+
+  /* Accent & status AS TEXT/BORDER on this surface (fills use the primitives) */
+  --accent-ink:    oklch(72% 0.13 50);  /* terracotta, LIGHTENED for dark — 7.4:1 on night-0 (64% base is fill-only here) */
+  /* Status inks, LIFTED for dark (measured on the tinted night sheet):
+     ok 9.0 · warn 8.2 · danger 6.9 · info 9.9 — the base tones (fills/dots)
+     stay below; text/border always use these -ink aliases. */
+  --ok-ink:        oklch(81% 0.13 150);
+  --warn-ink:      oklch(83% 0.12 80);
+  --danger-ink:    oklch(75% 0.14 30);
+  --info-ink:      oklch(80% 0.09 230);
+
+  --focus-ring:    var(--accent-glow);
+  --selection:     var(--accent-soft);
+
+  /* Data-viz envelope (the "brain shell" / any mesh hull): faint cool contour
+     + near-zero fill on the dark instrument. --mesh-tint is the OPAQUE
+     equivalent for depth-written hulls (WebGL: use it flat + unlit so folded
+     geometry can never alpha-stack). --field-point paints the ambient
+     (non-interactive) point mass — opaque, ≈2:1 vs the canvas: visible as
+     texture, deliberately below the 4.5:1 interactive threshold. */
+  --mesh-line: oklch(70% 0.03 240 / 0.30);
+  --mesh-fill: oklch(70% 0.03 240 / 0.05);
+  --mesh-tint: color-mix(in oklab, var(--night-0) 94%, oklch(70% 0.03 240));
+  --field-point: oklch(34% 0.025 240);
+
+  /* Tool inks (Trace view — one hue per tool family), NIGHT = lifted L
+     like the status inks. Replaces trace.js's legacy hex TOOL_COLOR. */
+  --tool-read:   var(--info-ink);
+  --tool-search: oklch(78% 0.10 210);
+  --tool-edit:   var(--warn-ink);
+  --tool-write:  var(--ok-ink);
+  --tool-exec:   var(--danger-ink);
+  --tool-agent:  oklch(78% 0.13 340);
+  --tool-web:    oklch(78% 0.11 300);
+}
+
+[data-surface="paper"] {
+  --canvas:        var(--paper-0);
+  --surface:       var(--sheet);
+  --surface-card:  var(--sheet);
+  --surface-chip:  var(--paper-1);
+  --surface-input: var(--sheet);
+
+  --border:        var(--paper-line);
+  --border-strong: var(--paper-line-2);
+  --divider:       var(--paper-hair);
+
+  --text:          var(--pfg-0);
+  --text-secondary:var(--pfg-1);
+  --text-muted:    var(--pfg-2);
+  --text-faint:    var(--pfg-3);
+
+  --accent-ink:    var(--accent-deep);
+  --ok-ink:        var(--ok-deep);
+  --warn-ink:      var(--warn-deep);
+  --danger-ink:    var(--danger-deep);
+  --info-ink:      var(--info-deep);
+
+  --focus-ring:    var(--accent-glow);
+  --selection:     var(--accent-soft);
+
+  /* ── Data colours, re-inked for paper ─────────────────────────────────────
+     The same variables deepen so data stays legible on cream — and the heat
+     scale inverts its "fade" end: on ink a cold memory fades toward black,
+     on paper it fades into the page. Consumers keep using var(--stage-*) /
+     var(--heat-*) unchanged. */
+  --heat-hot:  oklch(55% 0.14 40);
+  --heat-warm: oklch(62% 0.11 60);
+  --heat-cool: oklch(72% 0.06 80);
+  --heat-cold: oklch(86% 0.02 85);
+
+  --stage-labile: oklch(48% 0.12 230);
+  --stage-early:  oklch(46% 0.11 190);
+  --stage-late:   oklch(46% 0.11 155);
+  --stage-cons:   oklch(52% 0.11 95);
+  --stage-recon:  oklch(46% 0.12 320);
+
+  --emo-urgent:  oklch(48% 0.16 28);
+  --emo-frustr:  oklch(52% 0.13 55);
+  --emo-satisf:  oklch(46% 0.11 155);
+  --emo-discov:  oklch(48% 0.11 250);
+  --emo-conflct: oklch(50% 0.12 310);
+
+  --ok:     var(--ok-deep);
+  --warn:   var(--warn-deep);
+  --danger: var(--danger-deep);
+  --info:   var(--info-deep);
+
+  /* Envelope on paper: a graphite PENCIL CONTOUR around ONE flat hull layer.
+     --mesh-tint = the page with 4% ink mixed in, OPAQUE — render the hull
+     with it unlit + depth-written (single layer) so the mesh's folded
+     geometry can never stack into a grey mass. */
+  --mesh-line: oklch(42% 0.015 60 / 0.45);
+  --mesh-fill: oklch(42% 0.020 60 / 0.04);
+  --mesh-tint: color-mix(in oklab, var(--paper-0) 96%, var(--pfg-0));
+  --field-point: oklch(76% 0.035 240);
+
+  /* Tool inks (Trace view), PAPER = deep like the status inks. */
+  --tool-read:   var(--info-deep);
+  --tool-search: oklch(46% 0.10 210);
+  --tool-edit:   var(--warn-deep);
+  --tool-write:  var(--ok-deep);
+  --tool-exec:   var(--danger-deep);
+  --tool-agent:  oklch(48% 0.14 340);
+  --tool-web:    oklch(46% 0.12 300);
+}
+
+::selection { background: var(--selection); color: var(--text); }

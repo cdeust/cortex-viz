@@ -1,0 +1,91 @@
+/* =============================================================================
+   AI Architect — COLOR
+   Warm-neutral dark canvas. "Instrument-grade calm." The chrome is greyscale;
+   all saturation is reserved for DATA (heat, stage, valence) and a single
+   discipline accent — warm terracotta, the colour of the lab-notebook ink and
+   the wine in the glass. Values are oklch, kept intentionally low-chroma.
+   ============================================================================= */
+
+:root {
+  /* ── Warm-neutral greys (the chrome) ──────────────────────────────────── */
+  --ink-0:  oklch(12% 0.006 60);   /* app canvas / void            */
+  --ink-1:  oklch(15% 0.008 60);   /* surface / sidebar / panel    */
+  --ink-2:  oklch(18% 0.010 60);   /* elevated / card / KPI box    */
+  --ink-3:  oklch(22% 0.010 60);   /* chip / hover                 */
+  --ink-4:  oklch(28% 0.010 60);   /* input / field                */
+
+  --line:   oklch(30% 0.010 60 / 0.45);   /* default hairline border   */
+  --line-2: oklch(35% 0.010 60 / 0.22);   /* brighter / active border  */
+  --hair:   oklch(45% 0.010 60 / 0.14);   /* faint internal divider    */
+
+  --fg-0:   oklch(96% 0.005 80);   /* primary text                 */
+  --fg-1:   oklch(80% 0.006 70);   /* secondary text               */
+  --fg-2:   oklch(62% 0.006 70);   /* tertiary / labels            */
+  --fg-3:   oklch(48% 0.008 70);   /* quaternary / hints           */
+
+  /* ── The single accent — warm terracotta (wine · ink · amber lamp) ────── */
+  --accent:       oklch(64% 0.14 47);        /* terracotta, the brand mark   */
+  --accent-strong:oklch(58% 0.15 45);        /* deep accent — large text/fills */
+  --accent-bright:oklch(69% 0.14 52);        /* hover fill (brightens, AA-safe) */
+  --on-accent:    oklch(16% 0.015 50);       /* ink on accent fills — 5.5:1 AA */
+  --accent-soft:  oklch(64% 0.14 47 / 0.14); /* tint fill                    */
+  --accent-glow:  oklch(64% 0.14 47 / 0.35); /* focus ring / dot glow        */
+
+  /* Amber sibling — used sparingly for "verified / live" warmth ─────────── */
+  --amber:        oklch(78% 0.13 75);
+  --amber-soft:   oklch(78% 0.13 75 / 0.14);
+
+  /* ── Paper (light brand surface for docs, seals, print) ───────────────── */
+  --paper-0: oklch(95% 0.010 85);   /* cream sheet                  */
+  --paper-1: oklch(91% 0.014 82);   /* raised cream                 */
+  --paper-ink: oklch(28% 0.020 55); /* text on paper — see --pfg-0  */
+  --paper-2: oklch(87.5% 0.016 80);  /* pressed cream                */
+  --sheet:   oklch(97.5% 0.006 90);  /* the whiter sheet on the desk */
+
+  /* Warm inks on paper (WCAG on paper-0: 14.3 / 8.7 / 6.2 / 3.7) */
+  --pfg-0: oklch(24% 0.018 55);
+  --pfg-1: oklch(38% 0.020 55);
+  --pfg-2: oklch(46% 0.020 55);
+  --pfg-3: oklch(58% 0.020 60);
+
+  /* Paper hairlines (ruled-ledger lines) */
+  --paper-line:   oklch(32% 0.02 60 / 0.26);
+  --paper-line-2: oklch(32% 0.02 60 / 0.42);
+  --paper-hair:   oklch(32% 0.02 60 / 0.13);
+
+  /* Deep accent + status inks — readable as TEXT on paper (≥ 4.9:1) */
+  --accent-deep: oklch(50% 0.15 45);
+  --ok-deep:     oklch(46% 0.11 155);
+  --warn-deep:   oklch(50% 0.11 80);
+  --danger-deep: oklch(48% 0.16 28);
+  --info-deep:   oklch(46% 0.10 230);
+
+  /* ── Data-only colours — never used for chrome ────────────────────────── */
+  /* Heat scale: hot → cold (memory temperature) */
+  --heat-hot:  oklch(78% 0.13 40);
+  --heat-warm: oklch(74% 0.10 60);
+  --heat-cool: oklch(64% 0.05 80);
+  --heat-cold: oklch(48% 0.02 80);
+
+  /* Lifecycle stages (labile → consolidated → reconsolidated) */
+  --stage-labile: oklch(78% 0.15 230);
+  --stage-early:  oklch(74% 0.14 190);
+  --stage-late:   oklch(78% 0.13 155);
+  --stage-cons:   oklch(80% 0.13 95);
+  --stage-recon:  oklch(72% 0.14 320);
+
+  /* Emotional valence (encoding force) */
+  --emo-urgent:  oklch(68% 0.17 28);
+  --emo-frustr:  oklch(72% 0.15 55);
+  --emo-satisf:  oklch(76% 0.13 155);
+  --emo-discov:  oklch(74% 0.13 250);
+  --emo-conflct: oklch(72% 0.13 310);
+
+  /* ── Semantic status (verification lexicon) ───────────────────────────── */
+  --ok:     oklch(76% 0.13 155);   /* proven / passing / verified  */
+  --warn:   oklch(78% 0.13 75);    /* unsourced / informational    */
+  --danger: oklch(66% 0.17 28);    /* blocked / failing / error    */
+  --info:   oklch(74% 0.11 230);   /* neutral note                 */
+}
+
+/* Semantic surface aliases live in tokens/surfaces.css — author against those. */

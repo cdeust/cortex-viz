@@ -1,0 +1,73 @@
+<!-- @dsCard group="Components" viewport="700x520" name="Core" subtitle="Button · Tabs · Chip · Badge · Input · Select · StatCard · ReactorDot" -->
+<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../../styles.css"><link rel="stylesheet" href="../../cards/spec.css">
+<style>
+  .sec{margin-bottom:16px;}
+  .lbl{font:600 8.5px/1 var(--font-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--text-faint);margin-bottom:9px;}
+  .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;}
+  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+</style></head><body class="spec-body" data-surface="paper">
+  <div class="spec-head"><span class="aia-exhibit">Exhibit <b>K-01</b> · Core primitives</span><span class="spec-src">window.AIArchitectDesignSystem_2ec48f</span></div>
+  <div id="root"></div>
+  <div class="spec-foot"><span class="n">·</span>Everything renders on the record — the semantic aliases in tokens/surfaces.css carry the palette.</div>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script src="../../_ds_bundle.js"></script>
+  <script type="text/babel">
+    const { Button, Tabs, Chip, Badge, Input, Select, StatCard, ReactorDot } = window.AIArchitectDesignSystem_2ec48f;
+    const Search = () => (
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+    );
+    const Play = () => (
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+    );
+    function Demo(){
+      const [tab,setTab] = React.useState('graph');
+      const [filter,setFilter] = React.useState('all');
+      return (
+        <div>
+          <div className="sec">
+            <div className="lbl">Button — variant · size · disabled</div>
+            <div className="row">
+              <Button variant="primary" icon={<Play/>}>Analyze</Button>
+              <Button variant="secondary">Reset view</Button>
+              <Button variant="ghost">Cancel</Button>
+              <Button variant="danger" size="sm">Revert</Button>
+              <Button variant="secondary" disabled>Disabled</Button>
+            </div>
+          </div>
+          <div className="sec">
+            <div className="lbl">Tabs · Chip — switching &amp; filtering</div>
+            <div className="row" style={{gap:18}}>
+              <Tabs value={tab} onChange={setTab} items={[
+                {id:'graph',label:'Graph'},{id:'knowledge',label:'Knowledge'},{id:'wiki',label:'Wiki'}]}/>
+              {[['all','All',28],['semantic','Semantic',12]].map(([id,l,c])=>(
+                <Chip key={id} active={filter===id} count={c} onClick={()=>setFilter(id)}>{l}</Chip>
+              ))}
+            </div>
+          </div>
+          <div className="sec">
+            <div className="lbl">Badge · Input · Select · ReactorDot</div>
+            <div className="row">
+              <Badge tone="accent">Semantic</Badge>
+              <Badge tone="ok" dot>Verified</Badge>
+              <Input placeholder="Search memories…" icon={<Search/>} style={{width:180}}/>
+              <Select options={['all domains','retrieval','architecture']}/>
+              <ReactorDot tone="ok" label="Synchronized"/>
+            </div>
+          </div>
+          <div className="sec" style={{marginBottom:0}}>
+            <div className="lbl">StatCard — the evidence strip</div>
+            <div className="grid4">
+              <StatCard label="Memories" value="87" accent/>
+              <StatCard label="Avg heat" value="0.342"/>
+              <StatCard label="R@10 LongMemEval" value="98.4%" delta="+33.4% vs flat" deltaDir="up"/>
+              <StatCard label="Relationships" value="212"/>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    ReactDOM.createRoot(document.getElementById('root')).render(<Demo/>);
+  </script>
+</body></html>

@@ -29,14 +29,23 @@ PATTERN_COLOR = "#70D880"
 TOOL_COLOR = "#E0A840"
 FEATURE_COLOR = "#B088E0"
 MEMORY_COLORS = {"episodic": "#58D888", "semantic": "#C070D0"}
+# G7 (design gate): interactive points need DEEP paper values (L<=52%,
+# >=4.5:1) — the previous set was L64-82%, pale on cream (~1.1-2:1 on the
+# ~79k entity nodes these colour, cortex-viz Graph/Trace views). Re-targeted
+# to L50% at each entry's original hue (same H, C clamped to 0.10-0.155 —
+# the DS-deep convention already used by every other constant in this
+# module's sibling ``workflow_graph_palette.py``), computed via the OKLCH
+# <-> sRGB round trip (Ottosson, 2020, "A perceptual color space for image
+# processing", https://bottosson.github.io/posts/oklab/). Hues stay
+# distinct per entity type — only lightness/chroma moved into the deep band.
 ENTITY_COLORS = {
-    "function": "#50D0E8",
-    "dependency": "#60A0E0",
-    "error": "#E07070",
-    "decision": "#E0C050",
-    "technology": "#9080D0",
-    "file": "#7088D0",
-    "variable": "#50B8D0",
+    "function": "#007389",  # oklch(50% 0.12 212), was #50D0E8 (L80%)
+    "dependency": "#2566A2",  # oklch(50% 0.12 250), was #60A0E0 (L69%)
+    "error": "#A43A3E",  # oklch(50% 0.14 21), was #E07070 (L68%)
+    "decision": "#7E5F00",  # oklch(50% 0.13 93), was #E0C050 (L82%)
+    "technology": "#6654A0",  # oklch(50% 0.12 292), was #9080D0 (L65%)
+    "file": "#495FA3",  # oklch(50% 0.11 269), was #7088D0 (L64%)
+    "variable": "#007187",  # oklch(50% 0.10 215), was #50B8D0 (L73%)
 }
 
 DISCUSSION_COLOR = "#F43F5E"

@@ -194,15 +194,19 @@ window.BRAIN = window.BRAIN || {};
 
   // Memory-system grouping for the legend (boot.js renders it). `repKind` is
   // the system's representative NODE KIND — the legend swatch is drawn in that
-  // kind's ACTUAL rendered colour (boot.js firstColor[repKind]), so the
-  // memory-system swatches match the colours actually on screen rather than a
-  // separate hand-picked palette. `color` is only a fallback if the kind is
-  // absent from the current graph. source: legend-alignment fix 2026-07-03.
+  // kind's ACTUAL rendered colour category (boot.js firstCat[repKind], itself
+  // JUG.getNodeColor's own category reversed from the live JUG._tok table), so
+  // the memory-system swatches match the colours actually on screen, on
+  // either surface, rather than a separate hand-picked palette. `colorCat`
+  // names a JUG._tok category directly (never a raw hex — G9) and is only
+  // reached as a fallback when the current graph renders zero nodes of that
+  // repKind. source: legend-alignment fix 2026-07-03; category-token
+  // realignment (design-gate round) 2026-07-05.
   BRAIN.MEMORY_SYSTEMS = [
-    { label: 'episodic (memory, files)', repKind: 'memory', color: '#7fe3a0', regions: ['hippocampus', 'parahippocampal', 'amygdala'] },
-    { label: 'semantic (entities)', repKind: 'entity', color: '#8ab4ff', regions: ['atl', 'lateral_temporal'] },
-    { label: 'structural (symbols)', repKind: 'symbol', color: '#c9a0ff', regions: ['parietal_temporal'] },
-    { label: 'procedural (skills, tools, agents)', repKind: 'skill', color: '#ffc97a', regions: ['striatum', 'cerebellum'] },
-    { label: 'hubs (domains)', repKind: 'domain', color: '#ff8fb0', regions: ['precuneus_pcc', 'superior_frontal', 'thalamus'] },
+    { label: 'episodic (memory, files)', repKind: 'memory', colorCat: 'episodic', regions: ['hippocampus', 'parahippocampal', 'amygdala'] },
+    { label: 'semantic (entities)', repKind: 'entity', colorCat: 'info', regions: ['atl', 'lateral_temporal'] },
+    { label: 'structural (symbols)', repKind: 'symbol', colorCat: 'info', regions: ['parietal_temporal'] },
+    { label: 'procedural (skills, tools, agents)', repKind: 'skill', colorCat: 'info', regions: ['striatum', 'cerebellum'] },
+    { label: 'hubs (domains)', repKind: 'domain', colorCat: 'hub', regions: ['precuneus_pcc', 'superior_frontal', 'thalamus'] },
   ];
 })();

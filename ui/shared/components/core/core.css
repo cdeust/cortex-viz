@@ -1,0 +1,119 @@
+/* =============================================================================
+   AI Architect — core component classes
+   Consumed by the React primitives in components/core/. Built entirely on the
+   SEMANTIC aliases (tokens/surfaces.css), so every component renders correctly
+   on both surfaces — ink (instrument) and paper (brand). Prefixed `aia-`.
+   ============================================================================= */
+
+/* ── Button ───────────────────────────────────────────────────────────────── */
+.aia-btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  font-family:var(--font-sans);font-weight:var(--weight-semibold);
+  letter-spacing:0;white-space:nowrap;cursor:pointer;
+  border:1px solid transparent;border-radius:var(--radius-sm);
+  transition:background var(--dur-fast) var(--ease),
+             border-color var(--dur-fast) var(--ease),
+             color var(--dur-fast) var(--ease),
+             transform var(--dur-fast) var(--ease);
+  -webkit-font-smoothing:antialiased;
+}
+.aia-btn:focus-visible{outline:none;box-shadow:var(--shadow-focus);}
+.aia-btn:active{transform:translateY(0.5px);}
+.aia-btn[disabled],.aia-btn[aria-disabled="true"]{opacity:.42;pointer-events:none;}
+
+.aia-btn--sm{font-size:var(--text-xs);padding:6px 11px;}
+.aia-btn--md{font-size:var(--text-sm);padding:8px 15px;}
+.aia-btn--lg{font-size:var(--text-md);padding:11px 20px;}
+
+.aia-btn--primary{background:var(--accent);color:var(--on-accent);}
+.aia-btn--primary:hover{background:var(--accent-bright);}
+.aia-btn--secondary{background:var(--surface-card);color:var(--text);border-color:var(--border);}
+.aia-btn--secondary:hover{background:var(--surface-chip);border-color:var(--border-strong);}
+.aia-btn--ghost{background:transparent;color:var(--text-secondary);}
+.aia-btn--ghost:hover{color:var(--text);background:var(--surface-chip);}
+.aia-btn--danger{background:transparent;color:var(--danger-ink);border-color:color-mix(in oklab,var(--danger-ink) 55%,transparent);}
+.aia-btn--danger:hover{background:oklch(66% 0.17 28/.12);}
+.aia-btn__icon{display:inline-flex;width:1em;height:1em;flex:none;}
+
+/* ── Tabs (view-toggle: underline-active) ─────────────────────────────────── */
+.aia-tabs{display:inline-flex;gap:2px;}
+.aia-tab{
+  position:relative;background:transparent;border:0;cursor:pointer;white-space:nowrap;
+  font-family:var(--font-sans);font-size:12.5px;font-weight:var(--weight-medium);
+  letter-spacing:-0.005em;color:var(--text-muted);padding:8px 12px;border-radius:var(--radius-sm);
+  transition:color var(--dur-fast) var(--ease),background var(--dur-fast) var(--ease);
+}
+.aia-tab:hover{color:var(--text);}
+.aia-tab[aria-selected="true"]{color:var(--text);}
+.aia-tab[aria-selected="true"]::after{
+  content:"";position:absolute;left:10px;right:10px;bottom:-2px;height:1px;background:var(--text);
+}
+
+/* ── Chip / filter pill ───────────────────────────────────────────────────── */
+.aia-chip{
+  display:inline-flex;align-items:center;gap:6px;
+  font-family:var(--font-sans);font-size:11.5px;font-weight:var(--weight-medium);
+  color:var(--text-secondary);background:transparent;border:1px solid var(--border);
+  padding:4px 10px;border-radius:var(--radius-pill);cursor:pointer;
+  transition:background var(--dur-fast) var(--ease),border-color var(--dur-fast) var(--ease),color var(--dur-fast) var(--ease);
+}
+.aia-chip:hover{border-color:var(--border-strong);color:var(--text);}
+.aia-chip[aria-pressed="true"],.aia-chip--active{background:var(--surface-chip);border-color:var(--border-strong);color:var(--text);}
+.aia-chip__count{font-family:var(--font-mono);font-size:10px;color:var(--text-faint);}
+.aia-chip[aria-pressed="true"] .aia-chip__count{color:var(--accent-ink);}
+
+/* ── Badge (type / status micro-cap) ──────────────────────────────────────── */
+.aia-badge{
+  display:inline-flex;align-items:center;gap:6px;
+  font-family:var(--font-mono);font-size:9px;font-weight:var(--weight-semibold);
+  letter-spacing:.14em;text-transform:uppercase;white-space:nowrap;
+  padding:4px 9px;border:1px solid var(--border-strong);border-radius:var(--radius-xs);color:var(--text-secondary);
+}
+.aia-badge__dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+.aia-badge--accent{color:var(--accent-ink);border-color:color-mix(in oklab,var(--accent-ink) 60%,transparent);}
+.aia-badge--ok{color:var(--ok-ink);border-color:color-mix(in oklab,var(--ok-ink) 55%,transparent);}
+.aia-badge--warn{color:var(--warn-ink);border-color:color-mix(in oklab,var(--warn-ink) 55%,transparent);}
+.aia-badge--danger{color:var(--danger-ink);border-color:color-mix(in oklab,var(--danger-ink) 55%,transparent);}
+.aia-badge--info{color:var(--info-ink);border-color:color-mix(in oklab,var(--info-ink) 55%,transparent);}
+.aia-badge--solid{border:none;color:oklch(20% 0.02 60);}
+
+/* ── Input + Select (cmdk aesthetic) ──────────────────────────────────────── */
+.aia-field{
+  font-family:var(--font-mono);font-size:11.5px;color:var(--text);
+  background:var(--surface-input);border:1px solid var(--border);border-radius:var(--radius-sm);
+  padding:7px 11px;outline:none;
+  transition:border-color var(--dur-fast) var(--ease),background var(--dur-fast) var(--ease),box-shadow var(--dur-fast) var(--ease);
+}
+.aia-field::placeholder{color:var(--text-faint);}
+.aia-field:focus{border-color:var(--accent-ink);background:var(--surface);box-shadow:var(--shadow-focus);}
+.aia-field--select{cursor:pointer;appearance:none;padding-right:26px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%238a8a8a'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 9px center;}
+.aia-inputwrap{display:inline-flex;align-items:center;position:relative;}
+.aia-inputwrap .aia-input__icon{position:absolute;left:10px;display:inline-flex;width:13px;height:13px;color:var(--text-faint);pointer-events:none;}
+.aia-inputwrap:has(.aia-input__icon) .aia-field{padding-left:30px;}
+
+/* ── Card / panel ─────────────────────────────────────────────────────────── */
+.aia-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);
+  padding:16px;color:var(--text-secondary);
+}
+.aia-card--elevated{background:var(--surface-card);box-shadow:var(--shadow-md);}
+.aia-card--flush{padding:0;overflow:hidden;}
+.aia-card__head{display:flex;align-items:center;gap:10px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--divider);}
+.aia-card__title{font-family:var(--font-sans);font-size:13px;font-weight:var(--weight-semibold);letter-spacing:-.01em;color:var(--text);}
+
+/* ── Stat card (KPI) ──────────────────────────────────────────────────────── */
+.aia-stat{display:flex;flex-direction:column;gap:5px;background:var(--surface-card);border:1px solid var(--border);border-radius:var(--radius-md);padding:12px 14px;}
+.aia-stat__value{font-family:var(--font-mono);font-size:22px;font-weight:var(--weight-medium);letter-spacing:-.01em;color:var(--text);line-height:1;}
+.aia-stat__value--accent{color:var(--accent-ink);}
+.aia-stat__label{font-family:var(--font-mono);font-size:9px;font-weight:var(--weight-regular);letter-spacing:.14em;text-transform:uppercase;color:var(--text-faint);}
+.aia-stat__delta{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);}
+.aia-stat__delta--up{color:var(--ok-ink);}
+.aia-stat__delta--down{color:var(--danger-ink);}
+
+/* ── Reactor dot (live indicator) ─────────────────────────────────────────── */
+.aia-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:var(--glow-accent);}
+.aia-dot--live{animation:dot-blink 2.2s ease-in-out infinite;}
+.aia-dot--ok{background:var(--ok);box-shadow:var(--glow-ok);}
+.aia-dot--idle{background:var(--text-faint);box-shadow:none;}

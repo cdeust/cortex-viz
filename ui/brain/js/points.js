@@ -3,9 +3,11 @@
 // Builds one THREE.Points object for the whole graph: a position buffer from
 // layout.js, a per-node colour (its domain's lobe hue, so the brain reads as
 // coloured territories) and a per-node size derived from the node's heat/size.
-// A tiny ShaderMaterial
-// draws each node as a soft round additive sprite, so ~10^5 nodes render in a
-// single draw call and glow like neurons.
+// A tiny ShaderMaterial draws each node as a soft round FLAT INK dot — normal
+// (not additive) blending, so dense memory regions read as layered ink on
+// paper instead of piling up into an additive white-out glow. source:
+// AI Architect Design System README §3 ("no black backgrounds... colour only
+// from data"; paper doctrine drops emissive glow for flat, legible marks).
 
 window.BRAIN = window.BRAIN || {};
 
@@ -13,11 +15,10 @@ window.BRAIN = window.BRAIN || {};
   var BASE_SIZE = 1.35;    // world point size for a cold node (was 1.05)
   var HEAT_GAIN = 1.8;     // extra size at heat = 1
   var HUB_KINDS = { domain: 3.4, tool_hub: 2.0, mcp: 2.4, skill: 1.8, agent: 1.8 };
-  // Per-point opacity. The colored nodes LEAD the image (the scaffold + synapse
-  // web are now a faint background), so a firmer alpha — still capped to avoid
-  // additive white-out in the densest memory regions. source: readability pass
-  // 2026-07-02 (nodes were washed out under the scaffold net).
-  var POINT_ALPHA = 0.52;
+  // Per-point opacity. Normal blending (not additive) means alpha no longer
+  // needs to be capped against a white-out ceiling — it can sit closer to
+  // opaque so each node reads as a solid ink dot. source: paper re-ink pass.
+  var POINT_ALPHA = 0.82;
 
   var VERT = [
     'attribute float size;',
@@ -66,13 +67,17 @@ window.BRAIN = window.BRAIN || {};
       vertexShader: VERT,
       fragmentShader: FRAG,
       transparent: true,
-      depthTest: true,
+      // depthTest off so the node cloud floats OVER the opaque brain hull — a
+      // scientist reads the data points against the page, not occluded inside a
+      // silhouette. renderOrder 2 draws them after the hull (0) and web (1).
+      // source: AI Architect DS envelope Spec V-01 (points over the shell).
+      depthTest: false,
       depthWrite: false,
-      blending: THREE.AdditiveBlending,
+      blending: THREE.NormalBlending,
     });
 
     var points = new THREE.Points(geom, material);
-    points.renderOrder = 1;
+    points.renderOrder = 2;
     points.frustumCulled = false;
     BRAIN.world.add(points);
     BRAIN.points = points;

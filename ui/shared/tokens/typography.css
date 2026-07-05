@@ -1,0 +1,56 @@
+/* =============================================================================
+   AI Architect — TYPOGRAPHY
+   Three voices, each with a job:
+     · Inter Tight  — chrome, UI, labels, numbers-in-chrome. Tight, quiet.
+     · Newsreader   — prose, headlines, the human/scientific register.
+     · JetBrains Mono — identifiers, metrics, citations, anything you could
+                        copy-paste and run. Proof is always monospaced.
+   ============================================================================= */
+
+:root {
+  --font-sans:  'Inter Tight', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-serif: 'Newsreader', 'Iowan Old Style', Georgia, 'Times New Roman', serif;
+  --font-mono:  'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, monospace;
+
+  /* Type scale (px). Instrument chrome runs small & dense; prose runs larger. */
+  --text-3xs: 9px;    /* meta labels, uppercase micro-caps      */
+  --text-2xs: 10.5px; /* mono captions, status bar              */
+  --text-xs:  11.5px; /* chips, secondary UI                    */
+  --text-sm:  12.5px; /* body-UI, nav, buttons                  */
+  --text-md:  14px;   /* base body                              */
+  --text-lg:  16px;   /* lead paragraph                         */
+  --text-xl:  20px;   /* card title                             */
+  --text-2xl: 26px;   /* section head                           */
+  --text-3xl: 34px;   /* page title                             */
+  --text-4xl: 46px;   /* display                                */
+  --text-5xl: 62px;   /* hero display                           */
+
+  /* Weights */
+  --weight-regular: 400;
+  --weight-medium:  500;
+  --weight-semibold:600;
+  --weight-bold:    700;
+
+  /* Line-heights */
+  --leading-tight:  1.15;
+  --leading-snug:   1.3;
+  --leading-normal: 1.5;
+  --leading-relaxed:1.65;
+
+  /* Letter-spacing — sans tightens as it grows; mono/caps track open */
+  --tracking-caps:   0.14em;   /* uppercase micro-labels          */
+  --tracking-mono:   0.02em;   /* mono running text               */
+  --tracking-tight: -0.01em;   /* display / large sans            */
+  --tracking-tighter:-0.02em;  /* hero                            */
+
+  /* OpenType — the products enable these Inter Tight stylistic sets */
+  --font-features: "ss01","cv11","ss03";
+
+  /* Semantic roles */
+  --role-display:  var(--weight-regular) var(--text-4xl)/var(--leading-tight) var(--font-serif);
+  --role-title:    var(--weight-semibold) var(--text-xl)/var(--leading-snug) var(--font-sans);
+  --role-body:     var(--weight-regular) var(--text-md)/var(--leading-normal) var(--font-sans);
+  --role-prose:    var(--weight-regular) var(--text-lg)/var(--leading-relaxed) var(--font-serif);
+  --role-label:    var(--weight-semibold) var(--text-3xs)/1 var(--font-mono);
+  --role-code:     var(--weight-regular) var(--text-sm)/var(--leading-normal) var(--font-mono);
+}

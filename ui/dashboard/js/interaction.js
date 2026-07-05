@@ -37,8 +37,8 @@
     }
     var meta = metaParts.filter(Boolean).join(' \u00b7 ');
 
-    var colorMap = { episodic: '#26de81', semantic: '#d946ef', entity: '#00d2ff' };
-    var color = colorMap[nd.storeType] || '#00d2ff';
+    var colorMap = JMD.TYPE_COLORS_HEX;
+    var color = colorMap[nd.storeType] || colorMap.entity;
 
     tooltip.querySelector('.tt-label').textContent = content;
     tooltip.querySelector('.tt-type').textContent = typeLabel;
@@ -62,8 +62,8 @@
     var d = nd.data;
     var isEntity = nd.isEntity;
 
-    var colorMap = { episodic: '#26de81', semantic: '#d946ef', entity: '#00d2ff' };
-    var color = colorMap[nd.storeType] || '#00d2ff';
+    var colorMap = JMD.TYPE_COLORS_HEX;
+    var color = colorMap[nd.storeType] || colorMap.entity;
 
     // Type badge
     var typeEl = document.getElementById('panel-type');
@@ -167,8 +167,8 @@
       var d = c.node.data;
       var label = c.node.isEntity ? (d.name || 'Entity') : (d.content || '').slice(0, 60);
       var typeTag = c.isCausal ? 'causal' : c.type;
-      var colorMap = { episodic: '#26de81', semantic: '#d946ef', entity: '#00d2ff' };
-      var dotColor = colorMap[c.node.storeType] || '#00d2ff';
+      var colorMap = JMD.TYPE_COLORS_HEX;
+      var dotColor = colorMap[c.node.storeType] || colorMap.entity;
       html += '<div class="conn-item" data-idx="' + c.idx + '">'
             + '<span class="conn-dot" style="background:' + dotColor + '"></span>'
             + '<span class="conn-label">' + JMD.escHtml(label) + '</span>'

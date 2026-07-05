@@ -1,315 +1,172 @@
-/* Cortex — Memory Science Panel
-   Compact label-value grid for memory cards (Knowledge + Board).
-   Uses design tokens from theme.css. */
+/* Cortex — Memory Science components (AI Architect DS, paper doctrine).
+   Feeling line, Meaning quote, card-level meters/heat-footer, and the
+   detail-panel PROPERTIES ledger. Authored against the DS semantic
+   aliases only (--text*, --border*, --divider, --font-*, --heat-*) —
+   the shared aia-heat/aia-ledger/aia-chip/aia-footnotes primitives
+   supply the rest. No raw hex, no dashed section rules, no plain-
+   English explainer boxes. source: cards/data-memory-card.html (DD-01),
+   da-anatomy-spec.md §2.5/§2.12.
+   (NB: never write a star-slash glob inside a CSS comment.) */
 
-.ms-panel {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  column-gap: 8px;
-  row-gap: 3px;
-  align-items: center;
-  margin-top: 10px;
-  padding-top: 8px;
-  border-top: 1px dashed var(--hair);
-  font-family: var(--mono, 'JetBrains Mono', monospace);
-  font-size: 10.5px;
-  line-height: 1.35;
-}
-
-/* Compact variant (Board cards) — tighter spacing, smaller text. */
-.ms-panel-compact {
-  row-gap: 2px;
-  column-gap: 6px;
-  margin-top: 6px;
-  padding-top: 6px;
-  font-size: 9.5px;
-}
-
-.ms-row {
-  display: contents;  /* rows project directly into the 3-col grid */
-}
-.ms-k {
-  color: var(--fg-3, #7a8797);
-  letter-spacing: 0.02em;
-  text-transform: none;
-  white-space: nowrap;
-}
-
-.ms-bar {
-  position: relative;
-  display: block;
-  width: 100%;
-  min-width: 40px;
-  height: 4px;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.ms-panel-compact .ms-bar { height: 3px; }
-
-.ms-bar-fill {
-  position: absolute;
-  top: 0; left: 0; bottom: 0;
-  background: linear-gradient(
-    90deg,
-    color-mix(in oklab, var(--amber, #E8B840) 55%, transparent) 0%,
-    var(--amber, #E8B840) 100%
-  );
-  border-radius: inherit;
-  transition: width 0.2s var(--ease, ease);
-}
-
-/* Bipolar bar (valence: -1..+1, 0 = midline). */
-.ms-bar-bipolar {
-  background: linear-gradient(
-    90deg,
-    color-mix(in oklab, #E07070 30%, transparent) 0%,
-    rgba(255, 255, 255, 0.06) 50%,
-    color-mix(in oklab, #60D888 30%, transparent) 100%
-  );
-}
-.ms-bar-bipolar .ms-bar-fill { display: none; }
-.ms-bar-marker {
-  position: absolute;
-  top: -2px; bottom: -2px;
-  width: 2px;
-  background: var(--fg-0, #f4f4ec);
-  transform: translateX(-50%);
-  box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
-}
-
-.ms-v {
-  text-align: right;
-  white-space: nowrap;
-}
-.ms-v-num   { color: var(--fg-0, #f4f4ec); font-variant-numeric: tabular-nums; }
-.ms-v-count { color: var(--fg-1, #d0d4c8); font-variant-numeric: tabular-nums; }
-.ms-v-text  { color: var(--fg-1, #d0d4c8); font-family: var(--sans, sans-serif); }
-.ms-v-age   { color: var(--fg-2, #98a0a8); font-family: var(--sans, sans-serif); }
-.ms-v-flag  { color: var(--amber, #E8B840); font-weight: 600; }
-
-/* Knowledge cards sit inside .kv-card and the grid layout plays nicely
-   with their padding — no extra overrides required. Board cards are
-   narrower, so we shrink the key column there. */
-.kb-card .ms-panel-compact { grid-template-columns: 62px 1fr auto; }
-.kb-card .ms-panel-compact .ms-k { font-size: 9px; }
-
-/* ── Emotion chip ─────────────────────────────────────────────────
-   Single-line affective summary. Dot + name + valence + arousal. */
+/* ── Feeling line — dot + emotion word + valence + arousal, mono ────── */
 .ms-emotion {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  margin: 8px 0 4px;
-  padding: 3px 10px 3px 6px;
-  border: 1px solid var(--hair, rgba(255,255,255,0.08));
-  border-radius: 999px;
-  font-family: var(--sans, 'Inter Tight', sans-serif);
-  font-size: 11px;
-  background: rgba(255, 255, 255, 0.02);
-}
-.ms-emotion--compact {
-  margin: 4px 0 2px;
-  padding: 2px 8px 2px 5px;
-  font-size: 9.5px;
-  gap: 5px;
-}
-.ms-emotion-dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  box-shadow: 0 0 4px currentColor;
-}
-.ms-emotion--compact .ms-emotion-dot { width: 6px; height: 6px; }
-
-.ms-emotion-name {
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  text-transform: capitalize;
-}
-.ms-emotion-val,
-.ms-emotion-arousal {
-  font-family: var(--mono, 'JetBrains Mono', monospace);
+  gap: 7px;
+  margin: 4px 0 6px;
+  font-family: var(--font-mono);
   font-size: 10px;
-  color: var(--fg-2, #98a0a8);
-  letter-spacing: 0;
+  color: var(--text-muted);
 }
-.ms-emotion--compact .ms-emotion-val,
-.ms-emotion--compact .ms-emotion-arousal { font-size: 8.5px; }
+.ms-emotion--compact { font-size: 9px; margin: 3px 0 4px; }
+.ms-emotion--detail { font-size: 11px; margin: 10px 0 6px; }
+.ms-emotion-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  flex: none;
+}
+.ms-emotion-text {
+  letter-spacing: var(--tracking-mono);
+  text-transform: lowercase;
+}
 
-/* ── Meaning section ──────────────────────────────────────────────
-   The semantic layer — store type, schema alignment, tags, gist. */
+/* ── Meaning — micro-caps label + italic mono verbatim quote ────────── */
 .ms-meaning {
-  margin-top: 10px;
-  padding-top: 8px;
-  border-top: 1px dashed var(--hair, rgba(255,255,255,0.10));
-}
-.ms-meaning--compact {
   margin-top: 6px;
   padding-top: 6px;
+  border-top: 1px solid var(--divider);
 }
+.ms-meaning--compact { margin-top: 4px; padding-top: 4px; }
 .ms-meaning-header {
-  font-family: var(--sans, 'Inter Tight', sans-serif);
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-family: var(--font-mono);
+  font-size: var(--text-3xs, 8.5px);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
-  color: var(--fg-3, #7a8797);
-  margin-bottom: 4px;
+  color: var(--text-faint);
+  margin-bottom: 3px;
 }
-.ms-meaning--compact .ms-meaning-header { font-size: 8.5px; margin-bottom: 2px; }
+.ms-meaning-quote {
+  font-family: var(--font-mono);
+  font-style: italic;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.ms-meaning--compact .ms-meaning-quote { font-size: 9.5px; -webkit-line-clamp: 1; }
 
-.ms-meaning-grid {
+/* ── Card-level Heat footer (compact — Board kb-card) ───────────────── */
+.ms-heat-footer {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--divider);
+}
+.ms-heat-footer .aia-heat__track { height: 6px; }
+
+/* ── DD-01 four fixed meters (full — Knowledge kv-card) ──────────────
+   Amber measurement ink, no numeric readout on the row itself (the
+   ledger/detail panel carries the exact figure) — matches the
+   blueprint's ".meter" anatomy literally. */
+.ms-panel-full {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--divider);
+}
+.ms-meters {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
-.ms-meaning--compact .ms-meaning-grid { gap: 2px; }
-
-.ms-meaning-row {
+.ms-meter {
   display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  font-family: var(--sans, 'Inter Tight', sans-serif);
-  font-size: 11px;
-  color: var(--fg-1, #d0d4c8);
-  line-height: 1.4;
-}
-.ms-meaning--compact .ms-meaning-row { font-size: 9.5px; }
-
-.ms-meaning-icon {
-  flex: 0 0 auto;
-  width: 14px; min-width: 14px;
-  text-align: center;
-  font-family: var(--mono, monospace);
-  color: var(--fg-3, #7a8797);
-  line-height: 1.4;
-}
-.ms-meaning-store-semantic  { color: #C070D0; }
-.ms-meaning-store-episodic  { color: #58D888; }
-.ms-meaning-schema          { color: #FCD34D; }
-.ms-meaning-tags            { color: var(--amber, #E8B840); }
-.ms-meaning-gist            { color: var(--fg-2, #98a0a8); font-size: 1.2em; line-height: 1; }
-
-.ms-meaning-label { flex: 1; min-width: 0; }
-
-.ms-meaning-tags-wrap {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  flex: 1;
-  min-width: 0;
-}
-.ms-meaning-tag {
-  display: inline-block;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--hair, rgba(255,255,255,0.08));
-  color: var(--fg-1, #d0d4c8);
-  padding: 1px 6px;
-  border-radius: 999px;
-  font-family: var(--mono, monospace);
-  font-size: 9.5px;
-  letter-spacing: 0;
-}
-.ms-meaning--compact .ms-meaning-tag { font-size: 8.5px; padding: 0 5px; }
-
-.ms-meaning-gist-text {
-  flex: 1;
-  min-width: 0;
-  font-family: var(--serif, 'Newsreader', Georgia, serif);
-  font-style: italic;
-  color: var(--fg-1, #d0d4c8);
-}
-.ms-meaning--compact .ms-meaning-gist-text { font-size: 9.5px; }
-
-/* ── Emotion chip (detail variant) ─────────────────────────────── */
-.ms-emotion--detail {
-  font-size: 13px;
-  padding: 6px 14px 6px 10px;
-  gap: 10px;
-  margin: 12px 0 6px;
-}
-.ms-emotion--detail .ms-emotion-dot { width: 10px; height: 10px; }
-.ms-emotion--detail .ms-emotion-val,
-.ms-emotion--detail .ms-emotion-arousal { font-size: 11px; }
-
-/* ── Explained panel (detail modal) ──────────────────────────────
-   Each measurement gets a clear label, the value (bar/number/chip),
-   and a one-sentence non-technical explanation beneath. */
-.ms-explain {
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line, rgba(255,255,255,0.10));
-  /* Establish a query container so the measurement grid below responds to
-     the ACTUAL block width (narrow detail panel vs wide Knowledge card),
-     not the viewport. A viewport media query forced 2 columns even in the
-     ~280px detail panel, overflowing each value into its neighbour. */
-  container-type: inline-size;
-}
-.ms-explain-header {
-  font-family: var(--sans, 'Inter Tight', sans-serif);
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--fg-0, #f4f4ec);
-  letter-spacing: -0.005em;
-  margin-bottom: 2px;
-}
-.ms-explain-subheader {
-  font-family: var(--sans, 'Inter Tight', sans-serif);
-  font-size: 12px;
-  color: var(--fg-2, #98a0a8);
-  margin-bottom: 14px;
-}
-.ms-explain-list {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 10px;
-}
-/* Two columns ONLY when the measurement block itself is wide enough for two
-   ``minmax(0,160px) 1fr`` rows side by side (~460px) — the Knowledge card.
-   The narrow detail panel stays single-column, so labels/values never
-   overlap. Container query, not viewport. */
-@container (min-width: 460px) {
-  .ms-explain-list { grid-template-columns: 1fr 1fr; column-gap: 20px; }
-}
-
-.ms-explain-row {
-  padding: 10px 12px 10px 12px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--hair, rgba(255,255,255,0.06));
-  border-radius: var(--r-md, 6px);
-}
-.ms-explain-row-head {
-  display: grid;
-  grid-template-columns: minmax(0, 160px) 1fr;
-  column-gap: 12px;
-  row-gap: 4px;
   align-items: center;
+  gap: 8px;
 }
-.ms-explain-label {
-  font-family: var(--sans, 'Inter Tight', sans-serif);
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--fg-0, #f4f4ec);
+.ms-meter-k {
+  width: 74px;
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: var(--tracking-mono);
+  color: var(--text-muted);
 }
-.ms-explain-value {
+.ms-meter-track {
+  flex: 1;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-chip);
+  overflow: hidden;
   display: block;
-  min-width: 0;
 }
-.ms-explain-value-inner {
+.ms-meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--warn-ink); /* source: DS README DD-01 — meters carry the amber ink */
+}
+
+/* Provenance — Emotion·Store / Accessed / Created, mono kv rows. */
+.ms-provenance {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+}
+.ms-kv {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-muted);
+  padding: 2px 0;
+}
+.ms-kv b {
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+
+/* ── Detail-panel PROPERTIES ledger ──────────────────────────────────
+   Reuses the DS .aia-ledger row shape verbatim; only the value-slot
+   inline bar is local to this component. */
+.ms-properties-wrap { margin-top: 14px; }
+.ms-properties { margin: 0; }
+
+.ms-ledger-bar {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   width: 100%;
 }
-.ms-explain-bar {
+.ms-ledger-track {
   flex: 1;
   min-width: 60px;
-  height: 6px;
 }
-.ms-explain-note {
-  margin-top: 6px;
-  font-family: var(--sans, 'Inter Tight', sans-serif);
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: var(--fg-1, #d0d4c8);
+.ms-ledger-val {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+/* Tags — outline micro-caps chips (DS .aia-chip, read-only state). */
+.ms-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+.ms-tag-chip {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: var(--tracking-mono);
+  text-transform: none;
+  cursor: default;
+  padding: 3px 9px;
 }

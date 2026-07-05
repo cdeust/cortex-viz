@@ -1,0 +1,66 @@
+/* =============================================================================
+   AI Architect — verification component classes
+   The zetetic lexicon: proof, citation, memory-heat, data legend, and the
+   certification STAMP. These are the brand's signature primitives — the parts
+   that say "science is behind everything." Built on the semantic aliases so
+   they read correctly on both ink and paper.
+   ============================================================================= */
+
+/* ── ProofBadge — the gate verdict ────────────────────────────────────────── */
+.aia-proof{
+  display:inline-flex;align-items:center;gap:7px;white-space:nowrap;
+  font-family:var(--font-mono);font-size:10px;font-weight:var(--weight-semibold);
+  letter-spacing:.08em;text-transform:uppercase;
+  padding:5px 10px;border-radius:var(--radius-sm);border:1px solid;
+}
+.aia-proof__dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none;}
+.aia-proof--proven{color:var(--ok-ink);border-color:color-mix(in oklab,var(--ok-ink) 50%,transparent);background:oklch(76% 0.13 155/.10);}
+.aia-proof--unsourced{color:var(--warn-ink);border-color:color-mix(in oklab,var(--warn-ink) 50%,transparent);background:var(--amber-soft);}
+.aia-proof--blocked{color:var(--danger-ink);border-color:color-mix(in oklab,var(--danger-ink) 50%,transparent);background:oklch(66% 0.17 28/.10);}
+.aia-proof--pending{color:var(--text-muted);border-color:var(--border-strong);background:var(--surface-chip);}
+
+/* ── CitationTag — a claim's source annotation ────────────────────────────── */
+.aia-cite{
+  display:inline-flex;align-items:baseline;gap:5px;white-space:nowrap;
+  font-family:var(--font-mono);font-size:11px;color:var(--text-muted);
+  border-bottom:1px dashed var(--border-strong);cursor:help;padding-bottom:1px;
+  transition:color var(--dur-fast) var(--ease),border-color var(--dur-fast) var(--ease);
+}
+.aia-cite:hover{color:var(--accent-ink);border-color:var(--accent-ink);}
+.aia-cite__mark{color:var(--accent-ink);font-weight:var(--weight-medium);}
+.aia-cite--inline{border:none;padding:0;font-style:normal;color:var(--text-faint);}
+
+/* ── HeatBar — memory temperature ─────────────────────────────────────────── */
+.aia-heat{display:flex;flex-direction:column;gap:5px;}
+.aia-heat__track{position:relative;height:6px;border-radius:var(--radius-pill);background:var(--surface-chip);overflow:hidden;}
+.aia-heat__fill{position:absolute;inset:0 auto 0 0;border-radius:var(--radius-pill);
+  background:linear-gradient(90deg,var(--heat-cold),var(--heat-cool),var(--heat-warm),var(--heat-hot));
+  /* The gradient spans the FULL track (fill-width ÷ value), so a low-heat bar
+     shows only the cold end — and never repeats. */
+  background-size:calc(100% / var(--heat-scale,1)) 100%;background-repeat:no-repeat;}
+.aia-heat__meta{display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-faint);}
+.aia-heat__val{color:var(--text-secondary);}
+
+/* ── Legend — data key ────────────────────────────────────────────────────── */
+.aia-legend{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:center;}
+.aia-legend__item{display:inline-flex;align-items:center;gap:7px;font-family:var(--font-sans);font-size:11px;color:var(--text-muted);white-space:nowrap;}
+.aia-legend__swatch{width:9px;height:9px;border-radius:50%;flex:none;}
+.aia-legend__swatch--line{width:14px;height:2px;border-radius:2px;}
+
+/* ── Stamp — the verdict made physical (rubber-stamp certification) ───────── */
+.aia-stamp{
+  position:relative;display:inline-flex;flex-direction:column;align-items:center;gap:2px;
+  padding:8px 16px 7px;border:2px solid currentColor;border-radius:var(--radius-xs);
+  color:var(--accent-ink);white-space:nowrap;
+  font-family:var(--font-mono);font-weight:var(--weight-bold);
+  font-size:14px;letter-spacing:.22em;text-transform:uppercase;line-height:1;
+  transform:rotate(var(--stamp-tilt,-3deg));
+  -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.55 0.5'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+  mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.55 0.5'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.aia-stamp::after{content:"";position:absolute;inset:2px;border:1px solid currentColor;border-radius:2px;opacity:.55;}
+.aia-stamp__sub{font-size:8px;font-weight:var(--weight-medium);letter-spacing:.14em;opacity:.85;}
+.aia-stamp--ok{color:var(--ok-ink);}
+.aia-stamp--danger{color:var(--danger-ink);}
+.aia-stamp--neutral{color:var(--text-muted);}
+.aia-stamp--clean{-webkit-mask-image:none;mask-image:none;}

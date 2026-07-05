@@ -24,23 +24,121 @@
     symbol: 2,
     session: 16, prompt: 9, action: 6,
   };
-  var KIND_COLOR = {
-    domain: '#FCD34D',     // gold hub
-    tool_hub: '#F97316',   // fallback (per-tool colors override in node.color)
-    skill: '#FB923C',      // orange
-    command: '#FACC15',    // yellow — distinct from Bash-tool orange
-    hook: '#A855F7',       // purple
-    agent: '#EC4899',      // pink
-    mcp: '#6366F1',        // indigo
-    memory: '#10B981',     // emerald fallback
-    discussion: '#EF4444', // red
-    entity: '#50B0C8',     // teal
-    file: '#06B6D4',       // cyan fallback — primary-tool color overrides
-    symbol: '#64748B',     // slate — inherits parent-file color via node.color
-    session: '#FCD34D',    // session hub (gold)
-    prompt: '#22D3EE',     // user prompt (cyan)
-    action: '#94A3B8',     // tool action (slate; per-tool color via node.color)
+  // G9 (design gate): never bake a hex table — resolve every fallback colour
+  // LIVE against the design-system tokens on the CURRENT surface. KIND_TOKEN
+  // maps each node kind to a CSS custom property name; resolveKindColor()
+  // reads it via getComputedStyle (through window.CortexPalette, the shared
+  // reader in ui/shared/palette.js — already loaded before this file, see
+  // ui/unified-viz.html) so paper vs ink both render correctly with zero
+  // per-surface literals here. n.color (server-baked) always wins — this
+  // table is only ever the fallback, exactly as it was as a static object.
+  //
+  // Mapping preserves the hue families verified in the prior pivot-restore
+  // round (memory: cortex-viz-trace-pivot-restore.md) and the app's existing
+  // per-surface --kind-*/--tool-* families (ui/unified/panels.css, already
+  // authored for both surfaces): domain/session hubs share the DS hub token;
+  // tool_hub/entity share the graphite "recedes" token (DD-04 — the ~100k
+  // entity cloud recedes so hubs/memory read as signal); file/action default
+  // to the read-tool family; web now has its own canonical DS token
+  // (--tool-web) instead of borrowing --kind-mcp; skill/command/hook/agent/
+  // mcp/discussion keep their existing per-surface --kind-* tokens; memory/
+  // prompt/symbol take the nearest DATA-family hue (never a chrome grey —
+  // G3 forbids colouring data with chrome tones).
+  var KIND_TOKEN = {
+    // domain/session hubs use the SURFACE-AWARE alias (--warn-ink), not the
+    // raw --warn-deep primitive: --warn-deep is a single paper-only value
+    // (tokens/colors.css :root, oklch(50% 0.11 80)) that never re-inks, so a
+    // hub painted with it stayed paper-deep even on data-surface="ink" and
+    // read flat/low-contrast against the night canvas (G7 regression fixed
+    // 2026-07-05). --warn-ink (tokens/surfaces.css) resolves to --warn-deep
+    // on paper and a lifted oklch(83% 0.12 80) on ink — same hue, correct
+    // contrast on both.
+    domain:     '--warn-ink',     // olive hub (DD-07), same token as domain hubs elsewhere
+    session:    '--warn-ink',     // session hub — shares the hub token by design
+    tool_hub:   '--kind-entity',  // graphite, deep (DD-04) — per-tool colors override in node.color
+    entity:     '--kind-entity',  // graphite, deep (DD-04) — the recede-so-hubs-read-as-signal token
+    skill:      '--kind-skill',
+    command:    '--kind-command',
+    hook:       '--kind-hook',
+    agent:      '--kind-agent',
+    mcp:        '--kind-mcp',
+    discussion: '--kind-discussion',
+    memory:     '--ok-ink',       // emerald family — matches memory's established green hue
+    file:       '--tool-read',    // per-tool color overrides; read is the neutral default
+    action:     '--tool-read',    // per-tool color overrides (trace.js TOOL_COLOR) in almost all cases
+    web:        '--tool-web',     // WebFetch/WebSearch target — canonical DD-07 tool-family token
+    prompt:     '--stage-early',  // cyan family — nearest DATA hue to the prior prompt colour
+    symbol:     '--info-ink',     // inherits parent-file color via node.color in practice
   };
+  // G3/G7: last-resort colour is a TOKEN, never a raw hex literal — resolves
+  // through the same _readToken() path as every other entry so it stays
+  // surface-correct (DEEP on paper / lifted on ink) even in the fallback
+  // case. --field-point (tokens/surfaces.css) is defined on both surfaces,
+  // so this only fails to resolve if the design-system stylesheet itself
+  // never loaded (in which case nothing on the page is styled anyway).
+  var FALLBACK_TOKEN = '--field-point';
+
+  // G2 (design gate): the currently-mounted canvas/SVG renderer handle, so
+  // the 'cortex:surface-change' listener below can trigger a REPAINT (never
+  // a re-simulation) of the settled galaxy. Only one workflow-graph instance
+  // is ever mounted at a time — Graph and Trace share one wrapper/handle,
+  // destroyed-then-recreated on tab switch (workflow_graph_bridge.js) — so a
+  // single module-scope reference is sufficient; it is set in mount() and
+  // cleared in handle.destroy() below.
+  var _activeRenderer = null;
+  function _repaintActiveRenderer() {
+    if (_activeRenderer && typeof _activeRenderer.redraw === 'function') {
+      try { _activeRenderer.redraw(); } catch (_e) { /* non-fatal: next tick/interaction repaints anyway */ }
+    }
+  }
+
+  var _localTokenCache = {};
+  function _readToken(token) {
+    if (window.CortexPalette) return window.CortexPalette.hex(token);
+    // Defensive direct path (palette script missing): same getComputedStyle
+    // read, cached per (surface, token) so cache invalidates automatically
+    // whenever data-surface changes.
+    var surface = document.documentElement.getAttribute('data-surface') || 'paper';
+    var key = surface + '|' + token;
+    if (_localTokenCache[key]) return _localTokenCache[key];
+    var v = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
+    if (v) _localTokenCache[key] = v;
+    return v || null;
+  }
+  if (window.CortexSurface) {
+    // Belt-and-suspenders: CortexPalette already flushes its own cache on
+    // this event (registered earlier — palette.js loads before this file,
+    // see ui/unified-viz.html — so it has already run by the time this
+    // listener fires); this clears the defensive local cache above, THEN
+    // repaints the settled galaxy on the CURRENT surface's re-inked tokens.
+    // G2 fix (design gate, 2026-07-05): invalidating the cache alone left
+    // the canvas showing the previous surface's baked pixels until the next
+    // unrelated interaction (hover/zoom/click) forced a draw() — a toggle
+    // to ink kept stale paper-deep hub fills/labels on screen. Repainting
+    // here is drawing-only: _repaintActiveRenderer -> renderer.redraw() ->
+    // draw(), which reads current n.x/n.y and re-resolves every colour; it
+    // never calls sim.restart()/alpha(...).restart() and never writes a
+    // node position, so positions stay bit-identical across the toggle.
+    window.addEventListener(window.CortexSurface.EVENT, function () {
+      _localTokenCache = {};
+      _repaintActiveRenderer();
+    });
+  }
+  function resolveKindColor(kind) {
+    var token = KIND_TOKEN[kind];
+    return (token && _readToken(token)) || null;
+  }
+  // Live-resolving object so `KIND_COLOR[n.kind]` (nodeColor, below) and any
+  // external reader of ctx.KIND_COLOR keep working unchanged — each property
+  // read re-resolves against the current surface instead of returning a
+  // value baked in at file-load time.
+  var KIND_COLOR = {};
+  Object.keys(KIND_TOKEN).forEach(function (k) {
+    Object.defineProperty(KIND_COLOR, k, {
+      enumerable: true,
+      get: function () { return resolveKindColor(k) || _readToken(FALLBACK_TOKEN); },
+    });
+  });
   // Radial hierarchy inside each domain cloud — FIVE concentric/sector levels:
   //   L1 setup  (skills/hooks/commands/agents)   @ r = SETUP_R   front sector
   //   L2 tools  (tool_hub)                        @ r = TOOL_R    front sector
@@ -380,6 +478,14 @@
     var renderer = useCanvas
       ? wfg.mountCanvas(container, ctx, sim, width, height)
       : wfg.mountSVG(container, ctx, sim, width, height);
+    // G2: register this instance as the repaint target for the surface
+    // toggle (see the module-level 'cortex:surface-change' listener above).
+    _activeRenderer = renderer;
+    // Debug/verification hook (read-only reference, same pattern as the
+    // existing __wfgRendered above) — lets an external probe read live node
+    // positions (ctx.nodes[i].x/y) to confirm a surface-change repaint moved
+    // zero pixels. No behavior depends on this; it is never read internally.
+    if (window.JUG) window.JUG.__wfgCtx = ctx;
 
     function onResize() {
       var w = container.clientWidth || window.innerWidth;
@@ -562,6 +668,7 @@
         window.removeEventListener('resize', onResize);
         sim.stop();
         renderer.destroy();
+        if (_activeRenderer === renderer) _activeRenderer = null;
       },
       select: function (id) { renderer.selectId(id); },
       reflow: function () { onResize(); },
@@ -1243,7 +1350,10 @@
     else if (n.weight != null) bump = Math.min(4, n.weight * 2);
     return base + bump;
   }
-  function nodeColor(n) { return n.color || KIND_COLOR[n.kind] || '#50C8E0'; }
+  // G3/G7: last-resort branch (unmapped n.kind — not in KIND_TOKEN at all,
+  // so KIND_COLOR[n.kind] has no getter and is undefined) resolves the same
+  // FALLBACK_TOKEN, never a raw hex literal.
+  function nodeColor(n) { return n.color || KIND_COLOR[n.kind] || _readToken(FALLBACK_TOKEN); }
   function labelOf(n) { return n.label || n.name || n.title || n.path || n.id || ''; }
 
   window.JUG = window.JUG || {};

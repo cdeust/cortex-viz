@@ -1,18 +1,21 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-surface="paper">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cortex — Neural Graph</title>
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@300;400;500;600&family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<!-- Surface posture MUST stamp data-surface before first paint. -->
+<script src="/shared/surface-toggle.js"></script>
+<link rel="stylesheet" href="/shared/ds.css">
 <link rel="stylesheet" href="/css/theme.css">
 <link rel="stylesheet" href="/css/panels.css">
 <link rel="stylesheet" href="/css/detail.css">
 <link rel="stylesheet" href="/css/timeline.css">
-<link rel="stylesheet" href="/css/sankey.css">
+<!-- sankey.css removed with the Pipeline view (design gate, 2026-07-05) -->
 <link rel="stylesheet" href="/css/knowledge.css">
 <link rel="stylesheet" href="/css/workflow_graph.css">
 <link rel="stylesheet" href="/css/memory_science.css">
+<script src="/shared/palette.js"></script>
 <!-- KaTeX for scientific math rendering (load early; math appears in view mode too) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
@@ -35,7 +38,6 @@
 <div id="vignette"></div>
 <div id="graph-container"></div>
 <div id="timeline-container"></div>
-<div id="sankey-container"></div>
 <div id="knowledge-container"></div>
 <div id="wiki-container"></div>
 
@@ -54,15 +56,16 @@
   <div class="stat-row"><span>Synapses</span><span class="val" id="s-edge">--</span></div>
   <div class="stat-row"><span>Discussions</span><span class="val" id="s-disc">--</span></div>
 
-  <div id="benchmark-summary" style="margin-top:10px;border-top:1px solid #ffffff10;padding-top:8px;display:none">
-    <div style="font-size:7px;text-transform:uppercase;letter-spacing:0.5px;color:var(--cyan-dim,#508090);margin-bottom:6px">System Benchmarks</div>
-    <div class="stat-row"><span>LongMemEval</span><span class="val bench-val" id="b-lme" style="color:#40D870">--</span></div>
-    <div class="stat-row"><span>LoCoMo</span><span class="val bench-val" id="b-loc" style="color:#40D870">--</span></div>
-    <div class="stat-row"><span>BEAM</span><span class="val bench-val" id="b-beam" style="color:#E0B040">--</span></div>
+  <div id="benchmark-summary" class="panel-block" style="display:none">
+    <div class="panel-section-label">System Benchmarks</div>
+    <div class="stat-row"><span>LongMemEval</span><span class="val bench-val" id="b-lme">--</span></div>
+    <div class="stat-row"><span>LoCoMo</span><span class="val bench-val" id="b-loc">--</span></div>
+    <div class="stat-row"><span>BEAM-10M</span><span class="val bench-val" id="b-beam">--</span></div>
   </div>
 
-  <div id="system-vitals" style="margin-top:10px;border-top:1px solid #ffffff10;padding-top:8px;display:none">
-    <div style="font-size:7px;text-transform:uppercase;letter-spacing:0.5px;color:var(--cyan-dim,#508090);margin-bottom:6px">System Vitals</div>
+  <button id="vitals-toggle" class="panel-toggle" style="display:none">+ System Vitals</button>
+  <div id="system-vitals" class="panel-block" style="display:none">
+    <div class="panel-section-label">System Vitals</div>
     <!-- Stage colours = MEMORY_STAGE_COLORS (workflow_graph_palette.py), the
          same greens the memory nodes are painted with — one canonical stage
          palette across nodes, galaxy vitals, and the brain view. -->
@@ -91,15 +94,14 @@
 <div id="filter-bar">
   <span class="view-toggle">
     <button class="view-btn active" data-view="graph">Graph</button>
+    <!-- Brain is a separate 3D WebGL surface (its own page), not an in-page
+         tab — data-nav navigates instead of swapping the active view. -->
+    <button class="view-btn view-btn--brain" data-nav="/brain"
+            title="Open the 3D anatomical brain view (same graph, placed in a real cortical mesh)">Brain</button>
     <button class="view-btn" data-view="trace">Trace</button>
     <button class="view-btn" data-view="knowledge">Knowledge</button>
     <button class="view-btn" data-view="wiki">Wiki</button>
     <button class="view-btn" data-view="timeline">Board</button>
-    <button class="view-btn" data-view="sankey">Pipeline</button>
-    <!-- Brain is a separate 3D WebGL surface (its own page), not an in-page
-         tab — data-nav navigates instead of swapping the active view. -->
-    <button class="view-btn view-btn--brain" data-nav="/brain"
-            title="Open the 3D anatomical brain view (same graph, placed in a real cortical mesh)">Brain ⟶</button>
   </span>
   <button class="filter-btn" id="glossary-toggle" title="Glossary (?)">?</button>
   <span class="filter-sep"></span>
@@ -170,17 +172,27 @@
 })();
 </script>
 
+<!-- Bottom status + compact legend strip. Replaces the old ~40-line right-side
+     L1–L6 legend; the full vocabulary now lives in the glossary "?" panel. -->
 <div id="status-bar" class="hud-panel">
-  <div class="status-dot"></div>
-  <span id="status-text">Initializing</span>
-  <span style="color:var(--cyan-dim)">|</span>
-  <span id="status-zoom">L0</span>
-  <span style="color:var(--cyan-dim)">|</span>
-  <span id="status-time"></span>
+  <span class="sb-cell sb-status"><span class="status-dot"></span><span id="status-text">Synchronizing</span></span>
+  <span class="sb-sep"></span>
+  <span class="sb-cell"><i class="sb-sw" style="background:var(--stage-labile)"></i>Episodic</span>
+  <span class="sb-cell"><i class="sb-sw" style="background:var(--stage-recon)"></i>Semantic</span>
+  <span class="sb-cell"><i class="sb-sw sb-sw--diamond" style="background:var(--kind-entity)"></i>Entity</span>
+  <span class="sb-cell"><i class="sb-sw sb-sw--line"></i>Causal</span>
+  <span class="sb-sep"></span>
+  <span class="sb-cell"><b id="sb-nodes">--</b>&nbsp;nodes</span>
+  <span class="sb-cell"><b id="sb-edges">--</b>&nbsp;edges</span>
+  <span id="status-zoom" hidden>L0</span>
+  <span id="status-time" class="sb-cell sb-time"></span>
 </div>
 
-<button id="reset-btn">Reset</button>
-<button id="monitor-toggle">Log <span id="monitor-badge">0</span></button>
+<div id="top-actions">
+  <button id="surface-toggle" title="Toggle paper / ink surface">Ink surface</button>
+  <button id="reset-btn">Reset</button>
+  <button id="monitor-toggle">Monitor <span id="monitor-badge">0</span></button>
+</div>
 
 <div id="monitor-panel">
   <div class="mon-header">
@@ -259,64 +271,6 @@
   </div>
 </div>
 
-<div id="legend">
-  <div class="leg-section">Hierarchy — L1 setup</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#FCD34D;box-shadow:0 0 6px #FCD34D60"></div>Domain (hub)</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#FB923C;box-shadow:0 0 6px #FB923C60"></div>Skill</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#FACC15;box-shadow:0 0 6px #FACC1560"></div>Command</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#A855F7;box-shadow:0 0 6px #A855F760"></div>Hook</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#EC4899;box-shadow:0 0 6px #EC489960"></div>Agent</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#6366F1;box-shadow:0 0 6px #6366F160"></div>MCP</div>
-
-  <div class="leg-section">Tools (L2)</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#10B981;box-shadow:0 0 6px #10B98160"></div>Edit</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#059669;box-shadow:0 0 6px #05966960"></div>Write</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#06B6D4;box-shadow:0 0 6px #06B6D460"></div>Read</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#D946EF;box-shadow:0 0 6px #D946EF60"></div>Grep</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#C026D3;box-shadow:0 0 6px #C026D360"></div>Glob</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#F97316;box-shadow:0 0 6px #F9731660"></div>Bash</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#EC4899;box-shadow:0 0 6px #EC489960"></div>Task</div>
-
-  <div class="leg-section">Files (L3)</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#10B981;box-shadow:0 0 6px #10B98160"></div>Edited / Written</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#06B6D4;box-shadow:0 0 6px #06B6D460"></div>Read only</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#D946EF;box-shadow:0 0 6px #D946EF60"></div>Grep / Glob</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#F97316;box-shadow:0 0 6px #F9731660"></div>Bash only</div>
-
-  <div class="leg-section">L4 discussions</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#EF4444;box-shadow:0 0 6px #EF444460"></div>Discussion</div>
-
-  <div class="leg-section">L5 memories</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#86EFAC;box-shadow:0 0 6px #86EFAC60"></div>Memory · labile</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#4ADE80;box-shadow:0 0 6px #4ADE8060"></div>Memory · early LTP</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#16A34A;box-shadow:0 0 6px #16A34A60"></div>Memory · late LTP</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#166534;box-shadow:0 0 6px #16653460"></div>Memory · consolidated</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#C070D0;box-shadow:0 0 6px #C070D060"></div>Memory · semantic</div>
-
-  <div class="leg-section">L6 AST symbols <span style="opacity:0.55;font-weight:400;text-transform:none;letter-spacing:0">(load via filter)</span></div>
-  <div class="leg-item"><div class="leg-dot" style="background:#22D3EE;box-shadow:0 0 6px #22D3EE60"></div>Function</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#38BDF8;box-shadow:0 0 6px #38BDF860"></div>Method</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#8B5CF6;box-shadow:0 0 6px #8B5CF660"></div>Class / Struct / Enum / Trait</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#FBBF24;box-shadow:0 0 6px #FBBF2460"></div>Module / Package / Namespace</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#94A3B8;box-shadow:0 0 6px #94A3B860"></div>Constant / Field / Property</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#50B0C8;box-shadow:0 0 6px #50B0C860"></div>Entity (knowledge graph)</div>
-
-  <div class="leg-section">Edges</div>
-  <div class="leg-item"><div class="leg-line" style="background:rgba(120,200,220,0.7)"></div>in domain</div>
-  <div class="leg-item"><div class="leg-line" style="background:rgba(150,200,180,0.7)"></div>tool → file</div>
-  <div class="leg-item"><div class="leg-line" style="background:rgba(180,210,150,0.7)"></div>invoked skill</div>
-  <div class="leg-item"><div class="leg-line" style="background:rgba(200,170,220,0.7)"></div>triggered hook</div>
-  <div class="leg-item"><div class="leg-line" style="background:rgba(140,220,210,0.7)"></div>spawned agent</div>
-  <div class="leg-item"><div class="leg-line" style="background:rgba(244,63,94,0.65)"></div>discussion → file</div>
-  <div class="leg-item"><div class="leg-line" style="background:rgba(224,168,64,0.65)"></div>command → file</div>
-  <div class="leg-item"><div class="leg-line" style="background:rgba(138,107,255,0.65)"></div>invoked mcp</div>
-  <div class="leg-item"><div class="leg-line" style="background:rgba(100,116,139,0.7)"></div>symbol → file (defined_in)</div>
-  <div class="leg-item"><div class="leg-line" style="background:rgba(120,180,200,0.7)"></div>calls (symbol → symbol)</div>
-  <div class="leg-item"><div class="leg-line" style="background:rgba(200,150,100,0.65)"></div>imports (file → symbol)</div>
-  <div class="leg-item"><div class="leg-line" style="background:rgba(150,200,150,0.7)"></div>member_of (method → class)</div>
-  <div class="leg-item"><div class="leg-line" style="background:rgba(80,176,200,0.65)"></div>about entity</div>
-  <div class="leg-item"><div class="leg-line" style="background:rgba(200,150,255,0.4);border-top:1px dashed rgba(200,150,255,0.6)"></div>cross-domain</div>
-</div>
 
 <div id="glossary-panel">
   <button class="close-btn" id="glossary-close">&#x2715;</button>
@@ -330,38 +284,38 @@
 
   <div class="gloss-section">L1 · Claude setup</div>
   <div class="gloss-entry">
-    <div class="gloss-header"><span class="gloss-dot" style="background:#FCD34D"></span><span class="gloss-name">Domain</span></div>
-    <div class="gloss-desc">The project hub — one big gold node per project you work in. Everything else in the cloud belongs to this domain.</div>
+    <div class="gloss-header"><span class="gloss-dot" style="background:var(--warn-deep)"></span><span class="gloss-name">Domain</span></div>
+    <div class="gloss-desc">The project hub — one big olive node per project you work in. Everything else in the cloud belongs to this domain.</div>
   </div>
   <div class="gloss-entry">
-    <div class="gloss-header"><span class="gloss-dot" style="background:#FB923C"></span><span class="gloss-name">Skill</span></div>
+    <div class="gloss-header"><span class="gloss-dot" style="background:var(--kind-skill)"></span><span class="gloss-name">Skill</span></div>
     <div class="gloss-desc">A slash-command available to Claude (<code>/research-session</code>, <code>/loop</code>, plugin skills). Edge to domain = invoked at least once in that project.</div>
   </div>
   <div class="gloss-entry">
-    <div class="gloss-header"><span class="gloss-dot" style="background:#FACC15"></span><span class="gloss-name">Command</span></div>
+    <div class="gloss-header"><span class="gloss-dot" style="background:var(--kind-command)"></span><span class="gloss-name">Command</span></div>
     <div class="gloss-desc">A distinct shell command executed in the Bash tool. Body = the command text; click for first-seen and last-invoked timestamps.</div>
   </div>
   <div class="gloss-entry">
-    <div class="gloss-header"><span class="gloss-dot" style="background:#A855F7"></span><span class="gloss-name">Hook</span></div>
+    <div class="gloss-header"><span class="gloss-dot" style="background:var(--kind-hook)"></span><span class="gloss-name">Hook</span></div>
     <div class="gloss-desc">A hook script configured in <code>settings.json</code> (SessionStart, PostToolUse, etc.). Fires automatically around tool calls.</div>
   </div>
   <div class="gloss-entry">
-    <div class="gloss-header"><span class="gloss-dot" style="background:#EC4899"></span><span class="gloss-name">Agent</span></div>
+    <div class="gloss-header"><span class="gloss-dot" style="background:var(--kind-agent)"></span><span class="gloss-name">Agent</span></div>
     <div class="gloss-desc">A subagent type spawned via the Task tool (Explore, Plan, a genius reasoning pattern, …). Edge to domain = spawned at least once.</div>
   </div>
   <div class="gloss-entry">
-    <div class="gloss-header"><span class="gloss-dot" style="background:#6366F1"></span><span class="gloss-name">MCP</span></div>
+    <div class="gloss-header"><span class="gloss-dot" style="background:var(--kind-mcp)"></span><span class="gloss-name">MCP</span></div>
     <div class="gloss-desc">An MCP server Claude called (cortex, ai-architect, …). When two domains share an MCP, a long indigo thread bridges them.</div>
   </div>
 
   <div class="gloss-section">L2 · Tools</div>
   <div class="gloss-entry">
     <div class="gloss-desc">One hub per Claude-native tool per domain. Color = the tool:
-      <b style="color:#10B981">Edit</b>, <b style="color:#059669">Write</b>,
-      <b style="color:#06B6D4">Read</b>,
-      <b style="color:#D946EF">Grep</b>, <b style="color:#C026D3">Glob</b>,
-      <b style="color:#F97316">Bash</b>,
-      <b style="color:#EC4899">Task</b>.
+      <b style="color:var(--tool-edit)">Edit</b>, <b style="color:var(--tool-write)">Write</b>,
+      <b style="color:var(--tool-read)">Read</b>,
+      <b style="color:var(--tool-grep)">Grep</b>, <b style="color:var(--tool-glob)">Glob</b>,
+      <b style="color:var(--tool-bash)">Bash</b>,
+      <b style="color:var(--tool-task)">Task</b>.
       Files orbit the tool hub that most often touched them.
     </div>
   </div>
@@ -371,74 +325,74 @@
     <div class="gloss-desc">Every file Claude ever opened, colored by the primary tool that touched it (priority: Edit/Write → Read → Grep/Glob → Bash-only). Click a file for its path, primary-tool cluster, <b>first-seen</b>, <b>last-accessed</b>, and <b>last-modified</b> timestamps, plus a <i>See diff against HEAD</i> button that renders new/modified/deleted/historical content inline.</div>
   </div>
   <div class="gloss-entry">
-    <div class="gloss-header"><span class="gloss-dot" style="background:#10B981"></span><span class="gloss-name">Edited / written</span></div>
+    <div class="gloss-header"><span class="gloss-dot" style="background:var(--tool-edit)"></span><span class="gloss-name">Edited / written</span></div>
     <div class="gloss-desc">File was modified or created by Claude via Edit, Write, MultiEdit, or NotebookEdit.</div>
   </div>
   <div class="gloss-entry">
-    <div class="gloss-header"><span class="gloss-dot" style="background:#06B6D4"></span><span class="gloss-name">Read only</span></div>
+    <div class="gloss-header"><span class="gloss-dot" style="background:var(--tool-read)"></span><span class="gloss-name">Read only</span></div>
     <div class="gloss-desc">File was opened via Read or NotebookRead without being modified.</div>
   </div>
   <div class="gloss-entry">
-    <div class="gloss-header"><span class="gloss-dot" style="background:#D946EF"></span><span class="gloss-name">Grep / Glob</span></div>
+    <div class="gloss-header"><span class="gloss-dot" style="background:var(--tool-grep)"></span><span class="gloss-name">Grep / Glob</span></div>
     <div class="gloss-desc">File was searched via Grep or Glob without being read or modified.</div>
   </div>
   <div class="gloss-entry">
-    <div class="gloss-header"><span class="gloss-dot" style="background:#F97316"></span><span class="gloss-name">Bash only</span></div>
+    <div class="gloss-header"><span class="gloss-dot" style="background:var(--tool-bash)"></span><span class="gloss-name">Bash only</span></div>
     <div class="gloss-desc">File was referenced only from a Bash command (<code>cat</code>, <code>tail</code>, pipelines, …).</div>
   </div>
 
   <div class="gloss-section">L4 · Discussions</div>
   <div class="gloss-entry">
-    <div class="gloss-header"><span class="gloss-dot" style="background:#EF4444"></span><span class="gloss-name">Discussion</span></div>
+    <div class="gloss-header"><span class="gloss-dot" style="background:var(--kind-discussion)"></span><span class="gloss-name">Discussion</span></div>
     <div class="gloss-desc">One Claude Code session. Click for started-at, last-activity, duration, message count, and a <i>View full conversation</i> button that replays every turn (including tool calls) inside the modal.</div>
   </div>
 
   <div class="gloss-section">L5 · Memories</div>
   <div class="gloss-entry">
     <div class="gloss-desc">Knowledge Cortex has stored. Color = consolidation stage:
-      <b style="color:#86EFAC">labile</b> (freshly encoded),
-      <b style="color:#4ADE80">early LTP</b> (1–6h),
-      <b style="color:#16A34A">late LTP</b> (6–24h),
-      <b style="color:#166534">consolidated</b> (&gt;24h),
-      <b style="color:#C070D0">semantic</b> (extracted schema). Node size reflects heat; click for full content, tags, and every scientific measurement (arousal, surprise, plasticity, …).
+      <b style="color:var(--stage-labile)">labile</b> (freshly encoded),
+      <b style="color:var(--stage-early)">early LTP</b> (1–6h),
+      <b style="color:var(--stage-late)">late LTP</b> (6–24h),
+      <b style="color:var(--stage-cons)">consolidated</b> (&gt;24h),
+      <b style="color:var(--stage-recon)">semantic</b> (extracted schema). Node size reflects heat; click for full content, tags, and every scientific measurement (arousal, surprise, plasticity, …).
     </div>
   </div>
 
   <div class="gloss-section">Edges</div>
   <div class="gloss-entry">
-    <div class="gloss-header"><span class="gloss-line" style="background:rgba(120,200,220,0.7)"></span><span class="gloss-name">in domain</span></div>
+    <div class="gloss-header"><span class="gloss-line" style="background:var(--link-in-domain)"></span><span class="gloss-name">in domain</span></div>
     <div class="gloss-desc">Structural edge pinning a node to its domain hub.</div>
   </div>
   <div class="gloss-entry">
-    <div class="gloss-header"><span class="gloss-line" style="background:rgba(150,200,180,0.7)"></span><span class="gloss-name">tool → file</span></div>
+    <div class="gloss-header"><span class="gloss-line" style="background:var(--link-tool-used-file)"></span><span class="gloss-name">tool → file</span></div>
     <div class="gloss-desc">Weight = number of times that tool touched the file.</div>
   </div>
   <div class="gloss-entry">
-    <div class="gloss-header"><span class="gloss-line" style="background:rgba(180,210,150,0.7)"></span><span class="gloss-name">invoked skill</span></div>
+    <div class="gloss-header"><span class="gloss-line" style="background:var(--link-invoked-skill)"></span><span class="gloss-name">invoked skill</span></div>
     <div class="gloss-desc">Domain invoked a slash-command.</div>
   </div>
   <div class="gloss-entry">
-    <div class="gloss-header"><span class="gloss-line" style="background:rgba(200,170,220,0.7)"></span><span class="gloss-name">triggered hook</span></div>
+    <div class="gloss-header"><span class="gloss-line" style="background:var(--link-triggered-hook)"></span><span class="gloss-name">triggered hook</span></div>
     <div class="gloss-desc">Hook script bound to an event in this domain.</div>
   </div>
   <div class="gloss-entry">
-    <div class="gloss-header"><span class="gloss-line" style="background:rgba(140,220,210,0.7)"></span><span class="gloss-name">spawned agent</span></div>
+    <div class="gloss-header"><span class="gloss-line" style="background:var(--link-spawned-agent)"></span><span class="gloss-name">spawned agent</span></div>
     <div class="gloss-desc">Task hub spawned a subagent of this type.</div>
   </div>
   <div class="gloss-entry">
-    <div class="gloss-header"><span class="gloss-line" style="background:rgba(244,63,94,0.65)"></span><span class="gloss-name">discussion → file</span></div>
+    <div class="gloss-header"><span class="gloss-line" style="background:var(--link-discussion-file)"></span><span class="gloss-name">discussion → file</span></div>
     <div class="gloss-desc">That session touched this file. Weight = touches within the session.</div>
   </div>
   <div class="gloss-entry">
-    <div class="gloss-header"><span class="gloss-line" style="background:rgba(224,168,64,0.65)"></span><span class="gloss-name">command → file</span></div>
+    <div class="gloss-header"><span class="gloss-line" style="background:var(--link-command-file)"></span><span class="gloss-name">command → file</span></div>
     <div class="gloss-desc">The Bash command references this file path.</div>
   </div>
   <div class="gloss-entry">
-    <div class="gloss-header"><span class="gloss-line" style="background:rgba(138,107,255,0.65)"></span><span class="gloss-name">invoked mcp</span></div>
+    <div class="gloss-header"><span class="gloss-line" style="background:var(--link-invoked-mcp)"></span><span class="gloss-name">invoked mcp</span></div>
     <div class="gloss-desc">Domain called an MCP server tool; label on the edge = the specific tool name.</div>
   </div>
   <div class="gloss-entry">
-    <div class="gloss-header"><span class="gloss-line" style="background:rgba(200,150,255,0.4);border-top:1px dashed rgba(200,150,255,0.6)"></span><span class="gloss-name">cross-domain</span></div>
+    <div class="gloss-header"><span class="gloss-line" style="background:var(--link-cross);border-top:1px dashed var(--link-cross)"></span><span class="gloss-name">cross-domain</span></div>
     <div class="gloss-desc">The same file, skill, or MCP is shared between two domains — renders as a long dashed thread.</div>
   </div>
 
@@ -483,7 +437,7 @@
 <script src="/js/discussion_detail.js?v=117ece5"></script>
 <script src="/js/memory_science.js?v=117ece5"></script>
 <script src="/js/timeline.js?v=117ece5"></script>
-<script src="/js/sankey.js?v=117ece5"></script>
+<!-- sankey.js removed with the Pipeline view (design gate, 2026-07-05) -->
 <script src="/js/knowledge.js?v=117ece5"></script>
 <script src="/js/wiki.js?v=117ece5"></script>
 <script src="/js/controls.js?v=117ece5"></script>
@@ -604,10 +558,17 @@
         JUG.appendGraphDelta(nodes, edges);
       },
       onProgress: function (c) {
+        // DD-04 status line: exact counts, U+202F thousands grouping —
+        // same convention as polling.js fmtExact (toLocaleString grouped
+        // with en-US commas, off-exhibit).
+        // source: DS cards/data-pointcloud.html (Spec DD-04).
+        var fx = function (n) {
+          return String(n == null ? 0 : n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+        };
         _symbolHint('streaming full graph — '
-          + c.nodes.toLocaleString()
-          + (c.node_total ? '/' + c.node_total.toLocaleString() : '')
-          + ' nodes, ' + c.edges.toLocaleString() + ' edges');
+          + fx(c.nodes)
+          + (c.node_total ? '/' + fx(c.node_total) : '')
+          + ' nodes, ' + fx(c.edges) + ' edges');
       },
     });
   }
@@ -846,6 +807,37 @@
   } else {
     console.warn('[phase] JUG missing — galaxy loader disabled');
   }
+})();
+</script>
+
+<!-- Surface toggle wiring — paper (default) / ink micro-label chip. -->
+<script>
+(function () {
+  var btn = document.getElementById('surface-toggle');
+  if (!btn || !window.CortexSurface) return;
+  function sync() {
+    // Label the button by the surface it switches TO (action-oriented), not the
+    // current state — reads as a professional control, not a state chip.
+    btn.textContent = window.CortexSurface.get() === 'paper' ? 'Ink surface' : 'Paper surface';
+  }
+  window.CortexSurface.bindButton(btn);
+  window.addEventListener(window.CortexSurface.EVENT, sync);
+  sync();
+})();
+</script>
+
+<!-- System Vitals opt-in toggle — reveals the collapsed detail panel on demand
+     so the default rail stays clean (stats + benchmarks). -->
+<script>
+(function () {
+  var btn = document.getElementById('vitals-toggle');
+  var panel = document.getElementById('system-vitals');
+  if (!btn || !panel) return;
+  btn.addEventListener('click', function () {
+    var open = panel.style.display !== 'none';
+    panel.style.display = open ? 'none' : 'block';
+    btn.textContent = (open ? '+ ' : '– ') + 'System Vitals';
+  });
 })();
 </script>
 </body>

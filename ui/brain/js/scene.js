@@ -3,20 +3,33 @@
 // Owns the renderer, camera, controls, lights and the per-frame loop.
 // Everything visual is added to BRAIN.world (a Group at the origin) so the
 // brain mesh and the node cloud share one transform and orbit together.
-// No post-processing: nodes glow via additive points, which keeps the
-// dependency surface to three core + OrbitControls + GLTFLoader.
+// No post-processing: the brand doctrine is "no black backgrounds, data
+// views included" (AI Architect Design System README §3) — the canvas is the
+// paper record, not a glow-lit dark instrument, so there is no bloom/vignette/
+// film-grain pass, and the dependency surface stays three core + OrbitControls
+// + GLTFLoader.
 
 window.BRAIN = window.BRAIN || {};
 
 (function () {
   var TARGET_RADIUS = 80;      // normalized brain radius in world units
   var CAMERA_DISTANCE = 2.3;   // multiples of TARGET_RADIUS for the initial pull-back
+  var FOG_DENSITY = 0.0016;
 
   var container = document.getElementById('view');
 
+  // Surface-correct background: CortexPalette.hex('--canvas') resolves the
+  // design-system token LIVE on the current surface (cream --paper-0 by
+  // default; the warm-neutral --ink-0 only in the opt-in legacy instrument
+  // mode) — never a hardcoded near-black hex. Falls back to the paper cream
+  // if /shared/palette.js failed to load, so the scene never boots to black.
+  function canvasHex() {
+    return (window.CortexPalette && window.CortexPalette.hex('--canvas')) || '#f2efe9';
+  }
+
   var scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x05070d);
-  scene.fog = new THREE.FogExp2(0x05070d, 0.0016);
+  scene.background = new THREE.Color(canvasHex());
+  scene.fog = new THREE.FogExp2(canvasHex(), FOG_DENSITY);
 
   var camera = new THREE.PerspectiveCamera(
     55, window.innerWidth / window.innerHeight, 0.1, 4000
@@ -35,14 +48,22 @@ window.BRAIN = window.BRAIN || {};
   controls.minDistance = TARGET_RADIUS * 0.4;
   controls.maxDistance = TARGET_RADIUS * 8;
 
-  // Soft fill so the translucent cortex reads as a surface, not a flat blob.
-  scene.add(new THREE.AmbientLight(0x4060a0, 0.9));
-  var key = new THREE.DirectionalLight(0xaecbff, 0.8);
+  // Neutral, warm-white lighting — a surface to read the ink mesh and data
+  // points by, not a coloured glow. Flat ambient fill + one soft directional
+  // key light; no saturated rim light (the old cyan-key/pink-rim pair read
+  // as a lit-from-neon-signage instrument, wrong for a paper record).
+  scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+  var key = new THREE.DirectionalLight(0xfff4e6, 0.55);
   key.position.set(1, 1, 1);
   scene.add(key);
-  var rim = new THREE.DirectionalLight(0xff6090, 0.5);
-  rim.position.set(-1, -0.5, -1);
-  scene.add(rim);
+
+  // Re-paint the canvas + fog when the surface toggles (paper <-> ink) —
+  // Three.js bakes colour, it cannot read the CSS custom property change.
+  window.addEventListener('cortex:surface-change', function () {
+    var hex = canvasHex();
+    scene.background.set(hex);
+    scene.fog.color.set(hex);
+  });
 
   var world = new THREE.Group();
   scene.add(world);

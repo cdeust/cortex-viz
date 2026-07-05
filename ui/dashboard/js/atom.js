@@ -66,11 +66,12 @@
     shells.forEach(function(members, si) {
       if (members.length === 0) return;
       var radius = R0 + si * DR;
+      var guideColor = (window.CortexPalette && window.CortexPalette.hex('--border-strong')) || '#8a8a8a';
       var mesh = new THREE.Mesh(
         new THREE.SphereGeometry(radius, 24, 16),
         new THREE.MeshBasicMaterial({
-          color: 0x00d2ff, wireframe: true,
-          transparent: true, opacity: 0.04,
+          color: new THREE.Color(guideColor), wireframe: true,
+          transparent: true, opacity: 0.06,
         })
       );
       JMD.scene.add(mesh);

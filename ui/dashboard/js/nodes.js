@@ -1,6 +1,8 @@
-// Cortex Memory Dashboard — Node Builder
-// Glowing neural nodes: spheres for memories, octahedrons for entities.
-// Strong bloom + halo for the atom-shell visual.
+// Cortex Atom Memory Graph — Node Builder
+// Flat data-coloured nodes: spheres for memories, octahedrons for entities.
+// No glow halos, no bloom layer — colour and shape alone carry the data
+// (ui/shared/README.md: "drop all glows — lift comes from hairlines, not
+// bloom. A legend dot is a flat filled disc.").
 
 (function() {
 
@@ -17,20 +19,12 @@
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
 
-    // Shadow for readability
-    ctx.shadowColor = 'rgba(0,0,0,0.8)';
-    ctx.shadowBlur = 6;
-    ctx.shadowOffsetX = 1;
-    ctx.shadowOffsetY = 1;
-
     // Pipe separator
     ctx.fillStyle = color;
     ctx.globalAlpha = 0.6;
     ctx.fillText('|', 10, h / 2);
     ctx.globalAlpha = 1.0;
     ctx.fillText(text, 30, h / 2);
-
-    ctx.shadowBlur = 0;
 
     var tex = new THREE.CanvasTexture(canvas);
     tex.minFilter = THREE.LinearFilter;
@@ -46,6 +40,10 @@
     return sprite;
   }
 
+  function protectedHex() {
+    return (window.CortexPalette && window.CortexPalette.hex('--warn-ink')) || '#b0956a';
+  }
+
   // ─── Memory Node ─────────────────────────────────────────────
   JMD.createMemoryNode = function(m) {
     var typeColor = new THREE.Color(JMD.TYPE_COLORS[m.store_type] || JMD.TYPE_COLORS.episodic);
@@ -55,37 +53,30 @@
 
     var group = new THREE.Group();
 
-    // Core sphere — colored with moderate emissive
+    // Core sphere — flat data colour, minimal emissive (just enough to
+    // read against the fog at range; NOT a bloom source).
     var mat = new THREE.MeshStandardMaterial({
       color: typeColor,
       emissive: typeColor,
-      emissiveIntensity: 0.5 + heat * 0.3,
-      metalness: 0.2, roughness: 0.3,
+      emissiveIntensity: 0.12,
+      metalness: 0.1, roughness: 0.55,
       transparent: true, opacity: 0.95,
     });
     var core = new THREE.Mesh(JMD.sphereGeo, mat);
     core.scale.setScalar(scale);
     group.add(core);
 
-    // Glow halo
-    var glow = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: JMD.glowTexture, color: typeColor,
-      transparent: true, opacity: 0.15 + heat * 0.1,
-      blending: THREE.AdditiveBlending, depthWrite: false,
-    }));
-    glow.scale.setScalar(scale * 4);
-    group.add(glow);
-
     // Label
     var labelText = (m.content || '').slice(0, 25).replace(/\n/g, ' ');
     if (labelText.length > 22) labelText = labelText.slice(0, 22) + '...';
     group.add(createLabel(labelText, '#' + typeColor.getHexString()));
 
-    // Protected decision ring — gold wireframe torus (McGaugh 2004)
+    // Protected decision ring — flat wireframe torus in the "verified /
+    // live" amber, not a glow. (McGaugh 2004)
     if (m.is_protected) {
       var ringGeo = new THREE.TorusGeometry(scale * 1.3, 0.08, 8, 32);
       var ringMat = new THREE.MeshBasicMaterial({
-        color: 0xffaa00, transparent: true, opacity: 0.6,
+        color: new THREE.Color(protectedHex()), transparent: true, opacity: 0.6,
         wireframe: true,
       });
       var ring = new THREE.Mesh(ringGeo, ringMat);
@@ -93,21 +84,16 @@
       group.add(ring);
     }
 
-    // Team/global indicator — agent-colored outer glow (Wegner 1987 TMS)
+    // Team/global indicator — a small flat agent-coloured marker dot
+    // (Wegner 1987 TMS), not an additive glow.
     if (m.is_global && m.agent_context) {
       var agentHex = JMD.agentColor(m.agent_context);
-      var agentColor = new THREE.Color(agentHex);
-      var teamGlow = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: JMD.glowTexture, color: agentColor,
-        transparent: true, opacity: 0.12,
-        blending: THREE.AdditiveBlending, depthWrite: false,
-      }));
-      teamGlow.scale.setScalar(scale * 5.5);
-      group.add(teamGlow);
+      var dotGeo = new THREE.SphereGeometry(scale * 0.28, 8, 6);
+      var dotMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(agentHex) });
+      var dot = new THREE.Mesh(dotGeo, dotMat);
+      dot.position.set(scale * 0.9, scale * 0.9, 0);
+      group.add(dot);
     }
-
-    // Bloom
-    core.layers.enable(JMD.BLOOM_LAYER);
 
     group.userData = { baseScale: scale, coreMesh: core };
     return group;
@@ -121,33 +107,21 @@
 
     var group = new THREE.Group();
 
-    // Octahedron core — colored
+    // Octahedron core — flat data colour, minimal emissive.
     var mat = new THREE.MeshStandardMaterial({
       color: color,
       emissive: color,
-      emissiveIntensity: 0.6,
-      metalness: 0.3, roughness: 0.2,
+      emissiveIntensity: 0.15,
+      metalness: 0.15, roughness: 0.45,
       transparent: true, opacity: 0.95,
     });
     var core = new THREE.Mesh(JMD.octaGeo || JMD.sphereGeo, mat);
     core.scale.setScalar(scale);
     group.add(core);
 
-    // Glow halo
-    var glow = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: JMD.glowTexture, color: color,
-      transparent: true, opacity: 0.2,
-      blending: THREE.AdditiveBlending, depthWrite: false,
-    }));
-    glow.scale.setScalar(scale * 4.5);
-    group.add(glow);
-
     // Label
     var labelText = (e.name || 'entity').toUpperCase().slice(0, 20);
     group.add(createLabel(labelText, '#' + color.getHexString()));
-
-    // Bloom
-    core.layers.enable(JMD.BLOOM_LAYER);
 
     group.userData = { baseScale: scale, coreMesh: core };
     return group;

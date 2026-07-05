@@ -1,0 +1,69 @@
+/* =============================================================================
+   AI Architect — signature motifs ("the Proof Dossier language")
+   What makes this brand look like NOBODY else's memory tool: not neurons and
+   galaxies, but the typography of evidence — appellation lockups (wine label),
+   ruled ledgers (lab notebook / audit register), footnoted claims (the paper),
+   and stamped verdicts (the certificate). Designed for the PAPER surface;
+   degrades gracefully on ink.
+   ============================================================================= */
+
+/* ── Appellation lockup — the wine-label title block ─────────────────────── */
+.aia-appellation{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;}
+.aia-appellation__over{
+  font-family:var(--font-mono);font-size:9px;font-weight:var(--weight-semibold);
+  letter-spacing:.34em;text-transform:uppercase;color:var(--text-muted);}
+.aia-appellation__name{
+  font-family:var(--font-serif);font-weight:var(--weight-regular);
+  font-size:44px;line-height:1.08;letter-spacing:-.005em;color:var(--text);
+  text-wrap:balance;}
+.aia-appellation__name em{font-style:italic;color:var(--accent-ink);}
+.aia-appellation__rule{
+  display:flex;align-items:center;gap:8px;width:190px;color:var(--accent-ink);}
+.aia-appellation__rule::before,
+.aia-appellation__rule::after{content:"";flex:1;height:1px;background:currentColor;opacity:.55;}
+.aia-appellation__rule .diamond{width:7px;height:7px;transform:rotate(45deg);background:currentColor;flex:none;}
+.aia-appellation__sub{
+  font-family:var(--font-mono);font-size:10px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--text-muted);}
+
+/* ── Ledger — ruled evidence rows (lab notebook / audit register) ─────────── */
+.aia-ledger{counter-reset:ledger;}
+.aia-ledger__row{
+  display:flex;align-items:baseline;gap:14px;
+  padding:8px 0;border-bottom:1px solid var(--divider);}
+.aia-ledger__row:first-child{border-top:1px solid var(--border-strong);}
+.aia-ledger--numbered .aia-ledger__row::before{
+  counter-increment:ledger;content:counter(ledger,decimal-leading-zero);
+  font-family:var(--font-mono);font-size:9px;color:var(--text-faint);
+  width:20px;flex:none;letter-spacing:.08em;}
+.aia-ledger__k{
+  font-family:var(--font-mono);font-size:10px;font-weight:var(--weight-medium);
+  letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);
+  width:170px;flex:none;}
+.aia-ledger__v{font-family:var(--font-sans);font-size:13px;color:var(--text);flex:1;min-width:0;}
+.aia-ledger__v .mono{font-family:var(--font-mono);font-size:12px;}
+.aia-ledger__end{margin-left:auto;flex:none;}
+
+/* ── Footnotes — the claim carries its proof ──────────────────────────────── */
+.aia-fn{
+  font-family:var(--font-mono);font-size:.62em;font-weight:var(--weight-semibold);
+  color:var(--accent-ink);vertical-align:super;line-height:0;
+  margin-left:2px;letter-spacing:0;text-decoration:none;}
+.aia-footnotes{
+  margin-top:14px;padding-top:10px;border-top:1px solid var(--border-strong);
+  display:flex;flex-direction:column;gap:5px;}
+.aia-footnotes__item{
+  display:flex;gap:8px;font-family:var(--font-mono);font-size:10.5px;
+  line-height:1.5;color:var(--text-muted);}
+.aia-footnotes__item .n{color:var(--accent-ink);font-weight:var(--weight-semibold);flex:none;}
+
+/* ── Specimen / exhibit numbering ─────────────────────────────────────────── */
+.aia-exhibit{
+  font-family:var(--font-mono);font-size:9px;font-weight:var(--weight-medium);
+  letter-spacing:.22em;text-transform:uppercase;color:var(--text-faint);white-space:nowrap;}
+.aia-exhibit b{color:var(--accent-ink);font-weight:var(--weight-semibold);}
+
+/* ── The sheet — a document surface sitting on the desk ───────────────────── */
+.aia-sheet{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-xs);box-shadow:0 1px 0 oklch(32% 0.02 60 / 0.10), 0 10px 28px oklch(32% 0.02 60 / 0.10);}

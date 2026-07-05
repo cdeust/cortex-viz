@@ -59,7 +59,9 @@ def ingest_entity(b, ent: dict) -> None:
         NodeIdFactory.entity_id(pg_id),
         NodeKind.ENTITY,
         ent.get("name") or f"entity {pg_id}",
-        ENTITY_COLORS.get(ent_type, "#50B0C8"),
+        # G7: deep fallback for an entityType absent from ENTITY_COLORS —
+        # oklch(50% 0.10 217), same hue as the old #50B0C8 (L71%, too pale).
+        ENTITY_COLORS.get(ent_type, "#007088"),
         dom,
         1.0 + min(3.0, heat * 3.0),
         entityType=ent_type,

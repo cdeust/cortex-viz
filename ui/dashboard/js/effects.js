@@ -1,5 +1,7 @@
-// Cortex Memory Dashboard — Visual Effects
-// Ambient dust particles only. Clean, minimal.
+// Cortex Atom Memory Graph — Visual Effects
+// Ambient depth-cue particles only — neutral chrome grey, no additive
+// blending (additive + colour reads as glow, which the design system
+// forbids; see ui/shared/README.md).
 
 (function() {
   var scene = JMD.scene;
@@ -24,11 +26,11 @@
   var dustGeo = new THREE.BufferGeometry();
   dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
 
+  var dustColor = (window.CortexPalette && window.CortexPalette.hex('--text-faint')) || '#8a8a8a';
   var dustMat = new THREE.PointsMaterial({
-    color: 0x4488aa, size: 0.6,
-    transparent: true, opacity: 0.1,
-    blending: THREE.AdditiveBlending, depthWrite: false,
-    sizeAttenuation: true,
+    color: dustColor, size: 0.6,
+    transparent: true, opacity: 0.08,
+    depthWrite: false, sizeAttenuation: true,
   });
   scene.add(new THREE.Points(dustGeo, dustMat));
 

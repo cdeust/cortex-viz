@@ -1,37 +1,81 @@
 /* ════════════════════════════════════════════════════════════════
-   Cortex Memory Dashboard — Cyber Obsidian Theme
-   Stitch-inspired professional neural graph dashboard
+   Cortex Atom Memory Graph — dashboard chrome
+   Authored against the shared AI Architect design-system contract
+   (/shared/ds.css → tokens/{colors,surfaces,typography,spacing,elevation}.css).
+   Paper is the default posture; ink is the optional legacy instrument
+   mode reached via the top-right surface toggle. No black backgrounds,
+   no bloom/vignette/grain, no glow — lift comes from hairlines only.
+   See ui/shared/README.md for the token contract and re-inking method.
    ════════════════════════════════════════════════════════════════ */
 
 :root {
-  --bg-base: #0a0a0a;
-  --bg-surface: #111111;
-  --bg-elevated: #1a1a1a;
-  --bg-hover: #222222;
-  --border-subtle: rgba(255,255,255,0.06);
-  --border-active: #4ade80;
-  --accent-primary: #4ade80;
-  --accent-cyan: #00d2ff;
-  --accent-magenta: #d946ef;
-  --accent-green: #26de81;
-  --accent-red: #ff4444;
-  --accent-amber: #f59e0b;
-  --text-primary: rgba(255,255,255,0.87);
-  --text-secondary: rgba(255,255,255,0.55);
-  --text-tertiary: rgba(255,255,255,0.25);
-  --text-accent: #4ade80;
   --sidebar-w: 200px;
   --topbar-h: 44px;
   --kpi-h: 76px;
   --bottombar-h: 36px;
+
+  /* ── Data family: memory store_type (shared/README "re-inking
+     cortex-specific data families"). Reuses the canonical lifecycle
+     stage tokens directly rather than inventing new hues: episodic
+     (raw experience) = labile (new); semantic (extracted schema) =
+     the reconsolidation hue (palette.js's own mapping); entity
+     (stable knowledge-graph fact) = consolidated. ── */
+  --node-episodic: var(--stage-labile);
+  --node-semantic: var(--stage-recon);
+  --node-entity:   var(--stage-cons);
+
+  /* ── Data family: relationship/edge kind ── */
+  --edge-causal:       var(--emo-urgent);
+  --edge-cooccurrence: var(--emo-discov);
+  --edge-default:      var(--text-faint);
+  --edge-virtual:      var(--divider);
+  --edge-highlight:    var(--accent-ink);
+
+  /* ── Data family: agent/team identity (11 distinct hues, evenly
+     spaced 360/11 ≈ 32.7° apart to guarantee legend separability —
+     no canonical token exists for "team member", so hue placement is
+     deterministic rather than approximated from the legacy neons).
+     Ink: L78% C0.14 (in-range 74-80/0.13-0.15). Paper: L50% C0.13
+     (in-range 46-55/0.11-0.16). Per shared/README.md re-inking rule. ── */
+  --agent-researcher:   oklch(78% 0.14 0);
+  --agent-security:     oklch(78% 0.14 33);
+  --agent-reviewer:     oklch(78% 0.14 65);
+  --agent-tester:       oklch(78% 0.14 98);
+  --agent-devops:       oklch(78% 0.14 131);
+  --agent-dba:          oklch(78% 0.14 164);
+  --agent-architect:    oklch(78% 0.14 196);
+  --agent-orchestrator: oklch(78% 0.14 229);
+  --agent-engineer:     oklch(78% 0.14 262);
+  --agent-ux:           oklch(78% 0.14 295);
+  --agent-frontend:     oklch(78% 0.14 327);
+}
+
+[data-surface="paper"] {
+  --node-episodic: var(--stage-labile);
+  --node-semantic: var(--stage-recon);
+  --node-entity:   var(--stage-cons);
+  --edge-causal:       var(--emo-urgent);
+  --edge-cooccurrence: var(--emo-discov);
+
+  --agent-researcher:   oklch(50% 0.13 0);
+  --agent-security:     oklch(50% 0.13 33);
+  --agent-reviewer:     oklch(50% 0.13 65);
+  --agent-tester:       oklch(50% 0.13 98);
+  --agent-devops:       oklch(50% 0.13 131);
+  --agent-dba:          oklch(50% 0.13 164);
+  --agent-architect:    oklch(50% 0.13 196);
+  --agent-orchestrator: oklch(50% 0.13 229);
+  --agent-engineer:     oklch(50% 0.13 262);
+  --agent-ux:           oklch(50% 0.13 295);
+  --agent-frontend:     oklch(50% 0.13 327);
 }
 
 *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
 
 body {
-  background: var(--bg-base);
+  background: var(--canvas);
   color: var(--text-secondary);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-sans);
   overflow: hidden;
   width: 100vw;
   height: 100vh;
@@ -39,48 +83,47 @@ body {
 
 /* ── Loading ───────────────────────────────────────────────────── */
 #loading {
-  position: fixed; inset: 0; background: var(--bg-base);
+  position: fixed; inset: 0; background: var(--canvas);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  z-index: 500; transition: opacity 1s;
+  z-index: 500; transition: opacity var(--dur-slow);
 }
 #loading.done { opacity: 0; pointer-events: none; }
 
 .loader-ring {
   width: 64px; height: 64px; border-radius: 50%;
-  border: 1px solid rgba(74,222,128,0.1); border-top-color: var(--accent-primary);
-  animation: spin-cw 1s linear infinite; margin-bottom: 20px;
+  border: 1px solid var(--divider); border-top-color: var(--accent-ink);
+  animation: spin 1s linear infinite; margin-bottom: 20px;
 }
 .loader-title {
-  font-family: 'Orbitron', sans-serif; font-size: 12px; font-weight: 700;
-  letter-spacing: 6px; color: var(--accent-primary);
+  font-family: var(--font-mono); font-size: 12px; font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-caps); color: var(--accent-ink); text-transform: uppercase;
 }
 .loader-sub {
-  font-size: 9px; letter-spacing: 2px; color: var(--text-tertiary); margin-top: 8px;
+  font-size: 9px; letter-spacing: 2px; color: var(--text-faint); margin-top: 8px;
 }
-
-@keyframes spin-cw { to { transform: rotate(360deg); } }
 
 /* ── Sidebar ───────────────────────────────────────────────────── */
 #sidebar {
   position: fixed; top: 0; left: 0; bottom: 0;
   width: var(--sidebar-w);
-  background: var(--bg-surface);
-  border-right: 1px solid var(--border-subtle);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
   z-index: 200;
   display: flex; flex-direction: column;
 }
 
 .sidebar-header {
   padding: 20px 16px 16px;
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border);
 }
 .sidebar-logo {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 13px; font-weight: 800;
-  letter-spacing: 3px; color: var(--accent-primary);
+  font-family: var(--font-mono);
+  font-size: 12px; font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-caps); color: var(--accent-ink);
+  text-transform: uppercase;
 }
 .sidebar-version {
-  font-size: 9px; color: var(--text-tertiary);
+  font-size: 9px; color: var(--text-faint);
   letter-spacing: 1px; margin-top: 2px;
 }
 
@@ -91,20 +134,20 @@ body {
 .nav-item {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 16px;
-  font-size: 11px; font-weight: 500;
+  font-size: var(--text-xs); font-weight: var(--weight-medium);
   color: var(--text-secondary);
   cursor: pointer; text-decoration: none;
   border-left: 2px solid transparent;
-  transition: all 0.2s;
+  transition: all var(--dur-fast) var(--ease);
 }
 .nav-item:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
+  background: var(--surface-chip);
+  color: var(--text);
 }
 .nav-item.active {
-  background: rgba(74,222,128,0.06);
-  color: var(--text-accent);
-  border-left-color: var(--accent-primary);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  border-left-color: var(--accent-ink);
 }
 
 .nav-icon {
@@ -113,29 +156,35 @@ body {
 
 .sidebar-footer {
   padding: 12px 16px;
-  border-top: 1px solid var(--border-subtle);
+  border-top: 1px solid var(--border);
 }
 .sidebar-btn {
   display: flex; align-items: center; gap: 10px;
   width: 100%; padding: 8px 10px;
-  background: transparent; border: 1px solid var(--border-subtle);
-  border-radius: 6px; color: var(--text-secondary);
+  background: transparent; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--text-secondary);
   font-family: inherit; font-size: 10px;
-  cursor: pointer; transition: all 0.2s;
+  cursor: pointer; transition: all var(--dur-fast) var(--ease);
   margin-bottom: 10px;
 }
-.sidebar-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
-.sidebar-btn.active { border-color: var(--accent-primary); color: var(--text-accent); }
+.sidebar-btn:hover { background: var(--surface-chip); color: var(--text); }
+.sidebar-btn.active { border-color: var(--accent-ink); color: var(--accent-ink); }
 
 .sidebar-status {
   display: flex; align-items: center; gap: 6px;
-  font-size: 9px; color: var(--text-tertiary);
+  font-size: 9px; color: var(--text-faint);
 }
 .status-dot {
   width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
 }
-.status-dot.dead { background: var(--accent-red); }
-.status-dot.live { background: var(--accent-green); box-shadow: 0 0 6px rgba(38,222,129,0.5); }
+.status-dot.dead { background: var(--danger-ink); }
+/* The reactor dot is the ONE permitted "glow" in the system — a live
+   indicator, not decoration. source: shared design system elevation.css
+   --glow-ok. */
+.status-dot.live { background: var(--ok-ink); box-shadow: var(--glow-ok); animation: dot-blink 2.2s ease-in-out infinite; }
+
+/* .surface-toggle-btn is styled inline in atom-viz.html — single source
+   of truth for that rule lives there, scoped deliberately to the button. */
 
 /* ── Main Area ─────────────────────────────────────────────────── */
 #main {
@@ -149,8 +198,8 @@ body {
   height: var(--topbar-h);
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 16px;
-  background: var(--bg-surface);
-  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
   z-index: 100;
   flex-shrink: 0;
 }
@@ -159,59 +208,60 @@ body {
 .filter-bar { display: flex; gap: 2px; }
 .filter-btn {
   background: transparent; border: 1px solid transparent;
-  border-radius: 4px; padding: 5px 12px;
-  color: var(--text-tertiary);
-  font-family: inherit; font-size: 10px;
-  cursor: pointer; transition: all 0.2s;
+  border-radius: var(--radius-xs); padding: 5px 12px;
+  color: var(--text-faint);
+  font-family: var(--font-sans); font-size: 10px;
+  cursor: pointer; transition: all var(--dur-fast) var(--ease);
   letter-spacing: 1px;
 }
-.filter-btn:hover { background: var(--bg-hover); color: var(--text-secondary); }
+.filter-btn:hover { background: var(--surface-chip); color: var(--text-secondary); }
 .filter-btn.active {
-  background: rgba(74,222,128,0.08);
-  border-color: rgba(74,222,128,0.2);
-  color: var(--text-accent);
+  background: var(--accent-soft);
+  border-color: var(--accent-ink);
+  color: var(--accent-ink);
 }
 
 #search-box {
-  background: var(--bg-elevated); border: 1px solid var(--border-subtle);
-  border-radius: 4px; padding: 6px 12px; color: var(--text-primary);
-  font-family: inherit; font-size: 10px; width: 180px; outline: none;
-  transition: all 0.3s;
+  background: var(--surface-input); border: 1px solid var(--border);
+  border-radius: var(--radius-xs); padding: 6px 12px; color: var(--text);
+  font-family: var(--font-sans); font-size: 10px; width: 180px; outline: none;
+  transition: all var(--dur-base) var(--ease);
 }
-#search-box:focus { border-color: var(--accent-primary); box-shadow: 0 0 0 1px rgba(74,222,128,0.15); }
-#search-box::placeholder { color: var(--text-tertiary); }
+#search-box:focus { border-color: var(--accent-ink); box-shadow: var(--shadow-focus); }
+#search-box::placeholder { color: var(--text-faint); }
 
 .topbar-btn {
   display: flex; align-items: center; justify-content: center;
   width: 30px; height: 30px;
-  background: transparent; border: 1px solid var(--border-subtle);
-  border-radius: 4px; color: var(--text-tertiary); cursor: pointer;
-  transition: all 0.2s;
+  background: transparent; border: 1px solid var(--border);
+  border-radius: var(--radius-xs); color: var(--text-faint); cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
 }
-.topbar-btn:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--text-tertiary); }
+.topbar-btn:hover { background: var(--surface-chip); color: var(--text); border-color: var(--border-strong); }
 
 /* ── KPI Strip ─────────────────────────────────────────────────── */
 #kpi-strip {
   height: var(--kpi-h);
   display: flex; gap: 8px; padding: 10px 16px;
-  background: var(--bg-base);
-  border-bottom: 1px solid var(--border-subtle);
+  background: var(--canvas);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 .kpi-card {
   flex: 1; display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  background: var(--bg-elevated); border: 1px solid var(--border-subtle);
-  border-radius: 6px; padding: 8px 12px;
+  background: var(--surface-card); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: 8px 12px;
   min-width: 0; overflow: visible;
 }
+/* KPI values are measured numbers — proof is always monospaced. */
 .kpi-value {
-  font-family: 'Orbitron', sans-serif; font-size: 22px; font-weight: 700;
-  color: var(--accent-primary); line-height: 1.1;
+  font-family: var(--font-mono); font-size: 20px; font-weight: var(--weight-semibold);
+  color: var(--accent-ink); line-height: 1.1;
   white-space: nowrap;
 }
 .kpi-label {
-  font-size: 8px; color: var(--text-tertiary);
+  font-size: 8px; color: var(--text-faint);
   letter-spacing: 1.5px; text-transform: uppercase; margin-top: 4px;
   white-space: nowrap;
 }
@@ -229,29 +279,30 @@ body {
   height: var(--bottombar-h);
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 16px;
-  background: var(--bg-surface);
-  border-top: 1px solid var(--border-subtle);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
   z-index: 100;
   flex-shrink: 0;
 }
 .bottombar-legend { display: flex; gap: 16px; }
 .leg-item {
   display: flex; align-items: center; gap: 5px;
-  font-size: 9px; color: var(--text-tertiary);
+  font-size: 9px; color: var(--text-faint);
   letter-spacing: 0.5px;
 }
 .leg-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 
 .bottombar-status {
-  font-size: 9px; color: var(--text-tertiary);
+  font-size: 9px; color: var(--text-faint);
+  font-family: var(--font-mono);
   display: flex; align-items: center; gap: 6px;
 }
 .bottombar-status span { color: var(--text-secondary); }
 .sync-badge {
   font-size: 8px; letter-spacing: 1px; text-transform: uppercase;
-  color: var(--accent-green) !important;
+  color: var(--ok-ink) !important;
   padding: 2px 8px;
-  border: 1px solid rgba(38,222,129,0.2);
-  border-radius: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
   margin-left: 8px;
 }

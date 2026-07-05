@@ -182,11 +182,7 @@
       }
     });
 
-    // Selective bloom render
-    JMD.scene.traverse(JMD.darkenNonBloomed);
-    JMD.bloomComposer.render();
-    JMD.scene.traverse(JMD.restoreMaterials);
-    JMD.composer.render();
+    JMD.renderer.render(JMD.scene, JMD.camera);
   }
 
   // Export

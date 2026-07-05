@@ -6,9 +6,9 @@ window.CMV = window.CMV || {};
  * @param {Object} node - Graph node object.
  */
 CMV.openDetail = function (node) {
-  var col = CMV.COLORS[node.type] || '#00FFFF';
-  var h = '<div class="node-badge" style="background:' + col + '10;border-color:' + col + '40;color:' + col + '">'
-    + '<span style="width:5px;height:5px;border-radius:50%;background:' + col + ';display:inline-block;box-shadow:0 0 6px ' + col + '"></span>'
+  var col = CMV.COLORS[node.type] || (window.CortexPalette && window.CortexPalette.hex('--node-domain')) || '#888888';
+  var h = '<div class="node-badge" style="background:' + col + '24;border-color:' + col + ';color:' + col + '">'
+    + '<span style="width:5px;height:5px;border-radius:50%;background:' + col + ';display:inline-block"></span>'
     + (CMV.LABELS[node.type] || node.type)
     + '</div>'
     + '<h2>' + node.label + '</h2>'
@@ -33,9 +33,9 @@ CMV.openDetail = function (node) {
 
   if (node.confidence != null && !node._bs) {
     var pct = Math.round(node.confidence * 100);
-    h += '<div style="display:flex;justify-content:space-between;font-size:7px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase">'
-      + '<span>Confidence</span><span style="color:' + col + ';font-family:Orbitron">' + pct + '%</span></div>'
-      + '<div class="conf-bar-bg"><div class="conf-bar-fill" style="width:' + pct + '%;background:' + col + ';box-shadow:0 0 8px ' + col + '40"></div></div>';
+    h += '<div style="display:flex;justify-content:space-between;font-size:8px;color:var(--text-muted);letter-spacing:0.05em;text-transform:uppercase">'
+      + '<span>Confidence</span><span style="color:' + col + ';font-family:\'JetBrains Mono\',monospace">' + pct + '%</span></div>'
+      + '<div class="conf-bar-bg"><div class="conf-bar-fill" style="width:' + pct + '%;background:' + col + '"></div></div>';
   }
 
   if (node._bs) {

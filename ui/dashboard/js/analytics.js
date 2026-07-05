@@ -35,21 +35,21 @@
 
   function drawTypeChart(s) {
     drawBarChart('chart-types', [
-      { label: 'Episodic', value: s.episodic, color: '#26de81', filter: { key: 'activeFilter', value: 'episodic' } },
-      { label: 'Semantic', value: s.semantic, color: '#d946ef', filter: { key: 'activeFilter', value: 'semantic' } },
+      { label: 'Episodic', value: s.episodic, color: JMD.TYPE_COLORS_HEX.episodic, filter: { key: 'activeFilter', value: 'episodic' } },
+      { label: 'Semantic', value: s.semantic, color: JMD.TYPE_COLORS_HEX.semantic, filter: { key: 'activeFilter', value: 'semantic' } },
     ]);
   }
 
   function drawHeatChart(mems) {
     drawBarChart('chart-heat', [
-      { label: 'Hot', value: mems.filter(function(m) { return m.heat > 0.7; }).length, color: '#ff4444' },
-      { label: 'Warm', value: mems.filter(function(m) { return m.heat > 0.3 && m.heat <= 0.7; }).length, color: '#ffaa00' },
-      { label: 'Cold', value: mems.filter(function(m) { return m.heat <= 0.3; }).length, color: '#3a6a9a' },
+      { label: 'Hot', value: mems.filter(function(m) { return m.heat > 0.7; }).length, color: JMD.HEAT_COLORS.hot },
+      { label: 'Warm', value: mems.filter(function(m) { return m.heat > 0.3 && m.heat <= 0.7; }).length, color: JMD.HEAT_COLORS.warm },
+      { label: 'Cold', value: mems.filter(function(m) { return m.heat <= 0.3; }).length, color: JMD.HEAT_COLORS.cold },
     ]);
   }
 
   function drawDomainChart(counts) {
-    var palette = ['#00d2ff','#26de81','#d946ef','#ffaa00','#ff4444','#a55eea','#1abc9c','#ff6b35'];
+    var palette = JMD.CATEGORICAL_PALETTE;
     var entries = Object.entries(counts).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 8);
     drawBarChart('chart-domains', entries.map(function(e, i) {
       return { label: e[0].slice(0, 12), value: e[1], color: palette[i % palette.length],
@@ -58,7 +58,7 @@
   }
 
   function drawTagChart(memories) {
-    var palette = ['#00d2ff','#26de81','#d946ef','#ffaa00','#ff4444','#a55eea','#1abc9c','#ff6b35'];
+    var palette = JMD.CATEGORICAL_PALETTE;
     var counts = {};
     memories.forEach(function(m) {
       (m.tags || []).forEach(function(t) { counts[t] = (counts[t] || 0) + 1; });
@@ -72,11 +72,11 @@
 
   function drawConsolidationChart(s) {
     drawBarChart('chart-consolidation', [
-      { label: 'Labile', value: s.labile || 0, color: '#ff4444' },
-      { label: 'Early LTP', value: s.early_ltp || 0, color: '#ffaa00' },
-      { label: 'Late LTP', value: s.late_ltp || 0, color: '#26de81' },
-      { label: 'Consolidated', value: s.consolidated || 0, color: '#00d2ff' },
-      { label: 'Reconsol.', value: s.reconsolidating || 0, color: '#d946ef' },
+      { label: 'Labile', value: s.labile || 0, color: JMD.STAGE_COLORS.labile },
+      { label: 'Early LTP', value: s.early_ltp || 0, color: JMD.STAGE_COLORS.early_ltp },
+      { label: 'Late LTP', value: s.late_ltp || 0, color: JMD.STAGE_COLORS.late_ltp },
+      { label: 'Consolidated', value: s.consolidated || 0, color: JMD.STAGE_COLORS.consolidated },
+      { label: 'Reconsol.', value: s.reconsolidating || 0, color: JMD.STAGE_COLORS.reconsolidating },
     ]);
   }
 
@@ -88,10 +88,13 @@
       else if (dep > 0.15) trans++;
       else cortical++;
     });
+    // Hippocampal→cortical transfer is itself a consolidation continuum
+    // (McClelland et al. 1995) — reuse the SAME stage tokens rather than
+    // inventing a second colour family for the same underlying dimension.
     drawBarChart('chart-stores', [
-      { label: 'Hippocampal', value: hippo, color: '#ff6b35' },
-      { label: 'Transfer', value: trans, color: '#ffaa00' },
-      { label: 'Cortical', value: cortical, color: '#00d2ff' },
+      { label: 'Hippocampal', value: hippo, color: JMD.STAGE_COLORS.labile },
+      { label: 'Transfer', value: trans, color: JMD.STAGE_COLORS.early_ltp },
+      { label: 'Cortical', value: cortical, color: JMD.STAGE_COLORS.consolidated },
     ]);
   }
 
@@ -127,7 +130,7 @@
         label: d.label,
       });
 
-      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.fillStyle = JMD.CHART_TEXT.label;
       ctx.font = (9 * dpr) + 'px JetBrains Mono';
       ctx.textAlign = 'right';
       ctx.fillText(d.label, labelW - 6 * dpr, y + barH * 0.75);
@@ -140,7 +143,7 @@
       ctx.fillRect(labelW, y, w, 2 * dpr);
       ctx.globalAlpha = 1;
 
-      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.fillStyle = JMD.CHART_TEXT.value;
       ctx.textAlign = 'left';
       ctx.fillText(d.value, labelW + w + 6 * dpr, y + barH * 0.75);
     });
