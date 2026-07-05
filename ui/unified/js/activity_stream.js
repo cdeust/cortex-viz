@@ -23,6 +23,44 @@
     }
   }
 
+  // The activity spine belongs to the GALAXY (workflow_graph payload).
+  // appendGraphDelta writes into JUG.state.lastData, which FOLLOWS the active
+  // view (workflow_graph_bridge.js) — while the Trace view (the default)
+  // owns lastData, appending here would inject the replayed log's tens of
+  // thousands of session/memory fragments into the trace tree (observed:
+  // episodic clouds rendered around the trace hubs). Buffer the batches and
+  // flush them once the galaxy payload is the live one.
+  var _buf = [];
+  function _galaxyLive() {
+    // activeView gate (not just the schema): at page start lastData is still
+    // null while the default Trace view boots — schema-only would append the
+    // first replayed batches into a payload trace.js immediately replaces.
+    var st = window.JUG && JUG.state;
+    if (!st || st.activeView !== 'graph') return false;
+    var d = st.lastData;
+    return !(d && d.meta && d.meta.schema === 'trace.v1');
+  }
+  function _append(nodes, edges) {
+    _ensureLastData();
+    if (typeof JUG.appendGraphDelta === 'function') {
+      JUG.appendGraphDelta(nodes, edges);
+      console.log('[activity] +' + nodes.length + 'N +' + edges.length + 'E');
+    }
+  }
+  // Re-entrance guard: _append emits state:lastData, which re-fires the
+  // drain listener below while the while-loop is already draining.
+  var _flushing = false;
+  function _flush() {
+    if (_flushing) return;
+    _flushing = true;
+    try {
+      while (_buf.length && _galaxyLive()) {
+        var b = _buf.shift();
+        _append(b.nodes, b.edges);
+      }
+    } finally { _flushing = false; }
+  }
+
   function _onBatch(ev) {
     var data;
     try { data = JSON.parse(ev.data); } catch (e) { return; }
@@ -31,11 +69,9 @@
     });
     var edges = data.edges || [];
     if (!nodes.length && !edges.length) return;
-    _ensureLastData();
-    if (typeof JUG.appendGraphDelta === 'function') {
-      JUG.appendGraphDelta(nodes, edges);
-      console.log('[activity] +' + nodes.length + 'N +' + edges.length + 'E');
-    }
+    if (!_galaxyLive()) { _buf.push({ nodes: nodes, edges: edges }); return; }
+    if (_buf.length) _flush();
+    _append(nodes, edges);
   }
 
   // One-shot fetch of PRD document/section nodes (third bridge,
@@ -47,11 +83,9 @@
         return r.ok ? r.json() : null;
       }).then(function (d) {
         if (!d || !d.nodes || !d.nodes.length) return;
-        _ensureLastData();
-        if (typeof JUG.appendGraphDelta === 'function') {
-          JUG.appendGraphDelta(d.nodes, d.edges || []);
-          console.log('[prd] +' + d.nodes.length + 'N +' + (d.edges || []).length + 'E');
-        }
+        // Same galaxy routing as the batches — buffer while trace owns lastData.
+        if (!_galaxyLive()) { _buf.push({ nodes: d.nodes, edges: d.edges || [] }); return; }
+        _append(d.nodes, d.edges || []);
       }).catch(function () {});
     } catch (_) {}
   }
@@ -59,6 +93,11 @@
   function start() {
     if (es) return es;
     if (typeof EventSource === 'undefined') return null;
+    // Drain the deferred batches the moment the galaxy payload takes over
+    // lastData (view switch to Graph re-emits state:lastData via the bridge).
+    if (window.JUG && typeof JUG.on === 'function') {
+      JUG.on('state:lastData', function () { if (_buf.length) _flush(); });
+    }
     _loadPrd();
     // since=0 replays the durable session_activity log, then tails live.
     es = new EventSource('/api/activity/stream?since=0');

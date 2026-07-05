@@ -35,20 +35,44 @@
   var boardSort = 'recent';           // 'recent' | 'heat'
 
   var STAGES = ['labile', 'early_ltp', 'late_ltp', 'consolidated', 'reconsolidating'];
-  var STAGE_COLORS = JUG.CONSOLIDATION_COLORS;
   var STAGE_LABELS = JUG.CONSOLIDATION_LABELS || {};
-  var EMO_COLORS = {
-    urgency: '#ff3366', frustration: '#ef4444',
-    satisfaction: '#22c55e', discovery: '#f59e0b',
-    confusion: '#8b5cf6'
+
+  // Stage identity inks, as CSS custom-property references (NOT baked hexes):
+  // DOM consumers keep re-inking per surface for free — deep variants on
+  // paper, bright on the legacy ink instrument.
+  // source: DS tokens/colors.css + tokens/surfaces.css --stage-* ;
+  //         mapping per ui/shared/palette.js STAGE_TOKENS.
+  var STAGE_INK = {
+    labile:          'var(--stage-labile)',
+    early_ltp:       'var(--stage-early)',
+    late_ltp:        'var(--stage-late)',
+    consolidated:    'var(--stage-cons)',
+    reconsolidating: 'var(--stage-recon)',
+  };
+  // Unknown stage → neutral chrome ink (honest fallback, no invented colour).
+  var STAGE_INK_FALLBACK = 'var(--text-muted)';
+  // Measurement meter inks. DD-01: meters carry the amber fill — --warn-ink
+  // IS the DS amber (oklch 78% .13 75 = --amber on ink) and re-inks to
+  // --warn-deep on paper. Interference reads in the danger ink; heat in the
+  // heat family. source: DS README §Data display DD-01; tokens/surfaces.css.
+  var METER_INK = 'var(--warn-ink)';
+  var METER_INK_HEAT = 'var(--heat-hot)';
+  // Emotion facet inks. source: DS tokens --emo-* ; mapping per
+  // ui/shared/palette.js EMO_TOKENS (positive→satisfaction, negative→frustration).
+  var EMO_INK = {
+    urgent:   'var(--emo-urgent)',
+    positive: 'var(--emo-satisf)',
+    negative: 'var(--emo-frustr)',
   };
 
+  // Stage physics + Advance rules, verbatim from the exhibit.
+  // source: DS cards/data-board.html (Spec DD-02 \u00b7 The stage board)
   var STAGE_BIO = {
-    labile: { decay: '2.0x', vuln: '90%', plast: '100%', advance: 'DA\u22651 or imp>0.3' },
-    early_ltp: { decay: '1.2x', vuln: '50%', plast: '70%', advance: 'replay\u22651 or imp>0.4' },
-    late_ltp: { decay: '0.8x', vuln: '20%', plast: '30%', advance: 'replay\u22653 (\u22651 if schema>0.5)' },
-    consolidated: { decay: '0.5x', vuln: '5%', plast: '10%', advance: 'Stable' },
-    reconsolidating: { decay: '1.5x', vuln: '80%', plast: '90%', advance: 'Re-stabilizes' },
+    labile:          { decay: '2.0\u00d7', vuln: '90%', plast: '100%', advance: 'replays \u2265 1 or imp > 0.3' },
+    early_ltp:       { decay: '1.2\u00d7', vuln: '50%', plast: '70%',  advance: 'replays \u2265 3 (z \u2265 1 if schema \u2265 0.5)' },
+    late_ltp:        { decay: '0.8\u00d7', vuln: '20%', plast: '30%',  advance: 'stable' },
+    consolidated:    { decay: '0.5\u00d7', vuln: '5%',  plast: '10%',  advance: '\u2014' },
+    reconsolidating: { decay: '1.5\u00d7', vuln: '80%', plast: '90%',  advance: 're-stabilises' },
   };
 
   function init() {
@@ -175,31 +199,40 @@
     return nodes;
   }
 
-  function _boardChip(label, active, onClick, accent) {
-    var b = el('button');
-    b.textContent = label;
-    var fg = active ? '#04080F' : (accent || '#c4d4dc');
-    var bg = active ? (accent || '#80d2e0') : 'rgba(120,200,220,0.06)';
-    var bd = active ? (accent || '#80d2e0') : 'rgba(120,200,220,0.25)';
-    b.style.cssText =
-      'background:' + bg + ';color:' + fg + ';border:1px solid ' + bd + ';' +
-      'padding:3px 10px;border-radius:11px;cursor:pointer;font:inherit;font-size:11px;letter-spacing:0.4px;' +
-      (active ? 'font-weight:600;' : '');
+  // DS Chip (paper doctrine): chrome-neutral pill; pressed = accent-soft
+  // tint; the count renders as a mono figure; stage/emotion/heat identity
+  // is a small data dot, never a coloured chip. Styling lives in
+  // timeline.css (.kb-chip*) — no baked colours here.
+  function _boardChip(label, count, active, onClick, dotInk) {
+    var b = el('button', 'kb-chip' + (active ? ' kb-chip--active' : ''));
+    if (dotInk) {
+      var dot = el('span', 'kb-chip__dot');
+      dot.style.setProperty('--chip-dot', dotInk); // data ink token reference
+      b.appendChild(dot);
+    }
+    b.appendChild(document.createTextNode(label));
+    if (count !== '' && count != null) {
+      var c = el('span', 'kb-chip__count');
+      c.textContent = String(count);
+      b.appendChild(c);
+      // An empty facet filters to nothing — disable unless it is the
+      // active chip (which must stay clickable to be unselected).
+      if (count === 0 && !active) b.disabled = true;
+    }
     b.addEventListener('click', onClick);
     return b;
   }
 
+  // All chrome styling lives in timeline.css against the DS semantic
+  // aliases — this builder only assembles structure (no inline colours).
   function _boardFilterBar() {
     var wrap = el('div', 'kb-filter-wrap');
-    wrap.style.cssText = 'display:flex;flex-direction:column;gap:6px;padding:10px 14px;border-bottom:1px solid rgba(120,180,200,0.08);background:rgba(8,12,20,0.3)';
 
     // Row 1: search + sort + clear-all.
-    var row1 = el('div');
-    row1.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap';
-    var searchInput = el('input');
+    var row1 = el('div', 'kb-filter-row');
+    var searchInput = el('input', 'kb-search');
     searchInput.type = 'text'; searchInput.placeholder = 'Search…';
     searchInput.value = boardSearchQuery;
-    searchInput.style.cssText = 'flex:1;min-width:180px;background:rgba(10,16,28,0.6);border:1px solid rgba(120,200,220,0.25);color:#c4d4dc;padding:5px 10px;border-radius:3px;font:inherit;font-size:12px';
     var sDeb = null;
     searchInput.addEventListener('input', function() {
       clearTimeout(sDeb);
@@ -211,15 +244,14 @@
     row1.appendChild(searchInput);
 
     [['recent', 'Recent'], ['heat', 'Heat']].forEach(function(s) {
-      row1.appendChild(_boardChip(s[1], boardSort === s[0],
+      row1.appendChild(_boardChip(s[1], null, boardSort === s[0],
         function() { boardSort = s[0]; _boardResetAndFetch(); }));
     });
 
     var anyActive = boardFilterDomain !== 'all' || boardFilterStage || boardFilterEmotion
       || boardFilterMinHeat != null || boardFilterProtected || boardSearchQuery;
     if (anyActive) {
-      var clr = el('button'); clr.textContent = 'Clear all';
-      clr.style.cssText = 'background:transparent;border:1px solid rgba(224,176,64,0.4);color:#E0B040;padding:3px 10px;border-radius:3px;cursor:pointer;font:inherit;letter-spacing:0.6px;text-transform:uppercase;font-size:9px';
+      var clr = el('button', 'kb-clear'); clr.textContent = 'Clear all';
       clr.addEventListener('click', function() {
         boardFilterDomain = 'all'; boardFilterStage = null; boardFilterEmotion = null;
         boardFilterMinHeat = null; boardFilterProtected = false; boardSearchQuery = '';
@@ -230,32 +262,28 @@
     wrap.appendChild(row1);
 
     // Row 2: domain chips (server-known facets).
-    var row2 = el('div');
-    row2.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;align-items:center';
-    var domLabel = el('span'); domLabel.textContent = 'Domain';
-    domLabel.style.cssText = 'color:#7a8e9c;letter-spacing:1px;text-transform:uppercase;font-size:9px;margin-right:4px';
+    var row2 = el('div', 'kb-filter-row');
+    var domLabel = el('span', 'kb-filter-label'); domLabel.textContent = 'Domain';
     row2.appendChild(domLabel);
-    row2.appendChild(_boardChip('All' + (boardFacets ? ' (' + boardFacets.total + ')' : ''),
+    row2.appendChild(_boardChip('All', boardFacets ? boardFacets.total : null,
       boardFilterDomain === 'all',
       function() { boardFilterDomain = 'all'; _boardResetAndFetch(); }));
     if (boardFacets && boardFacets.global > 0) {
-      row2.appendChild(_boardChip('Global (' + boardFacets.global + ')',
+      row2.appendChild(_boardChip('Global', boardFacets.global,
         boardFilterDomain === 'global',
-        function() { boardFilterDomain = 'global'; _boardResetAndFetch(); }, '#FF4081'));
+        function() { boardFilterDomain = 'global'; _boardResetAndFetch(); }));
     }
     var domains = boardFacets && boardFacets.domains ? boardFacets.domains : [];
     domains.slice(0, 30).forEach(function(d) {
-      row2.appendChild(_boardChip(_boardShortDomain(d.name) + ' (' + d.count + ')',
+      row2.appendChild(_boardChip(_boardShortDomain(d.name), d.count,
         boardFilterDomain === d.name,
         function() { boardFilterDomain = d.name; _boardResetAndFetch(); }));
     });
     wrap.appendChild(row2);
 
     // Row 3: stage + emotion + heat + protected.
-    var row3 = el('div');
-    row3.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;align-items:center';
-    var fLabel = el('span'); fLabel.textContent = 'Filter';
-    fLabel.style.cssText = 'color:#7a8e9c;letter-spacing:1px;text-transform:uppercase;font-size:9px;margin-right:4px';
+    var row3 = el('div', 'kb-filter-row');
+    var fLabel = el('span', 'kb-filter-label'); fLabel.textContent = 'Filter';
     row3.appendChild(fLabel);
     var stageOpts = [
       { v: null,              t: 'Any stage' },
@@ -268,38 +296,37 @@
     stageOpts.forEach(function(opt) {
       var c = boardFacets && opt.v ? boardFacets.stages[opt.v]
             : (opt.v == null && boardFacets ? boardFacets.total : '');
-      row3.appendChild(_boardChip(opt.t + (c !== '' ? ' (' + c + ')' : ''),
+      row3.appendChild(_boardChip(opt.t, c === '' ? null : c,
         boardFilterStage === opt.v,
         function() { boardFilterStage = opt.v; _boardResetAndFetch(); },
-        STAGE_COLORS && opt.v ? STAGE_COLORS[opt.v] : null));
+        opt.v ? STAGE_INK[opt.v] : null));
     });
-    var sep = el('span'); sep.textContent = '·';
-    sep.style.cssText = 'color:#5a6e7c;margin:0 6px';
+    var sep = el('span', 'kb-filter-dot'); sep.textContent = '·';
     row3.appendChild(sep);
     var emoOpts = [
       { v: null,       t: 'Any feel' },
-      { v: 'urgent',   t: 'Urgent',   color: '#ff3366' },
-      { v: 'positive', t: 'Positive', color: '#22c55e' },
-      { v: 'negative', t: 'Negative', color: '#ef4444' },
+      { v: 'urgent',   t: 'Urgent' },
+      { v: 'positive', t: 'Positive' },
+      { v: 'negative', t: 'Negative' },
       { v: 'neutral',  t: 'Neutral' },
     ];
     emoOpts.forEach(function(opt) {
       var c = boardFacets && opt.v ? boardFacets.emotions[opt.v] : '';
-      row3.appendChild(_boardChip(opt.t + (c !== '' ? ' (' + c + ')' : ''),
+      row3.appendChild(_boardChip(opt.t, c === '' ? null : c,
         boardFilterEmotion === opt.v,
-        function() { boardFilterEmotion = opt.v; _boardResetAndFetch(); }, opt.color));
+        function() { boardFilterEmotion = opt.v; _boardResetAndFetch(); },
+        opt.v ? EMO_INK[opt.v] : null));
     });
-    var sep2 = el('span'); sep2.textContent = '·';
-    sep2.style.cssText = 'color:#5a6e7c;margin:0 6px';
+    var sep2 = el('span', 'kb-filter-dot'); sep2.textContent = '·';
     row3.appendChild(sep2);
-    row3.appendChild(_boardChip('Hot' + (boardFacets ? ' (' + boardFacets.hot + ')' : ''),
+    row3.appendChild(_boardChip('Hot', boardFacets ? boardFacets.hot : null,
       boardFilterMinHeat != null,
       function() { boardFilterMinHeat = boardFilterMinHeat != null ? null : 0.5; _boardResetAndFetch(); },
-      '#E07070'));
-    row3.appendChild(_boardChip('Protected' + (boardFacets ? ' (' + boardFacets.protected + ')' : ''),
+      METER_INK_HEAT));
+    row3.appendChild(_boardChip('Protected', boardFacets ? boardFacets.protected : null,
       boardFilterProtected,
       function() { boardFilterProtected = !boardFilterProtected; _boardResetAndFetch(); },
-      '#E0B040'));
+      METER_INK));
     wrap.appendChild(row3);
 
     return wrap;
@@ -339,55 +366,26 @@
       });
     });
 
-    var total = memories.length;
-
-    // ── Flow header ──
+    // ── Flow header — DD-02 anatomy: count, stage name, the three physics
+    // ledger rows and the factual Advance rule. Nothing else: no share bar,
+    // no live meters, no arrows, no badges (directive user 2026-07-04).
+    // source: DS cards/data-board.html (Spec DD-02 · The stage board)
     var flowStrip = el('div', 'kb-flow-strip');
-    STAGES.forEach(function(stage, i) {
-      var sc = STAGE_COLORS[stage] || '#50C8E0';
-      var count = groups[stage].length;
-      var pct = total > 0 ? (count / total * 100) : 0;
+    STAGES.forEach(function(stage) {
+      // G10: the count is the server-side truth for the whole stage
+      // (same source as the facet chip), never the length of the
+      // currently-loaded page. Falls back to the page-local count only
+      // while facets have not yet arrived (boardFacets == null).
+      var count = (boardFacets && boardFacets.stages && boardFacets.stages[stage] != null)
+        ? boardFacets.stages[stage]
+        : groups[stage].length;
       var bio = STAGE_BIO[stage];
 
-      if (i > 0) {
-        var arrow = el('div', 'kb-flow-arrow');
-        arrow.style.setProperty('--sc', STAGE_COLORS[STAGES[i-1]] || '#50C8E0');
-        arrow.innerHTML = '<div class="kb-flow-arrow-line"></div>';
-        flowStrip.appendChild(arrow);
-      }
-
-      // Compute live metrics
-      var stageMems = groups[stage];
-      var avgHeat = 0, avgImp = 0, avgEnc = 0, avgInterf = 0, avgReplay = 0, avgHippo = 0;
-      if (stageMems.length > 0) {
-        stageMems.forEach(function(m) {
-          avgHeat += (m.heat || 0);
-          avgImp += (m.importance || 0);
-          avgEnc += (m.encodingStrength || 0);
-          avgInterf += (m.interferenceScore || 0);
-          avgReplay += (m.accessCount || 0);
-          avgHippo += (m.hippocampalDependency || 0);
-        });
-        var n = stageMems.length;
-        avgHeat /= n; avgImp /= n; avgEnc /= n; avgInterf /= n; avgReplay /= n; avgHippo /= n;
-      }
-
       var card = el('div', 'kb-flow-node');
-      card.style.setProperty('--sc', sc);
-
-      // Count + name
       card.innerHTML =
-        '<div class="kb-flow-count" style="color:' + sc + '">' + count + '</div>' +
-        '<div class="kb-flow-label">' + (STAGE_LABELS[stage] || stage).toUpperCase() + '</div>';
+        '<div class="kb-flow-count">' + count + '</div>' +
+        '<div class="kb-flow-label">' + (STAGE_LABELS[stage] || stage) + '</div>';
 
-      // Percentage bar
-      var pctRow = el('div', 'kb-flow-pct-row');
-      pctRow.innerHTML =
-        '<div class="kb-flow-pct-bar"><div class="kb-flow-pct-fill" style="width:' + pct + '%;background:' + sc + '"></div></div>' +
-        '<span class="kb-flow-pct">' + pct.toFixed(1) + '%</span>';
-      card.appendChild(pctRow);
-
-      // Biological properties
       var bioEl = el('div', 'kb-flow-bio-section');
       bioEl.innerHTML =
         '<div class="kb-flow-bio-row"><span>Decay</span><span>' + bio.decay + '</span></div>' +
@@ -395,34 +393,10 @@
         '<div class="kb-flow-bio-row"><span>Plasticity</span><span>' + bio.plast + '</span></div>';
       card.appendChild(bioEl);
 
-      // Live metrics bars
-      if (count > 0) {
-        var liveEl = el('div', 'kb-flow-live');
-        liveEl.innerHTML =
-          '<div class="kb-flow-live-title">LIVE</div>' +
-          miniBar('Heat', avgHeat, sc) +
-          miniBar('Import', avgImp, sc) +
-          miniBar('Enc', avgEnc, sc) +
-          miniBar('Interf', avgInterf, '#E07070') +
-          miniBar('Hippo', avgHippo, '#C070D0') +
-          '<div class="kb-flow-bio-row"><span>Replay</span><span>' + avgReplay.toFixed(1) + '</span></div>';
-        card.appendChild(liveEl);
-      }
-
-      // Advance condition
+      // Advance condition: the factual rule, accent-ink label (DD-02).
       var advEl = el('div', 'kb-flow-advance');
-      advEl.innerHTML = '<span style="color:' + sc + '">Advance:</span> ' + bio.advance;
+      advEl.innerHTML = '<span class="kb-flow-advance-label">Advance:</span> ' + bio.advance;
       card.appendChild(advEl);
-
-      // At-risk count badge
-      var atRisk = stageMems.filter(function(m) {
-        return (m.interferenceScore || 0) > 0.3 && (m.heat || 0) < 0.2;
-      }).length;
-      if (atRisk > 0) {
-        var riskBadge = el('div', 'kb-flow-risk-badge');
-        riskBadge.textContent = '\u26A0 ' + atRisk + ' at risk';
-        card.appendChild(riskBadge);
-      }
 
       flowStrip.appendChild(card);
     });
@@ -435,10 +409,11 @@
     var board = el('div', 'kb-board');
 
     STAGES.forEach(function(stage) {
-      var sc = STAGE_COLORS[stage] || '#50C8E0';
+      var sc = STAGE_INK[stage] || STAGE_INK_FALLBACK;
       var mems = groups[stage];
 
       var col = el('div', 'kb-col');
+      // --sc: stage data ink — CSS renders it as the header's identity dot.
       col.style.setProperty('--sc', sc);
 
       // Header
@@ -446,8 +421,13 @@
       var title = el('span', 'kb-col-title');
       title.textContent = (STAGE_LABELS[stage] || stage).toUpperCase();
       header.appendChild(title);
+      // G10: server-truth stage total (same source as the facet chip),
+      // not the length of the currently-loaded page.
+      var colCount = (boardFacets && boardFacets.stages && boardFacets.stages[stage] != null)
+        ? boardFacets.stages[stage]
+        : mems.length;
       var count = el('span', 'kb-col-count');
-      count.textContent = mems.length;
+      count.textContent = colCount;
       header.appendChild(count);
       col.appendChild(header);
 
@@ -477,7 +457,6 @@
     // sees the first ~500 memories and the Board feels capped.
     var sentinel = el('div', 'kb-load-sentinel');
     sentinel.id = 'kb-load-sentinel';
-    sentinel.style.cssText = 'min-height:60px;display:flex;align-items:center;justify-content:center;gap:12px;color:#7a8e9c;font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:24px';
     var sText = el('span'); sText.id = 'kb-load-text';
     sText.textContent = boardDone
       ? '— end of board — ' + boardAccum.length + ' memories loaded'
@@ -486,9 +465,9 @@
           : 'Scroll for more · ' + boardAccum.length + ' loaded');
     sentinel.appendChild(sText);
     if (!boardDone) {
+      // DS secondary button — styled in timeline.css (.kb-load-more).
       var sBtn = el('button', 'kb-load-more');
       sBtn.id = 'kb-load-more';
-      sBtn.style.cssText = 'background:rgba(80,210,235,0.15);border:1px solid rgba(120,200,220,0.4);color:#80d2e0;padding:6px 14px;border-radius:3px;cursor:pointer;font:inherit;letter-spacing:1.2px';
       sBtn.textContent = 'Load more';
       sBtn.addEventListener('click', function(){
         boardScrolledSinceFetch = true;  // explicit user intent
@@ -533,6 +512,11 @@
   function buildCard(mem, stageColor) {
     var card = el('div', 'kb-card');
     card.dataset.memId = mem.id;
+    // Keyboard operability (WCAG 2.1.1): the card carries a click handler
+    // (select + open inspector) with no native interactive semantics —
+    // make it a focusable, announced button-equivalent.
+    card.tabIndex = 0;
+    card.setAttribute('role', 'button');
 
     var heat = Math.max(0, Math.min(1, mem.heat || 0));
     var stability = mem.stability;
@@ -540,27 +524,26 @@
     var plasticity = Math.max(0, Math.min(1, mem.plasticity || 0));
     var replayCount = mem.accessCount || 0;
 
-    // Heat tint via CSS custom property (used by ::before pseudo-element)
-    card.style.setProperty('--card-heat', heat);
-    card.style.setProperty('--card-stage-color', stageColor);
+    // No heat tint / opacity fade on the sheet — DD-01 cards are plain
+    // cream; heat lives in the HeatBar footer (stageColor stays used by
+    // the column header dot only).
 
-    // Card opacity — floor at 0.55
-    card.style.opacity = Math.max(0.55, 0.4 + heat * 0.5);
-
-    // Integrity border class (null-safe stability check)
-    var borderClass;
+    // Integrity class (null-safe stability check) — rendered by CSS as a
+    // small status dot in the sheet's corner (the DS forbids
+    // coloured-left-border cards).
+    var integrityClass;
     if (stability == null || stability === undefined) {
-      borderClass = 'kb-card--neutral';
+      integrityClass = 'kb-card--neutral';
     } else if (stability > 0.7 && interference < 0.3) {
-      borderClass = 'kb-card--healthy';
+      integrityClass = 'kb-card--healthy';
     } else if (stability > 0.3) {
-      borderClass = 'kb-card--consolidating';
+      integrityClass = 'kb-card--consolidating';
     } else if (interference > 0.5) {
-      borderClass = 'kb-card--at-risk';
+      integrityClass = 'kb-card--at-risk';
     } else {
-      borderClass = 'kb-card--fading';
+      integrityClass = 'kb-card--fading';
     }
-    card.classList.add(borderClass);
+    card.classList.add(integrityClass);
 
     // Fading indicator for very low heat
     if (heat < 0.1) {
@@ -569,19 +552,19 @@
 
     var body = el('div', 'kb-card-body');
 
-    // Content — 2 lines max, 100 chars
-    var label = el('div', 'kb-card-label');
-    label.textContent = (mem.label || mem.content || '').slice(0, 100);
+    // Content — minimal card (user directive 2026-07-04): one clamped
+    // passage; commands/code speak mono (T-04). Full detail lives in the
+    // inspector on click.
+    var rawLabel = (mem.label || mem.content || '').replace(/\*\*/g, '').trim();
+    var labelIsCode = /(^|\n)\s*(Tool:|Command:|\$ |#!\/|cd |grep |python3? |node |npm |git )/.test(rawLabel)
+      || rawLabel.indexOf('&&') !== -1 || rawLabel.indexOf('```') !== -1;
+    var label = el('div', 'kb-card-label' + (labelIsCode ? ' kb-card-label--code' : ''));
+    var labelText = rawLabel.replace(/\s+/g, ' ').slice(0, 100);
+    label.textContent = labelText;
     body.appendChild(label);
-
-    // Emotion chip — high-signal affective indicator under the label.
-    if (window.JUG && JUG._memSci && typeof JUG._memSci.buildEmotionChip === 'function') {
-      var emoChip = JUG._memSci.buildEmotionChip(mem);
-      if (emoChip) {
-        emoChip.classList.add('ms-emotion--compact');
-        body.appendChild(emoChip);
-      }
-    }
+    // Accessible name (WCAG 4.1.2): announce the card's content in place
+    // of the visual label since role="button" has no text-node fallback.
+    card.setAttribute('aria-label', (labelText || 'Memory') + (mem.domain ? ', ' + mem.domain : ''));
 
     // Meta row: domain pill + store type badge + relative age
     var meta = el('div', 'kb-card-meta');
@@ -608,97 +591,60 @@
     }
     body.appendChild(meta);
 
-    // Meaning — schema alignment, semantic tags, gist.
-    if (window.JUG && JUG._memSci && typeof JUG._memSci.buildMeaningSection === 'function') {
-      var meaning = JUG._memSci.buildMeaningSection(mem);
-      if (meaning) {
-        meaning.classList.add('ms-meaning--compact');
-        body.appendChild(meaning);
-      }
-    }
+    // Minimal card stops here — meaning, meters, tags and symbol chips all
+    // live in the full inspector (JUG._kvOpenMemory) opened on click.
 
-    // Scientific measurements — compact variant keeps Kanban column
-    // cards dense (6 top rows max; bars + counters only, no text/age).
-    if (window.JUG && JUG._memSci && typeof JUG._memSci.buildSciencePanel === 'function') {
-      var sci = JUG._memSci.buildSciencePanel(mem, 'compact');
-      if (sci) body.appendChild(sci);
-    }
-
-    // Tags — up to 2
-    if (mem.tags && mem.tags.length > 0) {
-      var tagsRow = el('div', 'kb-card-tags');
-      mem.tags.slice(0, 2).forEach(function(t) {
-        var tag = el('span', 'kb-card-tag');
-        tag.textContent = t;
-        tagsRow.appendChild(tag);
-      });
-      body.appendChild(tagsRow);
-    }
-
-    // Code impact — AST symbols that touch this memory (by file-ref
-    // or verbatim label mention). Cap at 3 chips here to keep Kanban
-    // cards compact; the Knowledge-view expanded modal shows more.
-    var _kvSyms = (window.JUG && JUG._kvResolve) ? JUG._kvResolve(mem, 3) : null;
-    if (_kvSyms && _kvSyms.length) {
-      var symRow = el('div', 'kb-card-tags');
-      symRow.title = 'Code symbols connected to this memory';
-      _kvSyms.forEach(function (ref) {
-        var chip = el('span', 'kb-card-tag');
-        chip.textContent = '⟨/⟩ ' + (ref.node.label || ref.node.id);
-        chip.style.cursor = 'pointer';
-        chip.addEventListener('click', function (ev) {
-          ev.stopPropagation();
-          if (window.JUG && JUG.emit) JUG.emit('graph:selectNode', ref.node);
-          if (JUG.state) JUG.state.activeView = 'graph';
-        });
-        symRow.appendChild(chip);
-      });
-      body.appendChild(symRow);
-    }
-
-    // Protected badge
+    // Protected badge \u2014 micro-caps word, never a pictograph (DS: no emoji).
     if (mem.isProtected) {
       var shield = el('span', 'kb-badge kb-badge-protected');
-      shield.textContent = '\u26A1';
+      shield.textContent = 'PROTECTED';
       body.appendChild(shield);
     }
 
-    // Hover-expand scan tier (hidden by default, shown on hover via CSS)
-    var scan = el('div', 'kb-card__scan');
-    var safeStability = (stability != null) ? Math.max(0, Math.min(1, stability)) : 0;
-
-    // Plasticity bar
-    scan.innerHTML =
-      '<div class="kb-card__bar">' +
-        '<span class="kb-card__bar-label">Plasticity</span>' +
-        '<div class="kb-card__bar-track"><div class="kb-card__bar-fill" style="width:' + (plasticity * 100) + '%"></div></div>' +
-      '</div>' +
-      '<div class="kb-card__bar">' +
-        '<span class="kb-card__bar-label">Stability</span>' +
-        '<div class="kb-card__bar-track"><div class="kb-card__bar-fill" style="width:' + (safeStability * 100) + '%"></div></div>' +
-      '</div>' +
-      (interference > 0.3 ? '<span class="kb-card__risk-badge">\u26A0 Interference</span>' : '') +
-      (replayCount > 0 ? '<span class="kb-card__meta-badge">\u21BB ' + replayCount + '</span>' : '');
-
-    body.appendChild(scan);
+    // Heat footer \u2014 the one meter the minimal card keeps (DD-01: a zero
+    // value shows an empty track, never hidden). Value verbatim.
+    var heatFoot = el('div', 'aia-heat kb-card__heat');
+    var heatMeta = el('div', 'aia-heat__meta');
+    var hk = el('span'); hk.textContent = 'Heat';
+    var hv = el('span', 'aia-heat__val'); hv.textContent = heat.toFixed(3);
+    heatMeta.appendChild(hk); heatMeta.appendChild(hv);
+    var heatTrack = el('div', 'aia-heat__track');
+    var heatFill = el('div', 'aia-heat__fill');
+    heatFill.style.setProperty('--heat-scale', heat || 0.001);
+    heatFill.style.width = (heat * 100) + '%';
+    heatTrack.appendChild(heatFill);
+    heatFoot.appendChild(heatMeta); heatFoot.appendChild(heatTrack);
+    body.appendChild(heatFoot);
     card.appendChild(body);
 
     // Tooltip on hover
     card.addEventListener('mouseenter', function() { JUG._tooltip.show(mem); });
     card.addEventListener('mouseleave', function() { JUG._tooltip.hide(); });
 
-    // Click to select/deselect
-    card.addEventListener('click', function(e) {
-      e.stopPropagation();
+    // Activate: highlight + open the FULL inspector (same panel as the
+    // Knowledge view — minimal card, complete detail on click). Shared by
+    // the click and keyboard (Enter/Space) paths so both stay in sync.
+    function activate() {
       _emitting = true;
       if (selectedId === mem.id) {
         clearHighlight();
         JUG.emit('graph:deselectNode');
       } else {
         highlightMemory(mem.id);
-        JUG.emit('graph:selectNode', mem);
+        if (window.JUG && typeof JUG._kvOpenMemory === 'function') {
+          JUG._kvOpenMemory(mem, []);
+        } else {
+          JUG.emit('graph:selectNode', mem);
+        }
       }
       _emitting = false;
+    }
+    card.addEventListener('click', function(e) { e.stopPropagation(); activate(); });
+    card.addEventListener('keydown', function(e) {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();  // Space must not scroll the column
+      e.stopPropagation();
+      activate();
     });
 
     return card;
@@ -735,14 +681,6 @@
     if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
     if (diff < 604800000) return Math.floor(diff / 86400000) + 'd ago';
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  }
-
-  function miniBar(label, value, color) {
-    var pct = Math.max(0, Math.min(100, (value || 0) * 100));
-    return '<div class="kb-flow-metric">' +
-      '<span class="kb-flow-metric-label">' + label + '</span>' +
-      '<div class="kb-flow-metric-bar"><div class="kb-flow-metric-fill" style="width:' + pct + '%;background:' + color + '"></div></div>' +
-      '<span class="kb-flow-metric-val">' + pct.toFixed(0) + '%</span></div>';
   }
 
   function el(tag, cls) {

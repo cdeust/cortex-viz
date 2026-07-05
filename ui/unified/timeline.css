@@ -1,192 +1,246 @@
-/* Cortex Memory Board — Kanban by consolidation stage */
+/* =======================================================================
+   Cortex Memory Board — kanban by consolidation stage, restated in the
+   AI Architect paper doctrine (DS README §3): the desk is --canvas, the
+   stage summary cards and memory cards are sheets (--surface-card +
+   hairline + quiet shadow), chrome is warm-neutral greyscale, and every
+   colour is DATA — stage / heat / valence inks that surfaces.css re-inks
+   per posture (deep on paper, bright on the legacy ink instrument).
+
+   Authored entirely against the semantic aliases (--canvas, --surface…,
+   --text…, --border…, --divider, --accent…, data tokens --stage-…,
+   --heat-…, --emo-…) — no raw hexes, so ink mode keeps working
+   automatically. (NB: never write a star-slash glob inside a CSS comment —
+   it terminates the comment and the parser then eats the next rule.)
+
+   CASCADE NOTE — knowledge.css (read-only) appends a "CORTEX DESIGN
+   RE-SKIN" layer of class-level `!important` rules over these .kb-*
+   selectors, and it loads AFTER this file. Contested properties are
+   therefore declared here under the #timeline-container ID scope with
+   `!important`, which out-specifies that layer; everything uncontested
+   stays a normal declaration. Bar fills are driven by the inline
+   `--bar-fill` custom property (set from timeline.js) because the
+   re-skin layer force-sets `background` on the fill classes.
+   ======================================================================= */
 
 #timeline-container {
-  /* Geometry (position, top/left/right/bottom, padding, overflow) owned by
+  /* Geometry (position, top/left/right/bottom, overflow) owned by
      theme.css so the view clears the fixed filter-bar. Keep only the
      display behavior + cosmetic properties here. */
   display: none;
   flex-direction: column;
-  background: var(--void, #080810);
+  background: var(--canvas); /* source: DS tokens/surfaces.css --canvas (paper-0 on paper) */
   z-index: 0;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-sans); /* chrome voice — Inter Tight; mono is reserved for data below */
 }
-
-/* View toggle */
-.view-toggle {
-  display: inline-flex; gap: 0; margin-right: 12px;
-  border: 1px solid var(--cyan, #50D0E8); border-radius: 4px; overflow: hidden;
-}
-.view-toggle .view-btn {
-  padding: 4px 10px; font-family: 'JetBrains Mono', monospace;
-  font-size: 11px; font-weight: 500; text-transform: uppercase;
-  letter-spacing: 0.08em; color: var(--cyan, #50D0E8);
-  background: transparent; border: none; cursor: pointer;
-  transition: background 0.2s, color 0.2s;
-}
-.view-toggle .view-btn:not(:last-child) { border-right: 1px solid var(--cyan, #50D0E8); }
-.view-toggle .view-btn.active { background: var(--cyan, #50D0E8); color: var(--void, #080810); }
-.view-toggle .view-btn:hover:not(.active) { background: rgba(80,208,232,0.12); }
 
 /* ═══════════════════════════════════
-   FLOW HEADER STRIP
+   FLOW HEADER STRIP — DD-02: five
+   stage sheets, physics header only
    ═══════════════════════════════════ */
-.kb-flow-strip {
+#timeline-container .kb-flow-strip {
   display: flex;
-  align-items: flex-start;
-  padding: 8px 8px 6px;
+  align-items: stretch;
+  gap: 10px;                       /* source: DS cards/data-board.html .cols */
   flex-shrink: 0;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  /* The strip is the DESK, not a panel — the re-skin layer wraps it in a
+     bordered surface; undo that and keep only a ruled ledger line below. */
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 1px solid var(--divider) !important;
+  border-radius: 0 !important;
+  padding: 2px 2px 12px !important;
+  margin: 0 0 2px !important;
 }
-.kb-flow-node {
+
+/* Each stage column is a sheet on the desk stating its measured physics.
+   source: DS cards/data-board.html (Spec DD-02) .col on aia-sheet */
+#timeline-container .kb-flow-node {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 6px 4px;
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 6px;
-  background: rgba(255,255,255,0.02);
+  padding: 12px 13px;                           /* source: DD-02 .col */
+  background: var(--surface-card) !important;   /* --sheet on paper */
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-sm);                 /* quiet, never glow */
 }
+
+/* Count — a measured number, centred. source: DD-02 .n */
 .kb-flow-count {
-  font-size: 24px;
-  font-weight: 700;
-  line-height: 1;
-  text-shadow: 0 0 8px currentColor;
+  font: 500 22px/1 var(--font-mono);            /* source: DD-02 .n */
+  color: var(--text);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
-.kb-flow-label {
-  font: 700 11px 'Orbitron', sans-serif;
-  color: var(--sc, #50C8E0);
-  letter-spacing: 0.1em;
-  text-shadow: 0 0 6px currentColor;
+
+/* Stage name — mono micro-caps, chrome-neutral, no dot. source: DD-02 .st */
+#timeline-container .kb-flow-label {
+  font: 600 var(--text-xs)/1 var(--font-mono) !important;  /* source: DD-02 .st (11.5px) */
+  letter-spacing: .16em !important;               /* source: DD-02 .st */
+  text-transform: uppercase !important;
+  color: var(--text-muted) !important;
+  text-align: center;
+  margin: 6px 0 10px;
 }
-/* Percentage bar row */
-.kb-flow-pct-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 2px 6px;
-}
-.kb-flow-pct-bar {
-  flex: 1;
-  height: 4px;
-  background: rgba(255,255,255,0.06);
-  border-radius: 2px;
-  overflow: hidden;
-}
-.kb-flow-pct-fill {
-  height: 100%;
-  border-radius: 2px;
-}
-.kb-flow-pct {
-  font-size: 11px;
-  font-weight: 600;
-  color: #FFF;
-  min-width: 32px;
-  text-align: right;
-}
-/* Biological properties */
+
+/* Physics ledger rows — each row rules itself off. source: DD-02 .ph */
 .kb-flow-bio-section {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 4px 6px 0;
-  border-top: 1px solid rgba(255,255,255,0.06);
   width: 100%;
 }
 .kb-flow-bio-row {
   display: flex;
   justify-content: space-between;
-  font-size: 11px;
+  font: 400 var(--text-sm) var(--font-mono);    /* source: DD-02 .ph (12.5px) */
+  padding: 3px 0;
+  border-top: 1px solid var(--divider);
 }
-.kb-flow-bio-row span:first-child { color: #C0D4E0; }
-.kb-flow-bio-row span:last-child { color: #FFF; font-weight: 600; }
-/* Live metrics section */
-.kb-flow-live {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  width: 100%;
-  padding: 4px 0 0;
-  border-top: 1px solid rgba(255,255,255,0.06);
-}
-.kb-flow-live-title {
-  font: 700 11px 'Orbitron', sans-serif;
-  color: var(--sc, #50C8E0);
-  letter-spacing: 0.15em;
-  text-align: center;
-  margin-bottom: 2px;
-}
-/* Advance condition */
-.kb-flow-advance {
-  font-size: 11px;
-  color: #C0D4E0;
-  text-align: center;
-  padding: 4px 6px 0;
-  border-top: 1px solid rgba(255,255,255,0.06);
-  width: 100%;
-  line-height: 1.4;
-}
-/* Mini metric bars in flow nodes */
-.kb-flow-metric {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
-  padding: 0 6px;
-}
-.kb-flow-metric-label {
-  font-size: 11px;
-  color: #C0D4E0;
-  width: 40px;
-  min-width: 40px;
-}
-.kb-flow-metric-bar {
-  flex: 1;
-  height: 4px;
-  background: rgba(255,255,255,0.06);
-  border-radius: 2px;
-  overflow: hidden;
-}
-.kb-flow-metric-fill {
-  height: 100%;
-  border-radius: 2px;
-}
-.kb-flow-metric-val {
-  font-size: 11px;
-  font-weight: 600;
-  color: #FFF;
-  width: 30px;
-  text-align: right;
+.kb-flow-bio-row span:first-child { color: var(--text-muted); }
+.kb-flow-bio-row span:last-child {
+  color: var(--text);
+  font-weight: 500;                             /* source: DD-02 .ph b */
+  font-variant-numeric: tabular-nums;
 }
 
-.kb-flow-arrow {
-  width: 28px;
-  min-width: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding-top: 16px;
+/* Advance — the factual rule; accent-ink label. source: DD-02 .adv */
+.kb-flow-advance {
+  margin-top: 8px;
+  font: 400 var(--text-xs)/1.5 var(--font-mono); /* source: DD-02 .adv (11.5px) */
+  color: var(--text-faint);
 }
-.kb-flow-arrow-line {
-  width: 100%;
-  height: 2px;
-  background: var(--sc, #50C8E0);
-  opacity: 0.3;
-  position: relative;
-}
-.kb-flow-arrow-line::after {
-  content: '\u25B6';
-  position: absolute;
-  right: -6px; top: -6px;
-  font-size: 8px;
-  color: var(--sc, #50C8E0);
-  opacity: 0.5;
+.kb-flow-advance-label {
+  color: var(--accent-ink);
+  font-weight: 600;                             /* source: DD-02 .adv b */
+  letter-spacing: .08em;
 }
 
 /* ═══════════════════════════════════
-   BOARD — 5 columns side by side
+   FILTER BAR — search + chips, ruled
+   into the record (no slab, no panel)
+   ═══════════════════════════════════ */
+.kb-filter-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 2px 12px;
+  border-bottom: 1px solid var(--divider);
+  background: transparent;
+  flex-shrink: 0;
+}
+.kb-filter-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Search — DS Input spec. source: DS components/core/core.css .aia-field */
+.kb-search {
+  flex: 1;
+  min-width: 180px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text);
+  background: var(--surface-input);   /* the sheet on paper */
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 11px;
+  outline: none;
+  transition: border-color var(--dur-fast) var(--ease),
+              background var(--dur-fast) var(--ease),
+              box-shadow var(--dur-fast) var(--ease);
+}
+.kb-search::placeholder { color: var(--text-faint); }
+.kb-search:focus {
+  border-color: var(--accent-ink);
+  background: var(--surface);
+  box-shadow: var(--shadow-focus); /* soft terracotta halo — never a hard outline */
+}
+
+/* Filter chips — DS Chip spec on paper: chip fill, hairline, pill;
+   pressed = accent-soft tint with the count re-inked in accent.
+   source: DS components/core/core.css .aia-chip / .aia-chip__count */
+.kb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+  background: var(--surface-chip);
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease);
+}
+.kb-chip:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.kb-chip--active {
+  background: var(--accent-soft);
+  /* 55% accent hairline — same recipe as DS .aia-btn--danger border */
+  border-color: color-mix(in oklab, var(--accent-ink) 55%, transparent);
+  color: var(--text);
+}
+.kb-chip__count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.kb-chip--active .kb-chip__count { color: var(--accent-ink); }
+/* A chip whose facet is empty filters to nothing — disabled, faint ink. */
+.kb-chip:disabled {
+  color: var(--text-faint);
+  cursor: default;
+  pointer-events: none;
+}
+.kb-chip:disabled .kb-chip__count { color: var(--text-faint); }
+/* Small data dot inside a chip — stage / emotion / heat identity. */
+.kb-chip__dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--chip-dot, transparent);
+}
+
+/* Row micro-labels (DOMAIN / FILTER) — 9px mono micro-caps. */
+.kb-filter-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-3xs);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  color: var(--text-faint);
+  margin-right: 4px;
+}
+.kb-filter-dot { color: var(--text-faint); margin: 0 6px; }
+
+/* Clear-all — a quiet mono action carrying the one discipline accent. */
+.kb-clear {
+  font-family: var(--font-mono);
+  font-size: var(--text-3xs);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  color: var(--accent-ink);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease);
+}
+.kb-clear:hover {
+  background: var(--accent-soft);
+  border-color: color-mix(in oklab, var(--accent-ink) 55%, transparent);
+}
+
+/* ═══════════════════════════════════
+   BOARD — 5 ruled ledger columns
    ═══════════════════════════════════ */
 .kb-board {
   flex: 1 1 0;
@@ -195,109 +249,146 @@
   grid-template-columns: repeat(5, minmax(0, 1fr));
   grid-auto-flow: column;
   gap: 8px;
-  padding: 4px 8px 8px;
+  padding: 8px 0;
   overflow: hidden;
 }
 
-/* ── Column ── */
-.kb-col {
+/* ── Column — not a panel: a ruled region of the record. Hairline
+   dividers separate columns; the header is a ledger heading. ── */
+#timeline-container .kb-col {
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: rgba(255,255,255,0.02);
-  border-radius: 6px;
-  border: 1px solid rgba(255,255,255,0.06);
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
   overflow: hidden;
 }
+#timeline-container .kb-col + .kb-col {
+  border-left: 1px solid var(--divider) !important;
+}
 
-/* Column header */
-.kb-col-header {
+/* Column header — micro-caps title + mono count over a ruled line. */
+#timeline-container .kb-col-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 10px;
-  border-bottom: 2px solid var(--sc, #50C8E0);
+  padding: 6px 10px 8px !important;
+  border-bottom: 1px solid var(--border-strong) !important;
   flex-shrink: 0;
+  background: transparent !important;
 }
-.kb-col-title {
-  font: 700 11px 'Orbitron', sans-serif;
-  color: var(--sc, #50C8E0);
-  letter-spacing: 0.1em;
-  text-shadow: 0 0 10px var(--sc, #50C8E0);
+#timeline-container .kb-col-title {
+  font-family: var(--font-mono) !important;
+  font-size: var(--text-3xs) !important;
+  font-weight: var(--weight-semibold) !important;
+  letter-spacing: var(--tracking-caps) !important;
+  text-transform: uppercase !important;
+  color: var(--text-secondary) !important;
 }
-.kb-col-count {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--sc, #50C8E0);
-  background: rgba(255,255,255,0.06);
-  padding: 2px 8px;
-  border-radius: 8px;
-  min-width: 24px;
-  text-align: center;
+.kb-col-title::before {
+  /* stage identity as a small data dot, not a coloured header */
+  content: '';
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--sc, var(--text-faint));
+  margin-right: 7px;
+  vertical-align: -0.5px;
+}
+#timeline-container .kb-col-count {
+  font-family: var(--font-mono) !important;
+  font-size: 11px !important;
+  font-weight: var(--weight-medium);
+  color: var(--text-muted) !important;
+  background: transparent;
+  padding: 0;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Cards container — scrollable */
 .kb-col-cards {
   flex: 1;
   overflow-y: auto;
-  padding: 6px;
+  padding: 8px 6px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 .kb-col-cards::-webkit-scrollbar { width: 3px; }
 .kb-col-cards::-webkit-scrollbar-track { background: transparent; }
-.kb-col-cards::-webkit-scrollbar-thumb { background: var(--sc, #50C8E0)25; border-radius: 2px; }
+.kb-col-cards::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--text) 22%, transparent);
+  border-radius: var(--radius-pill);
+}
 
-/* Empty state */
+/* Empty state — an honest empty, faint ink on a dashed hairline. */
 .kb-empty {
   display: flex;
   align-items: center;
   justify-content: center;
   height: 60px;
-  font-size: 11px;
-  color: rgba(200,220,235,0.3);
-  border: 1px dashed rgba(255,255,255,0.08);
-  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
 }
 
 /* ═══════════════════════════════════
-   CARD
+   MEMORY CARD — a sheet on the desk
+   (DD-01: chrome title, mono meters,
+   provenance line, stage tint only
+   as a data accent)
    ═══════════════════════════════════ */
-.kb-card {
+#timeline-container .kb-card {
   position: relative;
   display: flex;
-  background: var(--card, #0e1018);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 4px;
+  background: var(--surface-card) !important;   /* the sheet */
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-sm) !important;
+  padding: 0 !important;                        /* body carries the inset */
+  box-shadow: var(--shadow-sm);
   cursor: pointer;
-  transition: border-color 0.15s, opacity 0.15s, box-shadow 0.15s;
+  transition: border-color var(--dur-fast) var(--ease),
+              opacity var(--dur-fast) var(--ease),
+              box-shadow var(--dur-fast) var(--ease);
   overflow: hidden;
   flex-shrink: 0;
 }
-/* Heat tint pseudo-element */
-.kb-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  border-radius: inherit;
-  background: var(--card-stage-color, transparent);
-  opacity: calc(var(--card-heat, 0) * 0.12);
-  transition: opacity 0.3s;
+/* No background tint on cards — DD-01 shows plain cream sheets; heat is
+   carried by the card's HeatBar footer, never by a coloured card wash
+   (user rejection 2026-07-04: blue-tinted labile cards). */
+#timeline-container .kb-card:hover {
+  border-color: var(--border-strong) !important;
+  box-shadow: var(--shadow-md);
 }
-.kb-card:hover {
-  border-color: rgba(80,210,235,0.3);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+/* Keyboard focus — the DS terracotta halo, shown only for keyboard
+   navigation (not mouse clicks) so :hover already reads as "reachable". */
+#timeline-container .kb-card:focus-visible {
+  outline: none;
+  border-color: var(--accent-ink) !important;
+  box-shadow: var(--shadow-focus) !important;
 }
 
-/* Integrity border variants */
-.kb-card--healthy { border-left: 4px solid #60D888; }
-.kb-card--consolidating { border-left: 4px solid #E0B840; }
-.kb-card--at-risk { border-left: 4px dashed #E07070; }
-.kb-card--fading { border-left: 4px dotted #555; }
-.kb-card--neutral { border-left: 4px solid #666; }
+/* Integrity — a small status dot in the sheet's corner (the DS forbids
+   coloured-left-border cards; status inks re-map per surface). */
+.kb-card::after {
+  content: '';
+  position: absolute;
+  top: 9px; right: 9px;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--card-integrity, transparent);
+  pointer-events: none;
+}
+.kb-card--healthy       { --card-integrity: var(--ok-ink); }
+.kb-card--consolidating { --card-integrity: var(--warn-ink); }
+.kb-card--at-risk       { --card-integrity: var(--danger-ink); }
+.kb-card--fading        { --card-integrity: var(--text-faint); }
+.kb-card--neutral       { --card-integrity: transparent; }
 
 /* Card body */
 .kb-card-body {
@@ -307,166 +398,148 @@
   flex-direction: column;
   gap: 4px;
   min-width: 0;
+  position: relative; /* keep content above the ::before heat tint */
 }
 
-/* Label */
+/* Command/code memories speak mono — T-04 "anything you could
+   copy-paste and run". */
+#timeline-container .kb-card-label--code {
+  font-family: var(--font-mono) !important;
+  font-size: 11px !important;
+  font-weight: var(--weight-regular) !important;
+}
+/* Title — chrome voice, primary ink. */
 .kb-card-label {
-  font-size: 11px;
-  font-weight: 500;
-  color: #FFF;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: var(--weight-medium);
+  color: var(--text);
   line-height: 1.4;
+  padding-right: 12px; /* clear the integrity dot */
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-/* Meta: domain + time */
+/* Provenance row: domain + store kind + relative age — mono, quiet. */
 .kb-card-meta {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 .kb-card-domain {
+  font-family: var(--font-mono);
   font-size: 11px;
-  font-weight: 500;
-  color: #A0C0D8;
+  letter-spacing: var(--tracking-mono);
+  color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .kb-card-time {
+  font-family: var(--font-mono);
   font-size: 11px;
-  color: #8AB0C8;
+  color: var(--text-faint);
   margin-left: auto;
   flex-shrink: 0;
 }
 
-/* Tags */
-.kb-card-tags {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-}
-.kb-card-tag {
-  font-size: 11px;
-  font-weight: 500;
-  color: #50D0E8;
-  background: rgba(80,210,235,0.1);
-  padding: 2px 6px;
-  border-radius: 3px;
-  border: 1px solid rgba(80,210,235,0.15);
-}
-
-/* Store type badge */
+/* Store kind badge — data ink by memory family.
+   source: DS ui_kits/cortex-viz/data.js (episodic → --stage-late,
+   semantic → --stage-recon; same mapping as ui/shared/palette.js). */
 .kb-card__store-badge {
+  font-family: var(--font-mono);
   font-size: 9px;
   padding: 1px 4px;
-  border-radius: 3px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
+  border-radius: var(--radius-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-caps);
 }
-.kb-card__store-badge--episodic { background: rgba(88, 216, 136, 0.15); color: #58D888; }
-.kb-card__store-badge--semantic { background: rgba(192, 112, 208, 0.15); color: #C070D0; }
-
-/* Always-visible scan tier — cards are full-size at first paint so
-   no hover/click expansion shifts the layout. The hover-grow used to
-   drag the bottom sentinel into the IntersectionObserver's view,
-   which triggered an unintended next-page fetch. */
-.kb-card__scan {
-  max-height: none;
-  overflow: visible;
-  padding: 6px 0 0;
-  border-top: 1px solid rgba(80, 208, 232, 0.1);
+.kb-card__store-badge--episodic {
+  color: var(--stage-late);
+  background: color-mix(in oklab, var(--stage-late) 12%, transparent);
+}
+.kb-card__store-badge--semantic {
+  color: var(--stage-recon);
+  background: color-mix(in oklab, var(--stage-recon) 12%, transparent);
 }
 
-/* Bio bars */
-.kb-card__bar {
+/* Protected badge — mono micro-caps in the warn ink, hairline frame. */
+.kb-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+.kb-badge-protected {
+  color: var(--warn-ink);
+  border: 1px solid color-mix(in oklab, var(--warn-ink) 55%, transparent);
+  border-radius: var(--radius-xs);
+  padding: 1px 5px;
+  align-self: flex-start;
+}
+
+/* ═══════════════════════════════════
+   LOAD-MORE SENTINEL
+   ═══════════════════════════════════ */
+.kb-load-sentinel {
+  min-height: 60px;
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin: 2px 0;
-}
-.kb-card__bar-label {
-  font-size: 9px;
-  color: var(--text-dim, #8AB0C8);
-  width: 55px;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--text-faint);
   flex-shrink: 0;
 }
-.kb-card__bar-track {
-  flex: 1;
-  height: 3px;
-  background: rgba(255,255,255,0.06);
-  border-radius: 2px;
-  overflow: hidden;
+/* source: DS components/core/core.css .aia-btn--secondary */
+.kb-load-more {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0;
+  text-transform: none;
+  background: var(--surface-card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 11px;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease);
 }
-.kb-card__bar-fill {
-  height: 3px;
-  background: var(--cyan, #50D0E8);
-  border-radius: 2px;
-  max-width: 100%;
-}
-
-/* Risk badges */
-.kb-card__risk-badge {
-  font-size: 9px;
-  color: #E07070;
-  padding: 1px 4px;
-  border: 1px solid rgba(224, 112, 112, 0.3);
-  border-radius: 3px;
-  margin-top: 3px;
-  display: inline-block;
-}
-.kb-card__meta-badge {
-  font-size: 9px;
-  color: var(--cyan-dim, #508090);
-  margin-left: 4px;
-}
-
-/* Flow header at-risk badge */
-.kb-flow-risk-badge {
-  font-size: 10px;
-  font-weight: 600;
-  color: #E07070;
-  background: rgba(224, 112, 112, 0.1);
-  border: 1px solid rgba(224, 112, 112, 0.3);
-  border-radius: 4px;
-  padding: 2px 6px;
-  margin-top: 4px;
-  text-align: center;
-}
-
-/* Badges */
-.kb-badge {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-}
-.kb-badge-protected { color: #E8B840; }
-.kb-badge-semantic {
-  color: #C070D0;
-  font-weight: 700;
-  letter-spacing: 0.1em;
+.kb-load-more:hover {
+  background: var(--surface-chip);
+  border-color: var(--border-strong);
 }
 
 /* ═══════════════════════════════════
    SELECTION
    ═══════════════════════════════════ */
-.kb-card-selected {
-  border-color: var(--cyan, #50D0E8) !important;
-  box-shadow: 0 0 12px rgba(80,210,235,0.2) !important;
+#timeline-container .kb-card-selected {
+  border-color: var(--accent-ink) !important; /* the one discipline accent marks "you are here" */
+  box-shadow: var(--shadow-focus) !important;
   z-index: 10;
 }
-/* Fading/dropped memories (heat < 0.1) */
-.kb-card-fading {
-  opacity: 0.4;
-  border-style: dashed;
+/* Fading/dropped memories (heat < 0.1) — the record fades into the page.
+   !important: timeline.js drives per-card opacity inline from heat, and
+   these states must win over it. Values are the pre-existing product
+   constants (this file, pre-restyle), not new inventions. */
+#timeline-container .kb-card-fading {
+  opacity: 0.4 !important;
+  border-style: dashed !important;
 }
 .kb-card-fading .kb-card-label {
   text-decoration: line-through;
-  text-decoration-color: rgba(224,80,80,0.3);
+  text-decoration-color: color-mix(in oklab, var(--danger-ink) 45%, transparent);
 }
 
-.kb-card-dimmed {
-  opacity: 0.15;
+#timeline-container .kb-card-dimmed {
+  opacity: 0.15 !important;
 }
