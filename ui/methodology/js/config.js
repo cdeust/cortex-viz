@@ -3,14 +3,31 @@ window.CMV = window.CMV || {};
 
 CMV.SERVER_URL = 'http://localhost:3456/graph';
 
-CMV.COLORS = {
-  'domain':            '#00FFFF',
-  'entry-point':       '#00FF88',
-  'recurring-pattern': '#0080FF',
-  'tool-preference':   '#FFB800',
-  'blind-spot':        '#333344',
-  'bridge':            '#FF00FF',
+/* Node-kind colours are DATA, sourced from methodology/css/theme.css's
+   --node-* tokens (ink/paper re-inked per ui/shared/README.md). Canvas/WebGL
+   (3d-force-graph, Three.js) cannot read CSS custom properties, so we resolve
+   through CortexPalette.hex() and re-resolve on cortex:surface-change. */
+CMV.buildColors = function () {
+  var hex = (window.CortexPalette && window.CortexPalette.hex) || function (name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888888';
+  };
+  return {
+    'domain':            hex('--node-domain'),
+    'entry-point':       hex('--node-entry'),
+    'recurring-pattern': hex('--node-pattern'),
+    'tool-preference':   hex('--node-tool'),
+    'blind-spot':        hex('--node-blindspot'),
+    'bridge':            hex('--node-bridge'),
+  };
 };
+CMV.COLORS = CMV.buildColors();
+
+if (window.CortexSurface) {
+  window.addEventListener(window.CortexSurface.EVENT, function () {
+    CMV.COLORS = CMV.buildColors();
+    if (CMV.graphData && CMV.build) CMV.build(CMV.graphData); // re-bake baked-colour materials
+  });
+}
 
 CMV.LABELS = {
   'domain': 'Domain Hub',

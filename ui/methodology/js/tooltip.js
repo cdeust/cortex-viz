@@ -11,7 +11,8 @@ CMV.showTip = function (n, x, y) {
   var tip = document.getElementById('tooltip');
   document.getElementById('tt-label').textContent = n.label;
   document.getElementById('tt-type').textContent = CMV.LABELS[n.type] || n.type;
-  document.getElementById('tt-type').style.color = CMV.COLORS[n.type] || '#00FFFF';
+  document.getElementById('tt-type').style.color = CMV.COLORS[n.type]
+    || (window.CortexPalette && window.CortexPalette.hex('--node-domain')) || '#888888';
 
   var meta = '';
   if (n.sessionCount != null) meta += 'Sessions: ' + n.sessionCount + '\n';

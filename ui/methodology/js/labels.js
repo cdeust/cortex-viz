@@ -2,8 +2,9 @@
 window.CMV = window.CMV || {};
 
 /**
- * Create a canvas texture with Orbitron text, neon cyan glow, and underline.
- * Used for domain hub labels rendered as THREE.Sprite.
+ * Create a canvas texture with a flat, ink-coloured label + hairline
+ * underline (no glow/bloom — design-system doctrine). Used for domain hub
+ * labels rendered as THREE.Sprite.
  * @param {string} text - Label text to render.
  * @returns {THREE.CanvasTexture} Texture for sprite material.
  */
@@ -13,24 +14,20 @@ CMV.makeLabel = function (text) {
   c.height = 128;
   var ctx = c.getContext('2d');
   ctx.clearRect(0, 0, 512, 128);
-  ctx.font = '700 26px Orbitron, sans-serif';
+  ctx.font = '600 26px "Inter Tight", sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  // Glow pass
-  ctx.shadowColor = '#00FFFF';
-  ctx.shadowBlur = 20;
-  ctx.fillStyle = '#00FFFF';
-  ctx.fillText(text.toUpperCase(), 256, 58);
+  var hex = (window.CortexPalette && window.CortexPalette.hex) || function () { return '#E8F8FF'; };
+  var ink = hex('--text');
+  var rule = hex('--border-strong');
 
-  // Crisp pass
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = '#E8F8FF';
+  ctx.fillStyle = ink;
   ctx.fillText(text.toUpperCase(), 256, 58);
 
   // Underline
   var w = ctx.measureText(text.toUpperCase()).width;
-  ctx.strokeStyle = 'rgba(0,255,255,0.25)';
+  ctx.strokeStyle = rule;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(256 - w / 2, 78);

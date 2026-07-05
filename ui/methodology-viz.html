@@ -1,12 +1,14 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-surface="paper">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cortex — Methodology Map</title>
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="/shared/surface-toggle.js"></script>
+<link rel="stylesheet" href="/shared/ds.css">
 <link rel="stylesheet" href="methodology/css/theme.css">
 <link rel="stylesheet" href="methodology/css/components.css">
+<script src="/shared/palette.js"></script>
 </head>
 <body>
 
@@ -16,12 +18,6 @@
   <div class="loader-sub">Initializing cognitive map</div>
 </div>
 
-<div id="scanlines"></div>
-<div id="vignette"></div>
-<div id="arc-reactor"><div class="core"></div></div>
-<div class="hud-ring ring-1"></div>
-<div class="hud-ring ring-2"></div>
-<div class="hud-ring ring-3"></div>
 <div id="graph-canvas"></div>
 
 <div id="info-panel" class="hud-panel">
@@ -43,11 +39,12 @@
 <div id="status-bar" class="hud-panel">
   <div class="status-dot"></div>
   <span id="status-text">Initializing</span>
-  <span style="color:var(--cyan-dim)">|</span>
+  <span style="color:var(--text-faint)">|</span>
   <span id="status-time"></span>
 </div>
 
 <button id="reset-btn">Reset</button>
+<button id="surface-toggle" aria-label="Switch to instrument (ink) mode">Paper</button>
 
 <div id="detail-panel">
   <button class="close-btn" id="close-detail">&#x2715;</button>
@@ -61,12 +58,12 @@
 </div>
 
 <div id="legend">
-  <div class="leg-item"><div class="leg-dot" style="background:#00FFFF;box-shadow:0 0 6px #00FFFF"></div>Domain</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#00FF88;box-shadow:0 0 6px #00FF88"></div>Entry</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#0080FF;box-shadow:0 0 6px #0080FF"></div>Pattern</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#FFB800;box-shadow:0 0 6px #FFB800"></div>Tool</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#FF00FF;box-shadow:0 0 6px #FF00FF"></div>Bridge</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#333;box-shadow:0 0 4px #333"></div>Blind Spot</div>
+  <div class="leg-item"><div class="leg-dot" style="background:var(--node-domain)"></div>Domain</div>
+  <div class="leg-item"><div class="leg-dot" style="background:var(--node-entry)"></div>Entry</div>
+  <div class="leg-item"><div class="leg-dot" style="background:var(--node-pattern)"></div>Pattern</div>
+  <div class="leg-item"><div class="leg-dot" style="background:var(--node-tool)"></div>Tool</div>
+  <div class="leg-item"><div class="leg-dot" style="background:var(--node-bridge)"></div>Bridge</div>
+  <div class="leg-item"><div class="leg-dot" style="background:var(--node-blindspot)"></div>Blind Spot</div>
 </div>
 
 <script src="https://unpkg.com/three@0.158.0/build/three.min.js"></script>
@@ -83,6 +80,19 @@
 <script src="methodology/js/graph.js"></script>
 <script src="methodology/js/filters.js"></script>
 <script src="methodology/js/main.js"></script>
+
+<script>
+(function () {
+  var btn = document.getElementById('surface-toggle');
+  if (!btn || !window.CortexSurface) return;
+  function sync() {
+    btn.textContent = window.CortexSurface.get() === 'paper' ? 'Paper' : 'Ink';
+  }
+  window.CortexSurface.bindButton(btn);
+  window.addEventListener(window.CortexSurface.EVENT, sync);
+  sync();
+})();
+</script>
 
 </body>
 </html>

@@ -15,16 +15,20 @@ CMV.build = function (data) {
     links: data.edges.map(function (e) { return Object.assign({}, e); }),
   };
 
+  var paletteHex = (window.CortexPalette && window.CortexPalette.hex) || function (name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888888';
+  };
+
   CMV.graph = ForceGraph3D({ controlType: 'orbit' })(document.getElementById('graph-canvas'))
     .width(innerWidth).height(innerHeight)
-    .backgroundColor('#0A0A0F')
+    .backgroundColor(paletteHex('--canvas'))
     .showNavInfo(false)
     .graphData(fgData)
     .nodeId('id')
     .nodeLabel(function () { return ''; })
     .nodeOpacity(1)
     .nodeThreeObject(function (node) {
-      var col = CMV.COLORS[node.type] || '#00FFFF';
+      var col = CMV.COLORS[node.type] || paletteHex('--node-domain');
       var sz = node.type === 'domain'
         ? Math.max(3, Math.min(8, Math.sqrt(node.sessionCount || 1) * 1.2))
         : Math.max(1.5, Math.min(4, (node.size || 4) * 0.3));
@@ -45,9 +49,9 @@ CMV.build = function (data) {
     })
     .nodeThreeObjectExtend(false)
     .linkColor(function (l) {
-      if (l.type === 'bridge') return '#FF00FF';
-      if (l.type === 'has-blindspot') return 'rgba(50,50,68,0.2)';
-      return 'rgba(0,255,255,' + (0.04 + (l.weight || 0.5) * 0.12) + ')';
+      if (l.type === 'bridge') return paletteHex('--edge-bridge');
+      if (l.type === 'has-blindspot') return paletteHex('--edge-blindspot');
+      return paletteHex('--edge-default');
     })
     .linkWidth(function (l) {
       if (l.type === 'bridge') return 1.5;
@@ -62,7 +66,7 @@ CMV.build = function (data) {
       return (l.weight || 0) > 0.5 ? 2 : 1;
     })
     .linkDirectionalParticleColor(function (l) {
-      return l.type === 'bridge' ? '#FF00FF' : '#00FFFF';
+      return l.type === 'bridge' ? paletteHex('--edge-bridge') : paletteHex('--edge-default');
     })
     .linkDirectionalParticleWidth(function (l) {
       return l.type === 'bridge' ? 1.5 : 0.8;
@@ -117,22 +121,20 @@ CMV.build = function (data) {
 };
 
 /**
- * Post-processing: fog, ambient light, tone mapping.
+ * Scene fog only — flat, unlit MeshBasicMaterial nodes need no lighting or
+ * tone mapping (no bloom/glow per design-system doctrine).
  */
 CMV.setupScene = function () {
   setTimeout(function () {
     try {
-      var r = CMV.graph.renderer();
-      r.toneMapping = THREE.ACESFilmicToneMapping;
-      r.toneMappingExposure = 1.6;
+      var paletteHex = (window.CortexPalette && window.CortexPalette.hex) || function (name) {
+        return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888888';
+      };
+      var canvasHex = parseInt(paletteHex('--canvas').replace('#', ''), 16);
 
       var scene = CMV.graph.scene();
-      scene.fog = new THREE.FogExp2(0x0A0A0F, 0.0006);
-      scene.add(new THREE.AmbientLight(0x00FFFF, 0.015));
-
-      var pt = new THREE.PointLight(0x00FFFF, 0.3, 400);
-      pt.position.set(0, 0, 0);
-      scene.add(pt);
+      scene.fog = new THREE.FogExp2(canvasHex, 0.0006);
+      // No scene lights — node markers use MeshBasicMaterial (unlit, flat).
     } catch (e) { /* scene not ready */ }
   }, 600);
 };
