@@ -1,11 +1,14 @@
 // Cortex Brain View — structural scaffold net.
 //
-// The glowing cyan wireframe that gives the brain its FORM is NOT the semantic
-// graph edges (those link distant nodes and pile into a central hairball). It
-// is a surface mesh: thousands of points sampled on the cortex, each linked to
-// its nearest neighbours, so every line is short and hugs the surface — the
-// delicate gyri-tracing net of a connectome render. This scaffold is purely
-// structural (deterministic, seeded); the colored data nodes overlay on top.
+// The pencil-fine surface net that gives the brain its FORM is NOT the
+// semantic graph edges (those link distant nodes and pile into a central
+// hairball). It is a surface mesh: thousands of points sampled on the cortex,
+// each linked to its nearest neighbours, so every line is short and hugs the
+// surface — the delicate gyri-tracing net of a connectome render. This
+// scaffold is purely structural (deterministic, seeded); the colored data
+// nodes overlay on top. It draws in the design system's envelope contour ink
+// (--mesh-line), surface-aware, so on the paper record it reads as graphite
+// texture and on the ink instrument as a faint cool contour.
 //
 // Neighbour search is a uniform spatial grid (not an O(n²) scan), so the net
 // scales to a large vertex/edge count without a load-time cliff.
@@ -15,14 +18,28 @@ window.BRAIN = window.BRAIN || {};
 (function () {
   // The scaffold is a faint FORM cue only — the colored data nodes are the
   // subject and must read clearly over it. It was competing with the nodes
-  // (user report + screenshot 2026-07-02), so the net is dropped to a whisper:
-  // fewer vertices, and edge/dot alpha cut ~2-3x. source: readability pass.
+  // (user report + screenshot 2026-07-02), so vertex count is kept low and the
+  // net paints in the DS's dedicated ambient-mass token rather than a fade.
+  // GATE G7: ambient (non-interactive) point/line mass is OPAQUE --field-point,
+  // never alpha-faded — the token itself is pre-tuned to a ~2:1 contrast vs the
+  // canvas (deliberately below the 4.5:1 interactive floor), so the "whisper"
+  // comes from the token's colour value, not from transparency. Alpha-fading
+  // thousands of overlapping net segments/dots (the previous approach) has the
+  // same fold-stacking failure mode G8 forbids for the solid hull: dense knn
+  // regions pile translucent layers into an uneven grey mass instead of a
+  // uniform texture. source: AI Architect DS gate G7; tokens/surfaces.css
+  // --field-point (per surface).
   var SCAFFOLD_N = 12000;    // surface vertices in the net (was 20000)
   var KNN = 5;               // nearest neighbours linked per vertex
   var GRID = 24;             // spatial-grid resolution per axis for neighbour search
-  var NET_COLOR = 0x2c5372;  // dim steel-blue skeleton, well under the data web
-  var EDGE_ALPHA = 0.022;
-  var DOT_ALPHA = 0.05;
+
+  // Ambient-mass colour, opaque, read live per surface. Fallback mirrors the
+  // paper --field-point value so a palette-load failure still yields a dim
+  // neutral tint, not black.
+  function netColor() {
+    var hex = (window.CortexPalette && window.CortexPalette.hex('--field-point')) || '#5e7a96';
+    return new THREE.Color(hex);
+  }
 
   // mulberry32 — seeded so the net is identical across reloads.
   // source: https://github.com/bryc/code/blob/master/jshash/PRNG.md
@@ -138,28 +155,43 @@ window.BRAIN = window.BRAIN || {};
       var src = pairs[e] * 3, d = e * 3;
       seg[d] = pos[src]; seg[d + 1] = pos[src + 1]; seg[d + 2] = pos[src + 2];
     }
+    // OPAQUE (transparent:false): the ambient-mass token IS the whisper — no
+    // additive glow (forbidden), no alpha fade (G7). depthTest off: the net is
+    // sampled ON the very surface the opaque hull depth-writes (brain_mesh.js,
+    // Spec V-01), so testing against it would z-fight into patchy dashes; like
+    // all content over the hull it draws depth-off, ordered between the hull
+    // (0) and the synapse web (1).
     var lineGeom = new THREE.BufferGeometry();
     lineGeom.setAttribute('position', new THREE.BufferAttribute(seg, 3));
     var lines = new THREE.LineSegments(lineGeom, new THREE.LineBasicMaterial({
-      color: NET_COLOR, transparent: true, opacity: EDGE_ALPHA,
-      blending: THREE.AdditiveBlending, depthWrite: false,
+      color: netColor(), transparent: false, depthWrite: false, depthTest: false,
     }));
-    lines.renderOrder = 0;
+    lines.renderOrder = 0.5;
     lines.frustumCulled = false;
     BRAIN.world.add(lines);
 
     var dotGeom = new THREE.BufferGeometry();
     dotGeom.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     var dots = new THREE.Points(dotGeom, new THREE.PointsMaterial({
-      color: NET_COLOR, size: 1.0, sizeAttenuation: true,
-      transparent: true, opacity: DOT_ALPHA,
-      blending: THREE.AdditiveBlending, depthWrite: false,
+      color: netColor(), size: 1.0, sizeAttenuation: true,
+      transparent: false, depthWrite: false, depthTest: false,
     }));
-    dots.renderOrder = 0;
+    dots.renderOrder = 0.5;
     dots.frustumCulled = false;
     BRAIN.world.add(dots);
 
     BRAIN.scaffold = { lines: lines, dots: dots, edgeCount: pairs.length / 2, vertexCount: SCAFFOLD_N };
     return BRAIN.scaffold;
   };
+
+  // Re-ink the net on a surface toggle, like brain_mesh.js's shell — Three.js
+  // bakes colour into the material, so the CSS custom-property flip cannot
+  // reach it by itself. Re-read --field-point on the new surface and push it
+  // into both materials.
+  window.addEventListener('cortex:surface-change', function () {
+    if (!BRAIN.scaffold) return;
+    var c = netColor();
+    BRAIN.scaffold.lines.material.color.copy(c);
+    BRAIN.scaffold.dots.material.color.copy(c);
+  });
 })();

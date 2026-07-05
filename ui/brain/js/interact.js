@@ -30,13 +30,30 @@ window.BRAIN = window.BRAIN || {};
     m.renderOrder = 3;
     return m;
   }
+  // Selection/hover ring colour: the DS reserves terracotta (--accent-ink) for
+  // exactly this — accent/SELECTION only, never a data category or generic
+  // chrome wash (AI Architect DS gate G4). A raw white/cyan ring was chrome
+  // colour with no token behind it. Both rings share the one accent colour,
+  // differentiated by opacity/radius only: full accent = committed selection,
+  // dim accent = hover preview of what a click will select.
+  function accentHex() {
+    return (window.CortexPalette && window.CortexPalette.hex('--accent-ink')) || '#8a4420';
+  }
   // Selection ring (bright) + a dimmer HOVER ring so you see exactly which
   // node a click will land on before committing — the additive cloud blurs
   // individual nodes, so pre-click feedback is what makes picking feel precise.
   // Sized close to a node (BASE_SIZE ~1.35 world) so it pinpoints rather than
   // encircling a whole cluster. source: ring-too-big report 2026-07-03.
-  var ring = makeRing(0xffffff, 0.95, 1.1, 1.7);
-  var hoverRing = makeRing(0x9fe8ff, 0.6, 0.85, 1.35);
+  var ring = makeRing(accentHex(), 0.95, 1.1, 1.7);
+  var hoverRing = makeRing(accentHex(), 0.6, 0.85, 1.35);
+
+  // Three.js bakes the ring colour, so a surface toggle (paper <-> ink) needs
+  // an explicit re-read + re-tint, same pattern as scene.js/brain_mesh.js.
+  window.addEventListener('cortex:surface-change', function () {
+    var c = accentHex();
+    ring.material.color.set(c);
+    hoverRing.material.color.set(c);
+  });
 
   // Project every node to screen pixels; return the index whose projected
   // pixel is NEAREST the cursor (what you're actually pointing at), with only

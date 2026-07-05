@@ -1,26 +1,32 @@
 // Cortex Brain View — the synapse web, routed along white-matter tracts.
 //
-// Every graph edge is drawn as additive line geometry, endpoints read from the
-// anatomical positions layout.js placed. Instead of straight chords through the
-// interior, CROSS-REGION edges bow along the major fasciculi — fornix/cingulum
-// (medial temporal <-> hubs), uncinate (temporal <-> orbitofrontal), SLF/arcuate
+// Every graph edge is drawn as NORMAL-blended line geometry (not additive — the
+// DS forbids glow-by-accumulation, G6), endpoints read from the anatomical
+// positions layout.js placed. Instead of straight chords through the interior,
+// CROSS-REGION edges bow along the major fasciculi — fornix/cingulum (medial
+// temporal <-> hubs), uncinate (temporal <-> orbitofrontal), SLF/arcuate
 // (frontal <-> parietal), corpus callosum (left <-> right) — so connectivity
 // reads as real brain wiring. Short same-region edges stay straight.
 //   source: Catani & Thiebaut de Schotten (2008) "A diffusion tensor imaging
 //   tractography atlas for virtual in vivo dissections", Cortex 44:1105-1132.
 //
 // The per-edge alpha FADES WITH LENGTH so the dense surface web leads and long
-// interior crossings sink to a floor (additive blending would otherwise pile
-// up at the core). Curved edges are sampled into K_CURVE points; the segment
-// budget is bounded (curved-edge count is logged) so a future tweak can't
-// silently blow the vertex count.
+// interior crossings sink to a floor (still worth doing under normal blending:
+// without it, the dense short-edge surface web and the sparse long interior
+// crossings would compete at equal weight). Curved edges are sampled into
+// K_CURVE points; the segment budget is bounded (curved-edge count is logged)
+// so a future tweak can't silently blow the vertex count.
 
 window.BRAIN = window.BRAIN || {};
 
 (function () {
-  var SHORT_FRAC = 0.07;   // edges this short (x brain radius) glow at full strength
+  var SHORT_FRAC = 0.07;   // edges this short (x brain radius) read at full strength
   var LONG_FRAC = 0.62;    // edges this long fade to the floor
-  var BASE_ALPHA = 0.045;  // per-line alpha for a short edge
+  // Deep-ink lines on cream need more contrast than the same hue did as a
+  // near-white glow on near-black — bumped from 0.045 (tuned for the ink
+  // canvas) so the synapse web stays legible on paper. source: paper
+  // re-ink pass 2026-07-04 (README data-family re-inking rule).
+  var BASE_ALPHA = 0.09;
   var FLOOR = 0.04;        // fraction of BASE kept for the longest edges
   var K_CURVE = 6;         // sample points per tract-routed edge (=> 5 segments)
   var BOW_MIN = 0.15, BOW_MAX = 1.0;  // edge-length scaling of the tract bow
@@ -118,9 +124,14 @@ window.BRAIN = window.BRAIN || {};
     var mat = new THREE.ShaderMaterial({
       vertexShader: VERT, fragmentShader: FRAG,
       transparent: true, blending: THREE.NormalBlending, depthWrite: false,
+      // depthTest off so the synapse web floats OVER the opaque brain hull — the
+      // opaque shell (depthWrite:true) would otherwise occlude every interior
+      // tract, leaving only the front-most edges. renderOrder 1 draws the web
+      // after the hull (0) and under the node cloud (2). source: DS Spec V-01.
+      depthTest: false,
     });
     var lines = new THREE.LineSegments(geom, mat);
-    lines.renderOrder = 0;
+    lines.renderOrder = 1;
     lines.frustumCulled = false;
     BRAIN.world.add(lines);
     BRAIN.edgeLines = lines;

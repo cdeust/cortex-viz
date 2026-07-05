@@ -38,7 +38,7 @@ window.BRAIN = window.BRAIN || {};
     },
     // ── consolidation pipeline stage rows injected here by vitals.js ──
     {
-      key: 'procedural_skills', label: 'Skills', color: '#F0803C',
+      key: 'procedural_skills', label: 'Skills', color: 'var(--vital-orange)',
       title: 'Procedural skills (B1): recurring successful action-sequence ' +
         'habits, retrieved by situation. Value in parentheses = habitual ' +
         '(≥5 successful reps). Click for the skill list.',
@@ -48,7 +48,7 @@ window.BRAIN = window.BRAIN || {};
       },
     },
     {
-      key: 'inferred_memories', label: 'Inferred', color: '#E05050',
+      key: 'inferred_memories', label: 'Inferred', color: 'var(--vital-red)',
       title: 'Source / reality monitoring (C1): epistemic origin of stored ' +
         'memories — perceived / told / inferred. The highlighted count is ' +
         'inferred memories, the confabulation-risk cohort (Johnson 1993). ' +
@@ -61,7 +61,7 @@ window.BRAIN = window.BRAIN || {};
       },
     },
     {
-      key: 'crystallized_confabulations', label: 'Confabulated', color: '#E05050',
+      key: 'crystallized_confabulations', label: 'Confabulated', color: 'var(--vital-red)',
       title: 'Source / reality monitoring (C1) read-side enforcement: semantic ' +
         'memories the confabulation gate flagged at the episodic→semantic ' +
         'promotion point — an internally generated (inferred), ungrounded ' +
@@ -71,14 +71,14 @@ window.BRAIN = window.BRAIN || {};
       fmt: function (sv) { return num(sv.crystallized_confabulations); },
     },
     {
-      key: 'habituated_repeats', label: 'Habituated', color: '#8060D0',
+      key: 'habituated_repeats', label: 'Habituated', color: 'var(--vital-purple)',
       title: 'Habituation & sensitization (E1): surplus repeated presentations ' +
         'of identical content the write gate’s response decrement is ' +
         'damping (Rankin 2009).',
       fmt: function (sv) { return num(sv.habituated_repeats); },
     },
     {
-      key: 'extinguished', label: 'Extinguished', color: '#B060C0',
+      key: 'extinguished', label: 'Extinguished', color: 'var(--vital-magenta)',
       title: 'Fear extinction / inhibitory learning (E2): memories carrying a ' +
         'reversible inhibitory extinction tag — suppressed WITHOUT ' +
         'deletion, so they can spontaneously recover or be reinstated (Bouton ' +
@@ -86,7 +86,7 @@ window.BRAIN = window.BRAIN || {};
       fmt: function (sv) { return num(sv.extinguished); },
     },
     {
-      key: 'conflicting_claim_pairs', label: 'Conflicts', color: '#E0A030',
+      key: 'conflicting_claim_pairs', label: 'Conflicts', color: 'var(--vital-amber)',
       title: 'Conflict monitoring / cognitive control (A2): pairs of persisted ' +
         'claims that disagree — shared entity, opposing claim types. The ' +
         'standing counterpart of the recall-time conflict monitor (Botvinick ' +
@@ -94,7 +94,7 @@ window.BRAIN = window.BRAIN || {};
       fmt: function (sv) { return num(sv.conflicting_claim_pairs); },
     },
     {
-      key: 'familiarity_resolvable', label: 'Familiar', color: '#40C0C0',
+      key: 'familiarity_resolvable', label: 'Familiar', color: 'var(--vital-cyan)',
       title: 'Recollection vs. familiarity / dual-process retrieval (C2): share ' +
         'of a recent sample resolvable by FAMILIARITY ALONE (a near-duplicate ' +
         'neighbour above the familiarity threshold), the regime where a fast ' +
@@ -108,7 +108,7 @@ window.BRAIN = window.BRAIN || {};
       },
     },
     {
-      key: 'sleep_phase_outputs', label: 'Sleep NREM/REM', color: '#6C8CE0',
+      key: 'sleep_phase_outputs', label: 'Sleep NREM/REM', color: 'var(--vital-blue-sleep)',
       title: 'Two-phase consolidation (F1): standing footprint of the NREM/REM ' +
         'split — NREM stores auto-narration semantic memories; REM forms ' +
         'abstract schemas (Diekelmann & Born 2010; van de Ven 2020). NREM / REM.',
@@ -118,7 +118,7 @@ window.BRAIN = window.BRAIN || {};
       },
     },
     {
-      key: 'targeted_reactivation', label: 'TMR cue', color: '#50C878',
+      key: 'targeted_reactivation', label: 'TMR cue', color: 'var(--vital-green)',
       title: 'Targeted memory reactivation (F2): the cue that biased the last ' +
         'offline consolidation’s NREM replay — cueing biases which ' +
         'memories reconsolidate (Rasch 2007; Oudiette & Paller 2013). Shows the ' +
@@ -129,7 +129,7 @@ window.BRAIN = window.BRAIN || {};
       },
     },
     {
-      key: 'stress_modulation', label: 'Stress gain', color: '#E87050',
+      key: 'stress_modulation', label: 'Stress gain', color: 'var(--vital-stress)',
       title: 'Stress / arousal modulation of encoding (Yerkes-Dodson 1908; ' +
         'Diamond 2007): the current encoding-gain multiplier set by an ' +
         'inverted-U of stress. is_impairing flags the over-arousal downslope ' +
@@ -142,7 +142,7 @@ window.BRAIN = window.BRAIN || {};
       },
     },
     {
-      key: 'active_goal', label: 'Active goal', color: '#5090E0',
+      key: 'active_goal', label: 'Active goal', color: 'var(--vital-blue-goal)',
       title: 'Goal maintenance / cognitive control (A1): the goal currently ' +
         'biasing retrieval — prefrontal goal-shielding (Miller & Cohen 2001; ' +
         'Braver 2012). Shown as on/idle + the trigger and keyword counts that ' +
@@ -154,7 +154,7 @@ window.BRAIN = window.BRAIN || {};
       },
     },
     {
-      key: 'forward_model', label: 'Forward model', color: '#48C0A0',
+      key: 'forward_model', label: 'Forward model', color: 'var(--vital-teal)',
       title: 'Predictive coding / forward model (Wolpert 1998; Friston 2010): ' +
         'mean prediction error over a bounded sample of forward predictions — ' +
         'lower is a better-calibrated internal model. Shown as err (sample n).',
@@ -166,7 +166,7 @@ window.BRAIN = window.BRAIN || {};
       },
     },
     {
-      key: 'attentional_salience', label: 'Attn focus', color: '#C878E0',
+      key: 'attentional_salience', label: 'Attn focus', color: 'var(--vital-pink)',
       title: 'Attentional control / central executive (A1): concentration of ' +
         'bottom-up salience (0.5·importance + 0.5·|valence|) that feeds the ' +
         'recall-time attentional re-weight (Baddeley 2003; Posner & Petersen ' +

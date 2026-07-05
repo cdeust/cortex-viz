@@ -40,23 +40,98 @@ window.BRAIN = window.BRAIN || {};
     });
   }
 
+  // Ambient-mass neutral fallback token (DS gate G7: opaque --field-point,
+  // never a literal hex — same token scaffold.js/brain_mesh.js read for their
+  // own ambient tint). CortexPalette.hex() is the primary reader; when the
+  // palette script hasn't loaded yet, fall back to reading the CSS custom
+  // property straight off the root (surface-toggle.js stamps data-surface
+  // before first paint, so the property is already the correct one for the
+  // current surface). No literal hex anywhere in this fallback chain.
+  function fieldPointHex() {
+    if (window.CortexPalette && window.CortexPalette.hex) {
+      var v = window.CortexPalette.hex('--field-point');
+      if (v) return v;
+    }
+    var raw = getComputedStyle(document.documentElement).getPropertyValue('--field-point');
+    return raw ? raw.trim() : null;
+  }
+
   // Per-node RGB using the galaxy's own colour for each node (node.color carries
   // the kind/heat colour the unified graph renders), so the brain is
   // differentiated by node type exactly like the galaxy. Float32Array(3*N),
   // shared by the point cloud AND the edge web (edges gradient between their
-  // endpoints' colours).
+  // endpoints' colours). Falls back to the neutral --field-point token (never
+  // a literal hex) when neither JUG nor the node's own colour resolves.
+  function resolveNodeColor(n) {
+    return (window.JUG && JUG.getNodeColor) ? JUG.getNodeColor(n) : ((n && n.color) || fieldPointHex());
+  }
+
   function buildNodeColors(nodes) {
     var arr = new Float32Array(nodes.length * 3);
     var c = new THREE.Color();
-    var getColor = (window.JUG && JUG.getNodeColor)
-      ? JUG.getNodeColor
-      : function (n) { return n.color || '#8aa0c0'; };
+    var fallback = fieldPointHex();
     for (var i = 0; i < nodes.length; i++) {
-      try { c.set(getColor(nodes[i]) || '#8aa0c0'); } catch (e) { c.set('#8aa0c0'); }
+      var hex = resolveNodeColor(nodes[i]) || fallback;
+      // hex may still be null only if CortexPalette AND getComputedStyle both
+      // failed to resolve the token (broken page load) — skip .set() rather
+      // than baking a literal, leaving THREE.Color's own default.
+      if (hex) { try { c.set(hex); } catch (e) { if (fallback) c.set(fallback); } }
       arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b;
     }
     return arr;
   }
+
+  // Re-ink the node cloud on a surface toggle. JUG._tok (unified/js/config.js)
+  // is rehydrated from CortexPalette on every cortex:surface-change, so
+  // re-running resolveNodeColor picks up the new surface's tones automatically
+  // — this only rebuilds the colour buffer and re-uploads it; it never touches
+  // the position buffer, so no node moves and no simulation is involved
+  // (positions are placed once in start(), below, and never recomputed here).
+  var lastNodes = null;
+  function repaintNodeColors() {
+    if (!lastNodes || !BRAIN.points) return;
+    var colors = buildNodeColors(lastNodes);
+    var attr = BRAIN.points.geometry.getAttribute('ncolor');
+    if (!attr) return;
+    attr.array.set(colors);
+    attr.needsUpdate = true;
+  }
+  window.addEventListener('cortex:surface-change', repaintNodeColors);
+
+  // Reverse a resolved hex back to the live JUG._tok CATEGORY KEY it came
+  // from ('hub' / 'info' / 'episodic' / 'semantic' / …) so a legend swatch
+  // can be tagged with a stable TOKEN NAME instead of a hex frozen at build
+  // time. JUG._tok is re-hydrated from CortexPalette on every
+  // cortex:surface-change (unified/js/config.js), so re-reading it through
+  // the category name is how the legend re-inks without touching node data
+  // again. Falls back to the literal hex (no re-ink) only if JUG._tok is
+  // unavailable — same accepted-risk shape as resolveNodeColor's fallback.
+  function colorToCategory(hex) {
+    if (!window.JUG || !JUG._tok || hex == null) return hex;
+    var norm = String(hex).toUpperCase();
+    for (var key in JUG._tok) {
+      if (String(JUG._tok[key]).toUpperCase() === norm) return key;
+    }
+    return hex;
+  }
+
+  // category -> live hex. Unknown categories (the colorToCategory literal-hex
+  // fallback path) pass through unchanged.
+  function categoryHex(cat) {
+    if (window.JUG && JUG._tok && JUG._tok[cat] != null) return JUG._tok[cat];
+    return cat;
+  }
+
+  // Re-paint every tagged legend dot from its category — called once after
+  // fillLegend builds the DOM and again on cortex:surface-change. The dots
+  // carry no baked hex; `data-color-cat` is the only state.
+  function paintLegendDots() {
+    var dots = document.querySelectorAll('#legend .leg-dot[data-color-cat]');
+    for (var i = 0; i < dots.length; i++) {
+      dots[i].style.background = categoryHex(dots[i].getAttribute('data-color-cat'));
+    }
+  }
+  window.addEventListener('cortex:surface-change', paintLegendDots);
 
   // Per-domain placement inputs: a stable index (for round-robin hub seats) and
   // a neocortical surface anchor (the cold end of the memory consolidation
@@ -83,71 +158,103 @@ window.BRAIN = window.BRAIN || {};
     document.getElementById('s-sym').textContent = fmt(bk.symbol);
   }
 
-  // EXHAUSTIVE legend: every distinct colour a kind renders with gets its own
+  // EXHAUSTIVE legend: every distinct sub-kind a kind renders gets its own
   // labelled row. Colour is semantic (memory→consolidation stage, entity/
   // symbol→type, file→primary tool), so a single swatch per kind would hide
-  // most of what's on screen. We tally distinct (colour → count) per kind from
-  // the real node colours and label each via BRAIN.PALETTE (mirrors the server
-  // palette), so the legend matches the render exactly.
+  // most of what's on screen. Sub-kinds resolve from the node's own canonical
+  // metadata (entityType / symbol_type / stage — the values the server bakes
+  // the colour FROM) via BRAIN.PALETTE.subLabelFor; the colour reverse-lookup
+  // inside it is only a fallback for old payloads. Grouping by LABEL (not by
+  // raw hex) means a re-inked server palette can never lump distinct kinds
+  // into "other" again (root fix, user report 2026-07-04). Each row's swatch
+  // is the most common colour actually rendered for that sub-kind.
   function fillLegend(data) {
-    // kind -> { colorHex(upper) -> count }, and first colour per kind.
-    var byKindColor = {};
-    var firstColor = {};
+    var PAL = BRAIN.PALETTE;
+    // kind -> { categoryKey -> count }, and first category per kind. The
+    // category comes from resolveNodeColor() reversed through
+    // colorToCategory() — the SAME resolution buildNodeColors used to paint
+    // the actual point cloud, so a legend swatch never shows a colour
+    // nothing on screen is wearing (root cause: this used to read the raw,
+    // per-sub-kind n.color the SERVER bakes, which JUG.getNodeColor collapses
+    // into a few DD-04 categories for the rendered points — the two drifted).
+    var byKindCat = {};
+    var firstCat = {};
+    // kind -> { subLabel -> { n: count, cats: { categoryKey -> count } } }
+    var byKindLabel = {};
     for (var i = 0; i < data.nodes.length; i++) {
       var n = data.nodes[i];
       var k = n.kind || n.type;
       if (!k) continue;
-      var c = (n.color || '#8AA0C0').toUpperCase();
-      if (!firstColor[k]) firstColor[k] = c;
-      var m = byKindColor[k] || (byKindColor[k] = {});
-      m[c] = (m[c] || 0) + 1;
+      var cat = colorToCategory(resolveNodeColor(n));
+      if (!firstCat[k]) firstCat[k] = cat;
+      var m = byKindCat[k] || (byKindCat[k] = {});
+      m[cat] = (m[cat] || 0) + 1;
+      if (PAL && PAL.isGraded(k)) {
+        var sub = PAL.subLabelFor(n) || 'other';
+        var lm = byKindLabel[k] || (byKindLabel[k] = {});
+        var rec = lm[sub] || (lm[sub] = { n: 0, cats: {} });
+        rec.n += 1;
+        rec.cats[cat] = (rec.cats[cat] || 0) + 1;
+      }
     }
     var host = document.getElementById('legend');
     var esc = function (s) {
       return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     };
-    var row = function (color, label, count, cls) {
+    // Dots carry a category TAG, not a baked colour — paintLegendDots()
+    // resolves the actual hex immediately after and again on every
+    // cortex:surface-change.
+    var row = function (cat, label, count, cls) {
       return '<div class="leg-item' + (cls ? ' ' + cls : '') + '">' +
-        '<span class="leg-dot" style="background:' + color + '"></span>' +
+        '<span class="leg-dot" data-color-cat="' + esc(cat) + '"></span>' +
         '<span class="leg-label">' + esc(label) + '</span>' +
         (count != null ? '<span class="leg-n">' + count.toLocaleString('en-US') +
           '</span>' : '') + '</div>';
     };
-    var PAL = BRAIN.PALETTE;
-
     // Memory-systems map (where each kind lives in the brain). Each system's
-    // swatch uses its representative kind's ACTUAL rendered colour so it
-    // matches the nodes on screen — not a separate hand-picked palette.
+    // swatch uses its representative kind's ACTUAL rendered colour category
+    // so it matches the nodes on screen — not a separate hand-picked palette.
+    // sys.colorCat (anatomy.js) is only reached when the graph has zero
+    // rendered nodes of that repKind.
     var html = '<div class="leg-head">Memory systems → regions</div>';
     (BRAIN.MEMORY_SYSTEMS || []).forEach(function (sys) {
-      var swatch = (sys.repKind && firstColor[sys.repKind]) || sys.color;
-      html += row(swatch, sys.label);
+      var cat = (sys.repKind && firstCat[sys.repKind]) || sys.colorCat || 'info';
+      html += row(cat, sys.label);
     });
     html += '<div class="leg-note">Regions registered from MNI atlas centroids ' +
       '(affine fit). Memory depth = heat rank (relative).</div>';
 
-    // Exhaustive node-colour legend — every colour, every kind that renders it.
+    // Exhaustive node legend — every sub-kind, every kind that renders it.
     html += '<div class="leg-head" style="margin-top:10px">Node colours</div>';
     KIND_ORDER.forEach(function (k) {
-      var cmap = byKindColor[k];
+      var cmap = byKindCat[k];
       if (!cmap) return;
-      var colors = Object.keys(cmap).sort(function (a, b) { return cmap[b] - cmap[a]; });
+      var cats = Object.keys(cmap).sort(function (a, b) { return cmap[b] - cmap[a]; });
       var kindLabel = k.replace('_', ' ');
-      if (colors.length === 1 || !(PAL && PAL.isGraded(k))) {
-        // Single colour (or ungraded kind): one row, kind name + total.
-        html += row(colors[0], kindLabel, data.byKind[k]);
+      var lmap = byKindLabel[k];
+      var labels = lmap ? Object.keys(lmap).sort(function (a, b) {
+        return lmap[b].n - lmap[a].n;
+      }) : [];
+      if (labels.length <= 1) {
+        // Single sub-kind (or ungraded kind): one row, kind name + total.
+        html += row(cats[0], kindLabel, data.byKind[k]);
         return;
       }
-      // Graded kind: header with the kind + total, then one row per colour.
+      // Graded kind: header with the kind + total, then one row per sub-kind
+      // (count-descending), swatched with its most common rendered category.
       html += '<div class="leg-subhead">' + esc(kindLabel) +
         '<span class="leg-n">' + (data.byKind[k] || 0).toLocaleString('en-US') +
         '</span></div>';
-      colors.forEach(function (c) {
-        var sub = (PAL && PAL.labelFor(k, c)) || 'other';
-        html += row(c, sub, cmap[c], 'sub');
+      labels.forEach(function (lab) {
+        var rec = lmap[lab];
+        var cat = Object.keys(rec.cats).sort(function (a, b) {
+          return rec.cats[b] - rec.cats[a];
+        })[0];
+        html += row(cat, lab, rec.n, 'sub');
       });
     });
     host.innerHTML = html;
+    paintLegendDots();
   }
 
   function start() {
@@ -163,6 +270,7 @@ window.BRAIN = window.BRAIN || {};
         var data = results[0];
         var soup = results[1];
         if (!data.nodes.length) throw new Error('graph returned 0 nodes');
+        lastNodes = data.nodes;
         var nodeColors = buildNodeColors(data.nodes);
         setStatus('building the anatomical atlas…');
         var atlas = BRAIN.buildAtlas(soup.box);

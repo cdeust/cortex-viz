@@ -83,7 +83,7 @@ window.BRAIN = window.BRAIN || {};
     Object.keys(sv).forEach(function (k) {
       if (covered[k] || structural[k]) return;
       html += statRow(k, BRAIN.vitalsHumanize(k), BRAIN.vitalsFallbackFmt(sv[k]),
-        'New backend vital (no display spec yet): ' + k, '#9fb4c8');
+        'New backend vital (no display spec yet): ' + k, 'var(--vital-fallback)');
     });
 
     host.innerHTML = html;
