@@ -62,7 +62,7 @@
       if (i >= es.MAX_EDGES) return;
       var isConnected = connected.indexOf(i) >= 0;
       var bright = isConnected ? 0.9 : 0.06;
-      var color = isConnected ? new THREE.Color(0xf59e0b) : (e.isCausal ? new THREE.Color(0xff4444) : new THREE.Color(0x90a4ae));
+      var color = isConnected ? new THREE.Color(JMD.EDGE_COLORS.highlight) : (e.isCausal ? new THREE.Color(JMD.EDGE_COLORS.causal) : new THREE.Color(JMD.EDGE_COLORS['default']));
       edgeColors[i*6]   = color.r * bright;
       edgeColors[i*6+1] = color.g * bright;
       edgeColors[i*6+2] = color.b * bright;
@@ -76,13 +76,14 @@
   function resetEdgeHighlight() {
     var activeEdges = es.activeEdges;
     var edgeColors = es.edgeColors;
-    var causalColor = new THREE.Color(0xff4444);
-    var defaultColor = new THREE.Color(0x90a4ae);
-    var coOccColor = new THREE.Color(0xd946ef);
+    var causalColor = new THREE.Color(JMD.EDGE_COLORS.causal);
+    var defaultColor = new THREE.Color(JMD.EDGE_COLORS['default']);
+    var coOccColor = new THREE.Color(JMD.EDGE_COLORS.co_occurrence);
+    var virtualColor = new THREE.Color(JMD.EDGE_COLORS.virtual);
 
     activeEdges.forEach(function(e, i) {
       if (i >= es.MAX_EDGES) return;
-      var color = e.isVirtual ? new THREE.Color(0x556677) : (e.isCausal ? causalColor : (e.type === 'co_occurrence' ? coOccColor : defaultColor));
+      var color = e.isVirtual ? virtualColor : (e.isCausal ? causalColor : (e.type === 'co_occurrence' ? coOccColor : defaultColor));
       var dim = e.isVirtual ? 0.06 + e.weight * 0.12 : 0.15 + e.weight * 0.35;
       edgeColors[i*6]   = color.r * dim;
       edgeColors[i*6+1] = color.g * dim;

@@ -1,14 +1,47 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-surface="paper">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cortex — Atom Memory Graph</title>
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<!-- Load order is load-bearing (ui/shared/README.md): surface-toggle.js
+     stamps data-surface="paper" before first paint, then ds.css resolves
+     the token contract for this surface, then the dashboard's own sheets,
+     then palette.js so config.js can read CortexPalette at parse time. -->
+<script src="/shared/surface-toggle.js"></script>
+<link rel="stylesheet" href="/shared/ds.css">
 <link rel="stylesheet" href="/dashboard/theme.css">
 <link rel="stylesheet" href="/dashboard/panels.css">
+<script src="/shared/palette.js"></script>
+<!-- Scoped to the toggle button only — ui/dashboard/*.css owns the rest of
+     this surface's chrome and is out of frontend-engineer scope. Authored
+     against the shared DS aliases so the button itself is on-contract even
+     while the dashboard shell below it stays on its own dark palette. -->
+<style>
+  .surface-toggle-btn {
+    position: fixed;
+    top: 16px; right: 16px;
+    z-index: 1000;
+    background: var(--surface-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-muted);
+    font-family: 'Inter Tight', sans-serif;
+    font-size: 8px; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    padding: 8px 14px;
+    cursor: pointer;
+    transition: color 140ms ease, border-color 140ms ease;
+  }
+  .surface-toggle-btn:hover {
+    color: var(--accent-ink);
+    border-color: var(--border-strong);
+  }
+</style>
 </head>
 <body>
+
+<button id="surface-toggle" class="surface-toggle-btn" type="button">Ink</button>
 
 <div id="loading">
   <div class="loader-ring"></div>
@@ -93,18 +126,11 @@
 </div>
 
 <!-- ── Three.js r137 + UMD addons (global THREE.*) ───────────── -->
-<!-- Load order is load-bearing: EffectComposer.js defines THREE.Pass, so it
-     must precede every pass that `extends THREE.Pass` (ShaderPass, MaskPass,
-     RenderPass, UnrealBloomPass). source: three r137 examples/js —
-     postprocessing/EffectComposer.js:282 `THREE.Pass = Pass`. -->
+<!-- Postprocessing addons (EffectComposer/ShaderPass/UnrealBloomPass/…)
+     were removed with the bloom/vignette/grain post-process — the design
+     system forbids glow (ui/shared/README.md); rendering is now a direct
+     renderer.render(scene, camera) call (see js/raycast.js animate()). -->
 <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
-<script src="https://unpkg.com/three@0.137.0/examples/js/shaders/CopyShader.js"></script>
-<script src="https://unpkg.com/three@0.137.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
-<script src="https://unpkg.com/three@0.137.0/examples/js/postprocessing/EffectComposer.js"></script>
-<script src="https://unpkg.com/three@0.137.0/examples/js/postprocessing/ShaderPass.js"></script>
-<script src="https://unpkg.com/three@0.137.0/examples/js/postprocessing/MaskPass.js"></script>
-<script src="https://unpkg.com/three@0.137.0/examples/js/postprocessing/RenderPass.js"></script>
-<script src="https://unpkg.com/three@0.137.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
 <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
 
 <!-- ── Dashboard modules (atom-shell layout) ─────────────────── -->
@@ -126,6 +152,18 @@
 <script src="/dashboard/js/controls.js"></script>
 <script src="/dashboard/js/stats.js"></script>
 <script src="/dashboard/js/polling.js"></script>
+
+<script>
+  // Surface toggle label reflects the CURRENT posture and offers the OTHER one.
+  (function () {
+    var btn = document.getElementById('surface-toggle');
+    if (!btn || !window.CortexSurface) return;
+    function label() { btn.textContent = window.CortexSurface.get() === 'paper' ? 'Ink' : 'Paper'; }
+    window.CortexSurface.bindButton(btn);
+    window.addEventListener(window.CortexSurface.EVENT, label);
+    label();
+  })();
+</script>
 
 </body>
 </html>
