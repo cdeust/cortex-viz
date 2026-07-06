@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/cortex-workflow-graph.png" alt="cortex-viz galaxy — each project becomes a dense brain-region cloud whose shape IS its code: files, commands, agents, memories and AST symbols (functions, methods, classes, modules, constants across 10 languages) pulled into position by the real edges between them (defined_in, calls, imports, member_of, tool_used_file). Symbols touched by two projects sit in the inter-project space between their hubs; long threads mark shared files and MCPs." width="100%"/>
+  <img src="docs/assets/cortex-trace-galaxy.png" alt="cortex-viz Trace galaxy on the paper surface — every Claude Code session is a tight phyllotaxis disk of its own prompt → action → file → memory chain, clustered around its domain's olive hub; the selected chain's disks render solid gold in place while the rest of the galaxy stays legible, and the mono status bar streams the exact counts (CHAIN · 108 STEPS · 6 537/6 537 nodes · 8 696/8 696 edges), never rounded." width="100%"/>
 </p>
 
 <p align="center">
@@ -11,9 +11,11 @@
 
 # cortex-viz
 
-**The visualization layer for [Cortex](https://github.com/cdeust/Cortex).** A standalone MCP that turns Cortex's memory store, your Claude Code session history, and your codebase graph into seven live reading angles over the same data — a galaxy of every project, that same graph rendered inside a 3D anatomical brain, a per-session execution trace, a consolidation kanban, a curated knowledge browser, and a wiki. It reads Cortex's shared PostgreSQL store **read-only** plus the `~/.claude` artifacts; it renders, it never remembers.
+**The visualization layer for [Cortex](https://github.com/cdeust/Cortex).** A standalone MCP that turns Cortex's memory store, your Claude Code session history, and your codebase graph into six live reading angles over the same data — a galaxy of every project, that same graph rendered inside a 3D anatomical brain, a per-session execution trace, a consolidation kanban, a curated knowledge browser, and a wiki. It reads Cortex's shared PostgreSQL store **read-only** plus the `~/.claude` artifacts; it renders, it never remembers.
 
-Launch with the `open_visualization` tool (or `/cortex-visualize`). One launcher opens seven reading angles; the default landing view is **Trace**.
+Launch with the `open_visualization` tool (or `/cortex-visualize`). One launcher opens six reading angles; the default landing view is **Trace**.
+
+The whole UI ships on the **AI Architect design system**: a paper-first reading surface with a persistent **ink** (night) toggle, greyscale chrome, and a data palette resolved from design tokens at runtime — flipping the surface re-inks every view in place without disturbing a settled layout, and every count on screen is exact and streamed, never rounded.
 
 ---
 
@@ -34,7 +36,7 @@ Restart your Claude Code session, then launch the visualizer:
 /cortex-visualize
 ```
 
-One launcher opens all seven reading angles (Graph · Brain · Trace · Board · Knowledge · Wiki · Pipeline) in the browser, served live from the Cortex store, your session JSONL, the code graph, and git.
+One launcher opens all six reading angles (Graph · Brain · Trace · Knowledge · Wiki · Board) in the browser, served live from the Cortex store, your session JSONL, the code graph, and git.
 
 <details>
 <summary><strong>More options</strong> (Clone, manual run)</summary>
@@ -74,40 +76,35 @@ The same graph, on a second surface: every node placed inside an anatomical **co
 Because the full graph (278k+ nodes, 5.5M edges) is far larger than a browser can take in one payload, the brain **streams** it in progressively through a bounded-queue, frame-budgeted NDJSON loader — the cloud fills in as you watch. Clicking any node opens the same rich detail card as the galaxy (content, tags, live heat, relations, git diff, impact). Open it from the **Brain** button in the view bar, directly at `/brain`, or programmatically via `open_visualization(view="brain")`.
 
 <p align="center">
-<img src="docs/assets/cortex-brain.png" width="100%" alt="3D Brain view — the full memory graph streamed into a translucent anatomical cortical mesh; episodic memories in the medial temporal lobe fading outward to neocortex along a hot→consolidated depth gradient, semantic entities and code symbols in association cortex, procedural skills toward the striatum and cerebellum, domain hubs at the connectome's rich-club centres, synapses routed along white-matter tracts; the left panel reads node / synapse / domain / memory / entity counts plus memory-science vitals (mean heat, growing, strong, conflicts, forward-model error) and the right panel legends the memory-system regions and per-category node counts" />
+<img src="docs/assets/cortex-brain.png" width="100%" alt="3D Brain view — 125,744 nodes streamed into a translucent anatomical cortical mesh; episodic memories in the medial temporal lobe fading outward to neocortex along a hot→consolidated depth gradient, semantic entities and code symbols in association cortex, procedural skills toward the striatum and cerebellum, domain hubs at the connectome's rich-club centres; the left panel reads node / synapse / domain / memory / entity counts plus memory-science vitals (mean heat, growing, strong, conflicts, forward-model error) and the right panel legends the memory-system regions and exact per-category node counts" />
 </p>
 
 <p align="center">
-<img src="docs/assets/cortex-consolidation-board.png" width="100%" alt="Board view — five columns for labile, early LTP, late LTP, consolidated, and reconsolidating memories, each column header showing total count and per-bucket stage metrics (decay, vulnerability, plasticity, heat, importance, encoding, interference, hippo, replay) plus cards grouped by stage" />
+<img src="docs/assets/cortex-consolidation-board.png" width="100%" alt="Board view — five columns for labile, early LTP, late LTP, consolidated, and reconsolidating memories on the paper surface; each column header states the exact live count (117 · 2841 · 41 · 1 · 0) with its measured stage physics (decay ×, vulnerability %, plasticity %) and the factual advance rule; below, domain and feeling facet chips with exact counts filter the cards, and the empty reconsolidating column shows an honest 'No memories' instead of hiding" />
 </p>
 
 ### Board — consolidation as a kanban
 
 Five columns by consolidation stage (`labile` · `early_ltp` · `late_ltp` · `consolidated` · `reconsolidating`). Each header reads live bucket metrics — decay rate, vulnerability, plasticity, heat / importance / encoding / interference medians, hippocampal dependency, replay count — with the advancement rule (`replay ≥ 3` — or `≥ 1` when `schema > 0.5`; `DA ≥ 1 or imp > 0.3`) printed under the bar. Cards carry heat, importance, surprise, valence, arousal, and the exact tool that created the memory.
 
-<p align="center">
-<img src="docs/assets/cortex-memory-detail.png" width="100%" alt="Memory detail modal — stage pill, tags, valence chip, full body, then a Scientific measurements grid with plain-language explanations of consolidation stage, activity (heat), baseline activity, importance, surprise, emotional tone, emotional intensity, confidence, plasticity, stability" />
-</p>
-
 **Detail panel — every measurement explained.** Clicking any node opens a panel with the raw value *and* a one-line plain-language explanation. Consolidation stage, activity (heat), importance, surprise, emotional tone and intensity, confidence, plasticity, stability — each a labeled bar with a sentence like *"How unexpected this memory was when it arrived. Surprises stick better than routine events."*
 
 <p align="center">
-<img src="docs/assets/cortex-trace.png" width="100%" alt="Trace view — each Claude Code session is a tight phyllotaxis disk of its own prompt → action → file → discussion → memory chain, gravity-packed around the domain hub so the sessions of a domain cluster together; clicking a session hub expands its chain into the session's conversation, files, AST symbols, impact and git history" />
+<img src="docs/assets/cortex-trace-session.png" width="100%" alt="Trace view, session drill-down — clicking a session opens its full conversation replay: the transcript modal streams every assistant message and tool call (WRITE · READ) with timestamps, down to the closing checkpoint the agent wrote; the right panel holds the session's discussion card, and the mono status bar keeps the exact chain and node/edge counts" />
 </p>
 
-### Trace · Knowledge · Wiki · Pipeline
+### Trace · Knowledge · Wiki
 
 - **Trace** *(default)* — the live execution-trace drill: collapsed domain hubs → sessions → the ordered prompt → action → file chain of what actually happened → a file's AST symbols, impact neighbourhood, and git history. Discussions and Cortex `remember`/`recall` ops are woven into the chain. Served live from session JSONL, the code graph, and git on every request — no snapshots, always current.
-- **Knowledge** — curated memory cards with heat-based borders, emotion tags, and evidence file references; filter by domain or emotion, click any card for a full detail panel.
-- **Wiki** — the per-project knowledge base as a browsable Project → Kind → Pages tree, with a coverage grid on the welcome screen, and a CodeMirror split-pane editor with live preview. (The wiki *content* is authored autonomously by [Cortex](https://github.com/cdeust/Cortex#the-autonomous-wiki); cortex-viz is its reading + editing surface.)
-- **Pipeline** — a horizontal Sankey from domains through the write gate into consolidation stages; ribbon width = memory volume, so retention and drop-off are visible at a glance.
+- **Knowledge** — curated memory cards with the feeling (word + signed valence/arousal, never colour alone), the MEANING line and verbatim excerpt, stage/domain/HOT badges, and four measured meters in fixed order (heat · importance · valence · arousal — a zero shows an empty track, never hides); filter by domain, stage, or feeling with exact facet counts.
+- **Wiki** — the per-project knowledge base as a browsable Project → Kind → Pages tree with a dossier-style page reader: serif prose with numbered section heads and mono identifier chips, boxed status and kind badges, dated provenance, and an Edit · PDF · TEX · DOCX · HTML export strip. A CodeMirror split-pane editor with live preview sits behind Edit. (The wiki *content* is authored autonomously by [Cortex](https://github.com/cdeust/Cortex#the-autonomous-wiki); cortex-viz is its reading + editing surface.)
 
 <p align="center">
-<img src="docs/assets/wiki-project-tree.png" width="100%" alt="Wiki view — left panel organizes pages as Project → Kind → Pages (agentic-ai expanded showing Architecture Decisions, Explanation, Tutorial, Reference sub-trees), breadcrumb Wiki › agentic-ai › Architecture overview, page body opens with the auto-authored architecture explanation for the project" />
+<img src="docs/assets/cortex-knowledge.png" width="100%" alt="Knowledge view — curated memory cards on the paper surface: each card carries its tool source, feeling word with signed valence/arousal deltas, MEANING line with verbatim path, stage badge (LABILE · EARLY-LTP), domain chip, HOT flag, four measured meters (heat, importance, valence, arousal), and capture provenance; the filter bar above states exact counts per domain, stage, and feeling" />
 </p>
 
 <p align="center">
-<img src="docs/assets/wiki-edit-preview.png" width="100%" alt="Wiki editor — CodeMirror 6 source pane on the left showing YAML frontmatter (title, kind, domain, scope, status, authored_by, provenance, dates) and the body with wikilinks; live preview on the right rendering the same content with EB Garamond typography, hierarchical headings, and resolved cross-references" />
+<img src="docs/assets/wiki-page-reader.png" width="100%" alt="Wiki page reader — REFERENCE / AGENTIC-AI breadcrumb over the serif title 'agentic-ai — MCP integration' with boxed DRAFT and REFERENCE badges, CREATED · UPDATED provenance in mono micro-caps, an Edit · PDF · TEX · DOCX · HTML export strip, the project tree rail (Tree/Graph segmented control, per-kind page counts, accent-ticked active page), and a serif prose body with mono identifier chips and numbered section heads" />
 </p>
 
 ---
@@ -144,8 +141,8 @@ No `import mcp_server.*` is permitted anywhere in `cortex_viz/` — that invaria
 
 ## MCP tools
 
-`open_visualization` (launch the browser UI — pass `view="brain"` for the 3D anatomical brain, `view="galaxy"` or omit for the 2D graph) and `get_methodology_graph` (graph data). The seven views are served over HTTP by the server `open_visualization` launches; a live session-activity stream (every tool call, MCP call, file access, skill, and command) feeds the graph in real time via the activity-capture hooks.
+`open_visualization` (launch the browser UI — pass `view="brain"` for the 3D anatomical brain, `view="galaxy"` or omit for the 2D graph) and `get_methodology_graph` (graph data). The six views are served over HTTP by the server `open_visualization` launches; a live session-activity stream (every tool call, MCP call, file access, skill, and command) feeds the graph in real time via the activity-capture hooks.
 
 ## Status
 
-The visualization stack was extracted from Cortex (which is now a focused memory engine) so the graphics ship and scale on their own. Standalone MCP boots over stdio; all seven views are bridged to live data; the galaxy builds end-to-end at 75k+ nodes; the 3D brain streams the full 278k-node graph into a cortical mesh; the suite passes.
+The visualization stack was extracted from Cortex (which is now a focused memory engine) so the graphics ship and scale on their own. Standalone MCP boots over stdio; all six views are bridged to live data; the galaxy builds end-to-end at 75k+ nodes; the 3D brain streams the full graph into a cortical mesh; the whole UI sits on the AI Architect design system (paper/ink surfaces, token-resolved palette); the suite passes.

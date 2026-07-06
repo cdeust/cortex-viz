@@ -225,16 +225,24 @@
 
   // ── Badges ──
 
+  // G3 (design gate, 2026-07-06): badge colour lives in the token layer —
+  // panels.css .badge-* classes (var(--warn-ink)/--amber/--stage-*) — never
+  // inline hex + hex-alpha styles, which cannot re-ink on the paper/ink
+  // toggle. Store-type badges carry a per-value modifier so episodic/semantic
+  // take the canonical stage hues; unknown values stay on the neutral base.
   function buildBadges(data) {
     var b = [];
-    if (data.isGlobal) b.push(bdg('Global', '#8B6914'));
-    if (data.isProtected) b.push(bdg('Anchored', '#E0B840'));
-    if (data.storeType) b.push(bdg(data.storeType, '#40A8C0'));
+    if (data.isGlobal) b.push(bdg('Global', 'badge-global'));
+    if (data.isProtected) b.push(bdg('Anchored', 'badge-anchor'));
+    if (data.storeType) {
+      b.push(bdg(data.storeType,
+        'badge-store badge-store-' + String(data.storeType).toLowerCase()));
+    }
     return b.length ? '<div class="badge-row">' + b.join('') + '</div>' : '';
   }
 
-  function bdg(text, c) {
-    return '<span class="detail-badge" style="color:' + c + ';border-color:' + c + '40;background:' + c + '10">' + text + '</span>';
+  function bdg(text, cls) {
+    return '<span class="detail-badge ' + cls + '">' + text + '</span>';
   }
 
   // ── Config & exports ──

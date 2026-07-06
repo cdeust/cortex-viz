@@ -34,7 +34,11 @@
      2026-07-05). --tool-grep/-glob/-bash/-task have no canonical
      equivalent yet, so they stay locally defined below. */
   --tool-grep:  #D946EF;
-  --tool-glob:  #C026D3;
+  /* glob lifted from the legacy #C026D3 (measured 4.12:1 on the night
+     canvas — G7 fail) to 4.78:1, still deeper than grep (5.61:1) so the
+     Grep/Glob pairing survives. source: measured 2026-07-06, headless
+     Chromium probe vs var(--canvas) on data-surface="ink". */
+  --tool-glob:  oklch(62% 0.21 327);
   --tool-bash:  #F97316;
   --tool-task:  #EC4899;
 }
@@ -134,28 +138,10 @@
   letter-spacing: 0.08em; flex: 0 0 auto;
 }
 #flow-content { flex: 1 1 auto; overflow-y: auto; padding: 12px 0; }
-/* One step in the chain — a left-rail timeline, top→bottom. */
-.flow-step {
-  position: relative; padding: 8px 18px 8px 40px;
-  cursor: pointer; border-left: 2px solid transparent;
-}
-.flow-step:hover { background: color-mix(in oklab, var(--text) 4%, transparent); }
-.flow-step::before {
-  content: ''; position: absolute; left: 16px; top: 14px;
-  width: 9px; height: 9px; border-radius: 50%;
-  background: var(--dot, var(--text-muted));
-}
-/* vertical connector line between steps */
-.flow-step::after {
-  content: ''; position: absolute; left: 20px; top: 20px; bottom: -4px;
-  width: 1px; background: color-mix(in oklab, var(--text) 12%, transparent);
-}
-.flow-step:last-child::after { display: none; }
-.flow-step-kind { font: 600 8px var(--mono); letter-spacing: 0.1em;
-  text-transform: uppercase; color: var(--dot, #94A3B8); }
-.flow-step-label { font-size: 12px; color: var(--text-bright);
-  line-height: 1.4; word-break: break-word; overflow-wrap: anywhere; margin-top: 2px; }
-.flow-step-files { font-size: 10px; color: var(--text-dim); margin-top: 3px; }
+/* .flow-step* removed (design gate, 2026-07-06): the flow panel's content is
+   built exclusively by trace.js with the DD-03 .impact-* vocabulary (below) —
+   no JS creates .flow-step elements anymore. Dead CSS carrying a raw #94A3B8
+   fallback (G3 violation), same precedent as the #legend removal. */
 /* Top accent line removed — was causing visual noise with centered panel */
 
 .detail-window-btns {
@@ -210,10 +196,13 @@
 .tt-diff-header { font-size:6px; letter-spacing:2px; text-transform:uppercase; color:var(--cyan-dim); margin-bottom:3px; }
 .tt-diff-header::before { content:'// '; color:color-mix(in oklab, var(--accent-ink) 20%, transparent); }
 .tt-diff-lines { font-family:'JetBrains Mono'; font-size:8px; line-height:1.5; max-height:140px; overflow-y:auto; }
-.tt-diff-add { color:#40D870; }
-.tt-diff-del { color:#E05050; }
+/* G5: diff status colours are the -ink aliases (measured AA on both
+   surfaces, tokens/surfaces.css) — never raw hex. Context lines are
+   de-emphasised chrome (G3), not a data category. */
+.tt-diff-add { color:var(--ok-ink); }
+.tt-diff-del { color:var(--danger-ink); }
 .tt-diff-hunk { color:var(--cyan-dim); font-style:italic; }
-.tt-diff-ctx { color:#5a7a90; }
+.tt-diff-ctx { color:var(--text-dim); }
 .tt-diff-empty { color:var(--text-dim); font-style:italic; font-size:7px; }
 .tt-diff-truncated { color:var(--text-dim); font-style:italic; font-size:7px; margin-top:2px; }
 
@@ -306,14 +295,14 @@
 
 .mon-tabs-bio { border-bottom: none; padding-top: 0; }
 .mon-tabs-label { font-size: 7px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; padding: 4px 4px 4px 0; }
-.mon-tab[data-bio="urgency"].active { border-color: #ff3366; color: #ff3366; }
-.mon-tab[data-bio="frustration"].active { border-color: #ef4444; color: #ef4444; }
-.mon-tab[data-bio="satisfaction"].active { border-color: #22c55e; color: #22c55e; }
-.mon-tab[data-bio="discovery"].active { border-color: #f59e0b; color: #f59e0b; }
-.mon-tab[data-bio="confusion"].active { border-color: #8b5cf6; color: #8b5cf6; }
-.mon-tab[data-bio="emotional"].active { border-color: #d946ef; color: #d946ef; }
-.mon-tab[data-bio="protected"].active { border-color: #f59e0b; color: #f59e0b; }
-.mon-tab[data-bio="high-heat"].active { border-color: #ff6b6b; color: #ff6b6b; }
+/* .mon-tab[data-bio=…] colour overrides removed (design gate, 2026-07-06):
+   knowledge.css's DS re-skin of the Monitor panel (§ "Monitor / Glossary
+   panels") styles .mon-tab/.mon-tab.active greyscale with !important —
+   deliberate G3 chrome (active = selection via border/surface, category
+   identity carried by the tab label). The per-bio raw-hex rules that lived
+   here were therefore dead-by-important in the shipped UI (verified via
+   CSSOM match walk, 2026-07-06); deleting them changes nothing visually
+   and removes the G3 hex table. Same precedent as #legend / .flow-step. */
 
 #monitor-log {
   flex: 1; overflow-y: auto; padding: 8px 12px;
@@ -351,7 +340,10 @@
 .mon-tag { font-size: 7px; padding: 1px 6px; border: 1px solid color-mix(in oklab, var(--accent-ink) 10%, transparent); color: var(--text-dim); }
 
 .mon-id { font-size: 7px; color: color-mix(in oklab, var(--accent-ink) 15%, transparent); font-variant-numeric: tabular-nums; }
-.mon-anchored { color: var(--amber) !important; border-color: rgba(255,184,0,0.2) !important; }
+/* G5: anchored-amber as TEXT uses the surface-aware --warn-ink alias (same
+   gold/amber hue band, AA on both surfaces) — the base --amber token is a
+   single night-lifted value that measured 1.9:1 on paper (probe 2026-07-06). */
+.mon-anchored { color: var(--warn-ink) !important; border-color: color-mix(in oklab, var(--warn-ink) 25%, transparent) !important; }
 .mon-conn-badge { font-size: 7px; color: var(--cyan-dim); padding: 1px 5px; border: 1px solid color-mix(in oklab, var(--accent-ink) 8%, transparent); border-radius: 8px; }
 
 /* Expandable section (connections) — hidden until entry is clicked */
@@ -433,10 +425,22 @@
 .bio-bar { flex: 1; height: 3px; background: color-mix(in oklab, var(--accent-ink) 6%, transparent); overflow: hidden; border-radius: 1px; }
 .bio-fill { height: 100%; border-radius: 1px; transition: width 0.6s ease; }
 
+/* Detail-panel badges — classes consumed by detail_format.js buildBadges()
+   (G3 fix, 2026-07-06: bdg() previously inlined raw hex + hex-alpha styles,
+   leaving these rules dead; the JS now emits these classes so badge colour
+   lives in the token layer and re-inks per surface). Hue sources:
+   Global = the domain-hub gold family (--warn-ink, same token as
+   workflow_graph.js KIND_TOKEN.domain); Anchored = the app's amber
+   anchored/protected convention (.mon-anchored above); store type = the
+   canonical memory-science stage tokens (episodic → --stage-early,
+   semantic → --stage-recon — same hue contract as MEMORY_STAGE_COLORS,
+   workflow_graph_palette.py). Unknown store values stay neutral chrome. */
 .detail-badge { font-size: 7px; padding: 2px 8px; letter-spacing: 2px; text-transform: uppercase; border: 1px solid; }
-.badge-anchor { color: var(--amber); border-color: rgba(255,184,0,0.3); }
-.badge-store { color: var(--cyan-mid); border-color: rgba(0,187,221,0.2); }
-.badge-entity { color: var(--blue); border-color: rgba(0,128,255,0.2); }
+.badge-global { color: var(--warn-ink); border-color: color-mix(in oklab, var(--warn-ink) 30%, transparent); background: color-mix(in oklab, var(--warn-ink) 7%, transparent); }
+.badge-anchor { color: var(--warn-ink); border-color: color-mix(in oklab, var(--warn-ink) 30%, transparent); background: color-mix(in oklab, var(--warn-ink) 7%, transparent); }
+.badge-store { color: var(--text-muted); border-color: color-mix(in oklab, var(--text) 15%, transparent); background: color-mix(in oklab, var(--text) 4%, transparent); }
+.badge-store-episodic { color: var(--stage-early); border-color: color-mix(in oklab, var(--stage-early) 30%, transparent); background: color-mix(in oklab, var(--stage-early) 7%, transparent); }
+.badge-store-semantic { color: var(--stage-recon); border-color: color-mix(in oklab, var(--stage-recon) 30%, transparent); background: color-mix(in oklab, var(--stage-recon) 7%, transparent); }
 
 /* Loading */
 #loading { position: fixed; inset: 0; background: var(--void); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 500; transition: opacity 1s; }
@@ -466,10 +470,11 @@
   background: color-mix(in oklab, var(--canvas) 35%, transparent); border-radius: 4px; padding: 8px 10px;
   max-height: 360px; overflow: auto; white-space: pre;
 }
-#detail-panel .td-diff-add { color: #4ADE80; }
-#detail-panel .td-diff-del { color: #F87171; }
+/* G5: diff status colours via the -ink aliases — see .tt-diff-* above. */
+#detail-panel .td-diff-add { color: var(--ok-ink); }
+#detail-panel .td-diff-del { color: var(--danger-ink); }
 #detail-panel .td-diff-ctx { color: var(--text-dim); }
-#detail-panel .td-diff-hunk { color: #60A5FA; }
+#detail-panel .td-diff-hunk { color: var(--info-ink); }
 #detail-panel .td-msg {
   font-size: 11px; line-height: 1.45; color: var(--text-bright);
   padding: 5px 0; border-bottom: 1px solid color-mix(in oklab, var(--text) 5%, transparent);
@@ -481,7 +486,8 @@
 }
 #detail-panel .td-sha {
   font-family: ui-monospace, 'SF Mono', monospace; font-size: 10px;
-  color: var(--amber, #ffb454); margin-right: 4px;
+  /* G5: --warn-ink, not --amber — see .mon-anchored note above. */
+  color: var(--warn-ink); margin-right: 4px;
 }
 
 /* ── Trace detail-panel expandable sections (<details>) ── */

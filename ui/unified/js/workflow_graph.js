@@ -30,8 +30,10 @@
   // reads it via getComputedStyle (through window.CortexPalette, the shared
   // reader in ui/shared/palette.js — already loaded before this file, see
   // ui/unified-viz.html) so paper vs ink both render correctly with zero
-  // per-surface literals here. n.color (server-baked) always wins — this
-  // table is only ever the fallback, exactly as it was as a static object.
+  // per-surface literals here. n.color (server-baked) wins for every kind
+  // EXCEPT tool_hub (see nodeColor below — hubs resolve --tool-<tool> live,
+  // G7); this table is only ever the fallback, exactly as it was as a
+  // static object.
   //
   // Mapping preserves the hue families verified in the prior pivot-restore
   // round (memory: cortex-viz-trace-pivot-restore.md) and the app's existing
@@ -55,7 +57,7 @@
     // contrast on both.
     domain:     '--warn-ink',     // olive hub (DD-07), same token as domain hubs elsewhere
     session:    '--warn-ink',     // session hub — shares the hub token by design
-    tool_hub:   '--kind-entity',  // graphite, deep (DD-04) — per-tool colors override in node.color
+    tool_hub:   '--kind-entity',  // graphite, deep (DD-04) — unreachable in practice: nodeColor resolves --tool-<tool> from the hub id first (G7)
     entity:     '--kind-entity',  // graphite, deep (DD-04) — the recede-so-hubs-read-as-signal token
     skill:      '--kind-skill',
     command:    '--kind-command',
@@ -1353,7 +1355,34 @@
   // G3/G7: last-resort branch (unmapped n.kind — not in KIND_TOKEN at all,
   // so KIND_COLOR[n.kind] has no getter and is undefined) resolves the same
   // FALLBACK_TOKEN, never a raw hex literal.
-  function nodeColor(n) { return n.color || KIND_COLOR[n.kind] || _readToken(FALLBACK_TOKEN); }
+  //
+  // G7 (design gate): tool_hub nodes resolve their per-tool token LIVE and
+  // never trust the server-baked n.color. The bake (workflow_graph_palette.py
+  // TOOL_HUB_COLORS) is a paper-only encoding that cannot re-ink on the
+  // data-surface toggle (measured 2.94:1 on ink — BLOCKED, gate audit
+  // 2026-07-06), and its hues had drifted from the glossary's shipped
+  // contract (unified-viz.html "Tool hub" entry colours by
+  // var(--tool-edit/-write/-read/-grep/-glob/-bash/-task)). Resolving the
+  // same tokens here makes galaxy and legend agree on BOTH surfaces —
+  // same doctrine as JUG.getNodeColor (config.js): presentation of
+  // DS-governed data belongs to the client's token layer, not the wire
+  // payload. The trailing id segment IS the ToolKind value
+  // (NodeIdFactory.tool_hub_id → 'tool_hub:<domain_id>:<tool>',
+  // schema-validated by _check_tool_hub_pairs).
+  function resolveToolHubColor(n) {
+    // ToolKind values are capitalised ('Task', 'Bash', …) while the CSS
+    // custom properties are lowercase (--tool-task) and case-sensitive —
+    // verified against live /api/graph/full/stream ids, 2026-07-06.
+    var tool = String(n.id || '').split(':').pop().toLowerCase();
+    return tool ? _readToken('--tool-' + tool) : null;
+  }
+  function nodeColor(n) {
+    if (n.kind === 'tool_hub') {
+      var hubColor = resolveToolHubColor(n);
+      if (hubColor) return hubColor;
+    }
+    return n.color || KIND_COLOR[n.kind] || _readToken(FALLBACK_TOKEN);
+  }
   function labelOf(n) { return n.label || n.name || n.title || n.path || n.id || ''; }
 
   window.JUG = window.JUG || {};
