@@ -22,6 +22,7 @@ import math
 from cortex_viz.infrastructure.memory_associations import (
     DEFAULT_ASSOC_TOP_K,
     DEFAULT_SEMANTIC_MIN_SIM,
+    DEFAULT_TEMPORAL_ENABLED,
     DEFAULT_TEMPORAL_MIN_ACCESS,
     DEFAULT_TEMPORAL_SEED_LIMIT,
     DEFAULT_TEMPORAL_WINDOW_HOURS,
@@ -406,28 +407,33 @@ def test_combine_output_sorted_by_pair():
 # ── unified entry point ─────────────────────────────────────────────
 
 
-def test_load_memory_associations_issues_three_selects_and_merges():
-    """The unified loader runs exactly three SELECTs (one per channel)
-    and returns the combiner's shape, reason-tagged."""
+class _ThreeChannelStore:
+    def __init__(self):
+        self.calls = []
 
-    class _ThreeChannelStore:
-        def __init__(self):
-            self.calls = []
-
-        def query(self, sql, params=None, *, batch=False):
-            self.calls.append(sql)
-            if "memory_entities" in sql:  # co-entity channel
-                return [{"source_memory_id": 1, "target_memory_id": 2,
-                         "weight": 3.0, "shared_count": 2}]
-            if "get_temporal_co_access" in sql:  # temporal channel
-                return [{"source_memory_id": 1, "target_memory_id": 2,
-                         "weight": 0.7}]
+    def query(self, sql, params=None, *, batch=False):
+        self.calls.append(sql)
+        if "memory_entities" in sql:  # co-entity channel
             return [{"source_memory_id": 1, "target_memory_id": 2,
-                     "weight": 0.9}]  # semantic channel
+                     "weight": 3.0, "shared_count": 2}]
+        if "get_temporal_co_access" in sql:  # temporal channel
+            return [{"source_memory_id": 1, "target_memory_id": 2,
+                     "weight": 0.7}]
+        return [{"source_memory_id": 1, "target_memory_id": 2,
+                 "weight": 0.9}]  # semantic channel
 
+
+def test_load_memory_associations_default_runs_all_three_channels(monkeypatch):
+    """All three channels are active by default (additive render, user
+    directive 2026-07-07): with no env override the unified loader runs
+    THREE SELECTs and every channel contributes its reason tag. The
+    community-collapse regression that once justified opt-in is gone —
+    detection is decoupled onto the co-entity channel server-side."""
+    monkeypatch.delenv("CORTEX_VIZ_ASSOC_TEMPORAL", raising=False)
     store = _ThreeChannelStore()
     out = load_memory_associations(store)
     assert len(store.calls) == 3
+    assert any("get_temporal_co_access" in sql for sql in store.calls)
     assert out == [
         {
             "source_memory_id": 1,
@@ -437,3 +443,34 @@ def test_load_memory_associations_issues_three_selects_and_merges():
             "reason": "co-entity+semantic+temporal",
         }
     ]
+
+
+def test_load_memory_associations_temporal_opt_out_issues_two_selects(
+    monkeypatch,
+):
+    """With CORTEX_VIZ_ASSOC_TEMPORAL=0 the temporal channel is disabled:
+    the loader runs exactly two SELECTs and drops the temporal reason
+    tag — the escape hatch for an operator who wants the leaner v2
+    render."""
+    monkeypatch.setenv("CORTEX_VIZ_ASSOC_TEMPORAL", "0")
+    store = _ThreeChannelStore()
+    out = load_memory_associations(store)
+    assert len(store.calls) == 2
+    assert not any("get_temporal_co_access" in sql for sql in store.calls)
+    assert out == [
+        {
+            "source_memory_id": 1,
+            "target_memory_id": 2,
+            "weight": 1.0,
+            "shared_count": 2,
+            "reason": "co-entity+semantic",
+        }
+    ]
+
+
+def test_temporal_default_constant_is_on():
+    """The gate's default is a named constant and it is True — the three
+    additive channels are the out-of-the-box render (user directive);
+    community detection is decoupled so this cannot regress community
+    structure."""
+    assert DEFAULT_TEMPORAL_ENABLED is True

@@ -33,8 +33,9 @@ window.BRAIN = window.BRAIN || {};
   var K_ANCHOR = 0.05;
   var K_ASSOC = 0.45;
   // Per-community attractor pull (Change A, associative-community separation).
-  // Community membership comes from communities.js (label propagation over
-  // 'associates_with' edges); K_ASSOC already clusters a community's members
+  // Community membership comes from communities.js (which reads the
+  // server-side Leiden + CPM community_id, detected over the co-entity
+  // 'associates_with' channel); K_ASSOC already clusters a community's members
   // tightly together, K_COMMUNITY pulls that cluster's mass toward a point
   // OFFSET from the anatomical centroid so distinct communities separate into
   // visible blobs instead of collapsing onto one shared mass. The two gains

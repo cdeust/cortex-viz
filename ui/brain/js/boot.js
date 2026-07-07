@@ -285,7 +285,7 @@ window.BRAIN = window.BRAIN || {};
       if (k === 'memory' && BRAIN.COLOR_BY_COMMUNITY && BRAIN.communities) {
         html += row('info', 'memory — coloured by association community', data.byKind[k], null, k);
         html += '<div class="leg-note">' + BRAIN.communities.count.toLocaleString('en-US') +
-          ' communities detected (label propagation over associative edges).</div>';
+          ' communities detected (Leiden + CPM over co-entity associations, server-side).</div>';
         return;
       }
       var cats = Object.keys(cmap).sort(function (a, b) { return cmap[b] - cmap[a]; });
