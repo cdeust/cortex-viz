@@ -83,4 +83,28 @@ def test_missing_weight_and_shared_count_default_to_zero():
     ingest_association(target, {"source_memory_id": 1, "target_memory_id": 2})
     assert len(target._edges) == 1
     assert target._edges[0].weight == 0.0
-    assert target._edges[0].label == "0 shared"
+    # shared_count=0 means no co-entity evidence — labelling it
+    # "0 shared" would be misleading for semantic-only pairs, so the
+    # label falls back to the evidence channel (default "co-entity").
+    assert target._edges[0].label == "co-entity"
+    assert target._edges[0].reason == "co-entity"
+
+
+def test_reason_and_label_follow_the_evidence_channel():
+    """Unified-substrate rows carry a per-row channel tag; the edge's
+    reason mirrors it and shared_count>0 keeps the 'N shared' label."""
+    target = _FakeTarget({NodeIdFactory.memory_id(1), NodeIdFactory.memory_id(2),
+                          NodeIdFactory.memory_id(3), NodeIdFactory.memory_id(4)})
+    ingest_association(
+        target, {"source_memory_id": 1, "target_memory_id": 2,
+                  "weight": 0.9, "shared_count": 0, "reason": "semantic"}
+    )
+    ingest_association(
+        target, {"source_memory_id": 3, "target_memory_id": 4,
+                  "weight": 1.0, "shared_count": 2,
+                  "reason": "co-entity+semantic"}
+    )
+    assert target._edges[0].reason == "semantic"
+    assert target._edges[0].label == "semantic"
+    assert target._edges[1].reason == "co-entity+semantic"
+    assert target._edges[1].label == "2 shared"

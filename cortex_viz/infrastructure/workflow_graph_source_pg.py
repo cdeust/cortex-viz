@@ -14,6 +14,9 @@ from typing import Any, Iterable
 from cortex_viz.infrastructure.memory_associations import (
     load_co_entity_associations as _load_co_entity_associations,
 )
+from cortex_viz.infrastructure.memory_associations import (
+    load_memory_associations as _load_memory_associations,
+)
 
 _FILE_LINE_RE = re.compile(r"\*\*(?:File|Read):\*\*\s*`([^`]+)`")
 # Grep / Glob memory bodies: ``**Grep:** `<pattern>` in `<path>`` and
@@ -321,3 +324,17 @@ def load_co_entity_associations(
     ``core.workflow_graph_association.ingest_association``, skipping any
     whose endpoints are not in the graph."""
     return _load_co_entity_associations(pg_store, top_k=top_k)
+
+
+def load_memory_associations(
+    pg_store, top_k: int | None = None
+) -> list[dict[str, Any]]:
+    """Bulk-fetch the unified MEMORY<->MEMORY association substrate.
+
+    Delegates to ``infrastructure.memory_associations.
+    load_memory_associations`` — co-entity (v1) + semantic kNN (v2)
+    channels merged into one ``associates_with`` row set (see that
+    module's docstring for the combination model). Shape:
+    ``[{source_memory_id, target_memory_id, weight, shared_count,
+    reason}, ...]``."""
+    return _load_memory_associations(pg_store, top_k=top_k)

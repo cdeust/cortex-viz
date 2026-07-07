@@ -268,10 +268,10 @@ class WorkflowGraphSource:
     def load_memory_associations(
         self, pg_store, top_k: int | None = None
     ) -> list[dict[str, Any]]:
-        """Sparsified co-entity MEMORY↔MEMORY associations (v1 "brain
-        associations" — see ``infrastructure.memory_associations``),
-        one per ``associates_with`` edge."""
-        return _pg.load_co_entity_associations(pg_store, top_k=top_k)
+        """Unified MEMORY↔MEMORY association substrate — co-entity (v1)
+        + semantic kNN (v2) channels merged (see ``infrastructure.
+        memory_associations``), one row per ``associates_with`` edge."""
+        return _pg.load_memory_associations(pg_store, top_k=top_k)
 
 
 __all__ = ["WorkflowGraphSource"]
