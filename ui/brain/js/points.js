@@ -132,4 +132,30 @@ window.BRAIN = window.BRAIN || {};
     sizeAttr.needsUpdate = true;
     alphaAttr.needsUpdate = true;
   };
+
+  // Highlight the nodes in `rowSet` (a Set of point rows: a hovered/selected
+  // node + its graph neighbours): each swells by HL_SIZE_GAIN and renders at
+  // full POINT_ALPHA so the endpoints its edges lead to stand out; every other
+  // node keeps its filter-derived size/alpha. `rowSet` null/empty restores the
+  // plain filter state. Same cheap two-attribute re-upload as
+  // repaintPointFilter; callers invoke it only on a hovered/selected CHANGE.
+  var HL_SIZE_GAIN = 2.2;
+  BRAIN.highlightPoints = function (rowSet) {
+    if (!BRAIN.points || !BRAIN.pointNodes) return;
+    if (!rowSet || rowSet.size === 0) { BRAIN.repaintPointFilter(); return; }
+    var nodes = BRAIN.pointNodes;
+    var sizeAttr = BRAIN.points.geometry.getAttribute('size');
+    var alphaAttr = BRAIN.points.geometry.getAttribute('palpha');
+    for (var i = 0; i < nodes.length; i++) {
+      if (rowSet.has(i)) {
+        sizeAttr.array[i] = nodeSize(nodes[i]) * HL_SIZE_GAIN;
+        alphaAttr.array[i] = POINT_ALPHA;
+      } else {
+        sizeAttr.array[i] = nodeSize(nodes[i]);
+        alphaAttr.array[i] = nodeAlpha(nodes[i]);
+      }
+    }
+    sizeAttr.needsUpdate = true;
+    alphaAttr.needsUpdate = true;
+  };
 })();
