@@ -42,8 +42,12 @@ window.BRAIN = window.BRAIN || {};
   // direction), not opposed, so K_ASSOC did not need lowering to make room
   // for it. Visual calibration, not a sourced physical constant — same status
   // as K_ANCHOR/K_ASSOC above.
-  var K_COMMUNITY = 0.05;
-  var COMMUNITY_ATTRACTOR_FRAC = 0.35;  // attractor-ring radius, as a fraction of TARGET_RADIUS
+  var K_COMMUNITY = 0.08;
+  // Each distinct community is pulled toward ITS OWN member centroid (members
+  // are already near it -> short displacements -> compact blobs, not streaks),
+  // nudged outward from the global memory centroid by this fraction of
+  // TARGET_RADIUS so neighbouring communities separate. Visual calibration.
+  var COMMUNITY_SEP_FRAC = 0.2;
   var ITERATIONS = 200;          // FR annealing steps; temperature decays 1 -> ~0 across these
   var MAX_STEP_FRAC = 0.04;      // per-iteration displacement cap, as a fraction of TARGET_RADIUS
   var EPS_HEAT = 0.05;           // floor for heat in the reinforcement coupling (avoids a zero-heat node killing its own edges)
@@ -109,22 +113,44 @@ window.BRAIN = window.BRAIN || {};
     return { x: Math.cos(theta) * r, y: y, z: Math.sin(theta) * r };
   }
 
-  // One attractor point per community, offset from the memory cloud's
-  // anatomical centroid onto a ring of radius COMMUNITY_ATTRACTOR_FRAC *
-  // targetRadius, distributed by fibonacciSpherePoint (deterministic by
-  // communityId, stable across reloads for identical input).
-  function buildCommunityAttractors(positions, memIdx, count, targetRadius) {
-    var cx = 0, cy = 0, cz = 0;
-    for (var m = 0; m < memIdx.length; m++) {
-      var o = memIdx[m] * 3;
-      cx += positions[o]; cy += positions[o + 1]; cz += positions[o + 2];
+  // One attractor per DISTINCT community, placed at that community's OWN
+  // member centroid and pushed COMMUNITY_SEP_FRAC * targetRadius outward from
+  // the global memory centroid so neighbours separate. Members already sit
+  // near their centroid, so the pull is short — communities condense into
+  // compact blobs rather than streaking toward a distant shared ring. Only
+  // communities with >= BRAIN.MIN_COMMUNITY_SIZE members get an entry (the
+  // rest fall back to their anatomical anchor in buildAttractorByRow).
+  // Deterministic: centroids follow the (stable) positions; the near-centre
+  // degenerate case (community centroid ~ global centroid) falls back to a
+  // deterministic golden-angle direction so it still separates reproducibly.
+  function buildCommunityAttractors(nodes, positions, memIdx, communities, targetRadius) {
+    var communityOf = communities.communityOf, sizes = communities.sizes;
+    var minSize = BRAIN.MIN_COMMUNITY_SIZE || 1;
+    var gx = 0, gy = 0, gz = 0, N = memIdx.length;
+    for (var m = 0; m < N; m++) {
+      var go = memIdx[m] * 3;
+      gx += positions[go]; gy += positions[go + 1]; gz += positions[go + 2];
     }
-    if (memIdx.length > 0) { cx /= memIdx.length; cy /= memIdx.length; cz /= memIdx.length; }
-    var ringR = targetRadius * COMMUNITY_ATTRACTOR_FRAC;
-    var pts = new Array(count);
-    for (var c = 0; c < count; c++) {
-      var v = fibonacciSpherePoint(c, count);
-      pts[c] = { x: cx + v.x * ringR, y: cy + v.y * ringR, z: cz + v.z * ringR };
+    if (N > 0) { gx /= N; gy /= N; gz /= N; }
+    var acc = {};  // cid -> [sumX, sumY, sumZ, memberCount]
+    for (var m2 = 0; m2 < N; m2++) {
+      var row = memIdx[m2], o = row * 3;
+      var cid = communityOf.get(nodes[row].id);
+      if (cid == null || (sizes.get(cid) || 0) < minSize) continue;
+      var a = acc[cid] || (acc[cid] = [0, 0, 0, 0]);
+      a[0] += positions[o]; a[1] += positions[o + 1]; a[2] += positions[o + 2]; a[3] += 1;
+    }
+    var sep = targetRadius * COMMUNITY_SEP_FRAC;
+    var pts = new Array(communities.count);
+    for (var key in acc) {
+      var cell = acc[key], k = cell[3];
+      var ccx = cell[0] / k, ccy = cell[1] / k, ccz = cell[2] / k;
+      var dx = ccx - gx, dy = ccy - gy, dz = ccz - gz;
+      var len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      var ux, uy, uz;
+      if (len > 1e-3) { ux = dx / len; uy = dy / len; uz = dz / len; }
+      else { var v = fibonacciSpherePoint(parseInt(key, 10), communities.count); ux = v.x; uy = v.y; uz = v.z; }
+      pts[key] = { x: ccx + ux * sep, y: ccy + uy * sep, z: ccz + uz * sep };
     }
     return pts;
   }
@@ -239,7 +265,7 @@ window.BRAIN = window.BRAIN || {};
     var attrByRow = null;
     var communityCount = communities ? communities.count : 0;
     if (communities && communities.count > 0) {
-      var attractorPts = buildCommunityAttractors(positions, memIdx, communities.count, radius);
+      var attractorPts = buildCommunityAttractors(nodes, positions, memIdx, communities, radius);
       attrByRow = buildAttractorByRow(nodes, anchors, memIdx, communities.communityOf, communities.sizes, attractorPts);
     }
 
