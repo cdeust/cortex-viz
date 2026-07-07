@@ -25,6 +25,20 @@ window.BRAIN = window.BRAIN || {};
   var INSET = 0.97;                 // keep points inside the surface
   var DEFAULT_HEAT = 0.5;           // memories with no heat sit mid-gradient
   var COLD_SPREAD = 1.9;            // cold memories disperse this much wider
+  // Non-memory nodes (entities/symbols/files) are NOT moved by the force
+  // relaxation — they keep their anatomical placement. A Gaussian blob there has
+  // an infinite tail: for a peripheral region (the temporal pole, ~80k
+  // entities), that tail overshoots the pial surface and the hard clamp projects
+  // ALL of it onto the surface radius, building a dense CRUST on the membrane
+  // (user report 2026-07-07: "nodes écrasés contre la membrane"). FILL_SIGMAS is
+  // the radius, in units of the region sigma, of a BOUNDED uniform ball used
+  // instead: 3 sigma is the Gaussian lobe's own visual extent (the 3-sigma rule
+  // — 99.7% of a Gaussian's mass), so the cloud keeps its size but has NO tail
+  // to project. The ball centre is pulled just far enough inward that the whole
+  // ball fits under INSET*surface, so the clamp never fires — no crust.
+  //   source: 3-sigma rule (Pukelsheim 1994, "The Three Sigma Rule",
+  //   Am. Statistician 48(2):88-91).
+  var FILL_SIGMAS = 3;
 
   // FNV-1a — stable string hash for per-id hemisphere + jitter seed.
   function hashStr(s) {
@@ -84,6 +98,24 @@ window.BRAIN = window.BRAIN || {};
     );
   }
 
+  // Uniform point inside a ball of radius R centred at `center`. r = R*cbrt(u)
+  // gives constant volumetric density; direction uniform on the unit sphere.
+  // Unlike a Gaussian the support is BOUNDED by R — no tail to overshoot the
+  // surface — so a caller that keeps R inside the surface never triggers the
+  // clamp.  source: Marsaglia (1972) for the uniform sphere direction; the
+  // cbrt-radius is the inverse-CDF of the 3-ball's r^2 volume element.
+  function sampleBall(center, R, rand) {
+    var r = R * Math.cbrt(rand());
+    var z = 2 * rand() - 1;
+    var phi = 2 * Math.PI * rand();
+    var s = Math.sqrt(Math.max(0, 1 - z * z));
+    return new THREE.Vector3(
+      center.x + r * s * Math.cos(phi),
+      center.y + r * s * Math.sin(phi),
+      center.z + r * z
+    );
+  }
+
   // Rank-normalize memory heat for DISPLAY. The stored heat distribution is
   // heavily degenerate — ~79% of memories fall in a narrow band near 0.47, with
   // a second spike at 0.0 — so mapping heat directly onto the consolidation
@@ -135,11 +167,23 @@ window.BRAIN = window.BRAIN || {};
     return p;
   }
 
-  // Non-memory node: Gaussian blob in its kind's region.
-  function placeGeneric(center, sigma, surface, rand) {
-    var p = sampleBlob(center, sigma, rand, 1);
-    clampInside(p, surface);
-    return p;
+  // Non-memory node: BOUNDED uniform fill of its kind's region (no Gaussian
+  // tail => no surface crust). The ball radius is FILL_SIGMAS * the region's
+  // mean sigma (its own anatomical extent); the centre is pulled inward along
+  // its direction just far enough that the whole ball fits under INSET*surface,
+  // so the clamp never fires. Peripheral regions therefore fill INWARD from the
+  // cortex instead of caking a fixed-sigma blob against the membrane.
+  function placeGeneric(atlas, rkey, hemi, surface, rand) {
+    var center = atlas.centerOf(rkey, hemi);
+    var sig = atlas.sigmaOf(rkey);
+    var R = FILL_SIGMAS * (sig.x + sig.y + sig.z) / 3;
+    var cx = center.x, cy = center.y, cz = center.z;
+    var cLen = Math.sqrt(cx * cx + cy * cy + cz * cz) || 1e-6;
+    var ceil = surface.radiusInDir(cx, cy, cz) * INSET;
+    if (R > ceil) R = ceil;                         // region wider than the hull: fill from centre
+    var newCenterR = Math.min(cLen, ceil - R);      // furthest out the centre can sit and still fit
+    var k = newCenterR / cLen;
+    return sampleBall(new THREE.Vector3(cx * k, cy * k, cz * k), R, rand);
   }
 
   // Region key recorded for a node (drives edge tract selection). A hot memory
@@ -175,10 +219,10 @@ window.BRAIN = window.BRAIN || {};
         rkey = memoryRegionKey(vh);
       } else if (kind === 'domain') {
         rkey = atlas.hubSeat(idx[node.id] || 0);
-        p = placeGeneric(atlas.centerOf(rkey, hemi), atlas.sigmaOf(rkey), surface, rand);
+        p = placeGeneric(atlas, rkey, hemi, surface, rand);
       } else {
         rkey = atlas.regionForKind(kind);
-        p = placeGeneric(atlas.centerOf(rkey, hemi), atlas.sigmaOf(rkey), surface, rand);
+        p = placeGeneric(atlas, rkey, hemi, surface, rand);
       }
 
       var j = i * 3;
