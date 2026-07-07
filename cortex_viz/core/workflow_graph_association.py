@@ -66,11 +66,13 @@ def ingest_association(b, assoc: dict) -> None:
     shared_count = int(assoc.get("shared_count") or 0)
     # The unified substrate (infrastructure.memory_associations.
     # load_memory_associations) tags each row with its evidence channel
-    # ("co-entity", "semantic", "co-entity+semantic"); rows from the
-    # bare v1 loader carry no tag and default to "co-entity".
+    # ("co-entity", "semantic", "temporal", or a "+"-join of those);
+    # rows from the bare v1 loader carry no tag and default to
+    # "co-entity".
     reason = str(assoc.get("reason") or "co-entity")
-    # "N shared" only means something on the co-entity channel; a
-    # semantic-only pair shares no entity, so its label is the channel.
+    # "N shared" only means something on the co-entity channel; a pair
+    # without co-entity evidence shares no entity, so its label is the
+    # channel tag.
     label = f"{shared_count} shared" if shared_count > 0 else reason
     b._edges.append(
         WorkflowEdge(

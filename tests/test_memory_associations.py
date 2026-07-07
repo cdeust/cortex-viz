@@ -22,11 +22,15 @@ import math
 from cortex_viz.infrastructure.memory_associations import (
     DEFAULT_ASSOC_TOP_K,
     DEFAULT_SEMANTIC_MIN_SIM,
+    DEFAULT_TEMPORAL_MIN_ACCESS,
+    DEFAULT_TEMPORAL_SEED_LIMIT,
+    DEFAULT_TEMPORAL_WINDOW_HOURS,
     DF_CEILING_FRAC,
     combine_associations,
     load_co_entity_associations,
     load_memory_associations,
     load_semantic_associations,
+    load_temporal_associations,
 )
 
 
@@ -227,6 +231,70 @@ def test_semantic_row_shape_and_types():
     ]
 
 
+# ── v3 temporal co-access loader ────────────────────────────────────
+
+
+def test_temporal_forwards_params_in_pg_function_order():
+    """Contract: (window_hours, min_access, seed_limit) feed
+    get_temporal_co_access positionally, then top_k bounds the ranking
+    window — all via the batch pool."""
+    store = _FakeStore(rows=[])
+    load_temporal_associations(store, top_k=5)
+    assert len(store.calls) == 1
+    sql, params, batch = store.calls[0]
+    assert batch is True
+    assert params == (
+        DEFAULT_TEMPORAL_WINDOW_HOURS,
+        DEFAULT_TEMPORAL_MIN_ACCESS,
+        DEFAULT_TEMPORAL_SEED_LIMIT,
+        5,
+    )
+    assert "get_temporal_co_access" in sql
+
+
+def test_temporal_defaults_are_the_sourced_constants():
+    # window/min_access inherit the PG function's own defaults; the
+    # seed limit is the measured corpus-covering value.
+    assert DEFAULT_TEMPORAL_WINDOW_HOURS == 2.0
+    assert DEFAULT_TEMPORAL_MIN_ACCESS == 1
+    assert DEFAULT_TEMPORAL_SEED_LIMIT == 10000
+
+
+def test_temporal_env_overrides(monkeypatch):
+    monkeypatch.setenv("CORTEX_VIZ_ASSOC_TEMPORAL_WINDOW_H", "6.0")
+    monkeypatch.setenv("CORTEX_VIZ_ASSOC_TEMPORAL_MIN_ACCESS", "2")
+    monkeypatch.setenv("CORTEX_VIZ_ASSOC_TEMPORAL_SEED_LIMIT", "500")
+    store = _FakeStore(rows=[])
+    load_temporal_associations(store, top_k=8)
+    _, params, _ = store.calls[0]
+    assert params == (6.0, 2, 500, 8)
+
+
+def test_temporal_invalid_env_falls_back_to_defaults(monkeypatch):
+    monkeypatch.setenv("CORTEX_VIZ_ASSOC_TEMPORAL_WINDOW_H", "not-a-number")
+    store = _FakeStore(rows=[])
+    load_temporal_associations(store, top_k=8)
+    _, params, _ = store.calls[0]
+    assert params[0] == DEFAULT_TEMPORAL_WINDOW_HOURS
+
+
+def test_temporal_zero_top_k_short_circuits_without_querying():
+    store = _FakeStore(rows=[{"source_memory_id": 1, "target_memory_id": 2,
+                               "weight": 0.9}])
+    out = load_temporal_associations(store, top_k=0)
+    assert out == []
+    assert store.calls == []
+
+
+def test_temporal_row_shape_and_types():
+    rows = [{"source_memory_id": 1, "target_memory_id": 2, "weight": "0.75"}]
+    store = _FakeStore(rows=rows)
+    out = load_temporal_associations(store)
+    assert out == [
+        {"source_memory_id": 1, "target_memory_id": 2, "weight": 0.75}
+    ]
+
+
 # ── channel combiner (pure — no store involved) ─────────────────────
 
 
@@ -289,6 +357,42 @@ def test_combine_empty_channels():
     assert sem_only[0]["reason"] == "semantic"
 
 
+def test_combine_temporal_channel_normalized_and_tagged():
+    temp = [
+        {"source_memory_id": 1, "target_memory_id": 2, "weight": 0.9},
+        {"source_memory_id": 3, "target_memory_id": 4, "weight": 0.45},
+    ]
+    by_pair = {
+        (r["source_memory_id"], r["target_memory_id"]): r
+        for r in combine_associations([], [], temp)
+    }
+    assert by_pair[(1, 2)]["weight"] == 1.0
+    assert by_pair[(3, 4)]["weight"] == 0.5
+    assert by_pair[(1, 2)]["reason"] == "temporal"
+    assert by_pair[(1, 2)]["shared_count"] == 0
+
+
+def test_combine_three_channel_pair_joins_reasons_in_order():
+    co = [{"source_memory_id": 1, "target_memory_id": 2, "weight": 4.0,
+           "shared_count": 2}]
+    sem = [{"source_memory_id": 1, "target_memory_id": 2, "weight": 0.8}]
+    temp = [{"source_memory_id": 1, "target_memory_id": 2, "weight": 0.9}]
+    out = combine_associations(co, sem, temp)
+    assert len(out) == 1
+    row = out[0]
+    assert row["weight"] == 1.0
+    assert row["shared_count"] == 2
+    assert row["reason"] == "co-entity+semantic+temporal"
+
+
+def test_combine_temporal_default_is_backward_compatible():
+    """Omitting temporal_rows behaves exactly like the two-channel v2
+    combiner — existing callers are unaffected."""
+    co = [{"source_memory_id": 1, "target_memory_id": 2, "weight": 4.0,
+           "shared_count": 1}]
+    assert combine_associations(co, []) == combine_associations(co, [], None)
+
+
 def test_combine_output_sorted_by_pair():
     sem = [
         {"source_memory_id": 9, "target_memory_id": 10, "weight": 0.7},
@@ -302,11 +406,11 @@ def test_combine_output_sorted_by_pair():
 # ── unified entry point ─────────────────────────────────────────────
 
 
-def test_load_memory_associations_issues_both_selects_and_merges():
-    """The unified loader runs exactly two SELECTs (one per channel)
+def test_load_memory_associations_issues_three_selects_and_merges():
+    """The unified loader runs exactly three SELECTs (one per channel)
     and returns the combiner's shape, reason-tagged."""
 
-    class _TwoChannelStore:
+    class _ThreeChannelStore:
         def __init__(self):
             self.calls = []
 
@@ -315,18 +419,21 @@ def test_load_memory_associations_issues_both_selects_and_merges():
             if "memory_entities" in sql:  # co-entity channel
                 return [{"source_memory_id": 1, "target_memory_id": 2,
                          "weight": 3.0, "shared_count": 2}]
+            if "get_temporal_co_access" in sql:  # temporal channel
+                return [{"source_memory_id": 1, "target_memory_id": 2,
+                         "weight": 0.7}]
             return [{"source_memory_id": 1, "target_memory_id": 2,
                      "weight": 0.9}]  # semantic channel
 
-    store = _TwoChannelStore()
+    store = _ThreeChannelStore()
     out = load_memory_associations(store)
-    assert len(store.calls) == 2
+    assert len(store.calls) == 3
     assert out == [
         {
             "source_memory_id": 1,
             "target_memory_id": 2,
             "weight": 1.0,
             "shared_count": 2,
-            "reason": "co-entity+semantic",
+            "reason": "co-entity+semantic+temporal",
         }
     ]
