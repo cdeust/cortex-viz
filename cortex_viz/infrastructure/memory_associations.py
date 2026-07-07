@@ -1,7 +1,7 @@
 """Read-only memory<->memory association loaders (the "brain
 associations" substrate).
 
-Two independent association channels, each computed in a single
+Three independent association channels, each computed in a single
 read-only SQL statement executed via ``MemoryReader.query(...,
 batch=True)``, plus a pure combiner that merges them into ONE unified
 ``associates_with`` substrate (same downstream layout + community
@@ -17,8 +17,18 @@ detection, no per-channel special-casing):
     nearest neighbours in embedding space via the HNSW index
     (``idx_memories_embedding``, ``vector_cosine_ops``), weighted by
     cosine similarity and floored at a measured similarity threshold.
-  * ``load_memory_associations`` — runs both and merges via
-    ``combine_associations`` (union of the two kNN graphs, per-pair
+  * v3 temporal (``load_temporal_associations``) — pairs of memories
+    accessed within the same time window, weighted by access
+    proximity. Delegates the pair generation to Cortex's existing
+    ``get_temporal_co_access()`` PG function (single source of truth
+    for the proximity model — never re-derived here), then applies the
+    SAME top-k kNN sparsification as the other channels: the raw
+    output is burst cliques (every pair inside one working session),
+    measured 138 051 pairs for only 1 000 seed memories on the live
+    corpus (2026-07-07) — unusable as a substrate without
+    sparsification.
+  * ``load_memory_associations`` — runs all three and merges via
+    ``combine_associations`` (union of the kNN graphs, per-pair
     max of max-normalized channel weights).
 
 Model (fixed — do not change without a new ADR):
@@ -46,15 +56,20 @@ Model (fixed — do not change without a new ADR):
     carry no discriminating signal and are dropped before
     symmetrization (same kNN-graph construction as above, von Luxburg
     2007 sec. 2).
-  * Channel combination: union of the two kNN graphs; each channel's
+  * Temporal weight(a, b) = proximity as computed by
+    ``get_temporal_co_access()`` (1 - dt/window, already in [0, 1]) —
+    the PG function owns the model; this module only sparsifies its
+    output to a top-k kNN graph and symmetrizes (von Luxburg 2007
+    sec. 2, identical construction to the other channels).
+  * Channel combination: union of the kNN graphs; each channel's
     weights are first normalized to [0, 1] by that channel's own max
     (they live on incommensurable scales — unbounded IDF sums vs.
-    bounded cosine similarity), then a pair's combined weight is the
-    MAX over channels. Union-of-graphs is the standard multi-view
-    kNN-graph construction (von Luxburg 2007 sec. 2); max-combination
-    keeps a pair as strong as its strongest evidence channel rather
-    than diluting a strong semantic link that happens to share no
-    entity.
+    bounded cosine similarity vs. bounded access proximity), then a
+    pair's combined weight is the MAX over channels. Union-of-graphs
+    is the standard multi-view kNN-graph construction (von Luxburg
+    2007 sec. 2); max-combination keeps a pair as strong as its
+    strongest evidence channel rather than diluting a strong semantic
+    link that happens to share no entity.
 
 No I/O beyond the single ``pg_store.query`` SELECT — this module never
 INSERTs, UPDATEs, or DELETEs; cortex-viz is a read-only bridge over
@@ -86,6 +101,22 @@ DF_CEILING_FRAC = 0.10
 # drops the weak tail. Overridable via CORTEX_VIZ_ASSOC_MIN_SIM for
 # retuning on a different corpus without a code change.
 DEFAULT_SEMANTIC_MIN_SIM = 0.6
+
+# source: defaults of Cortex's get_temporal_co_access(p_window_hours
+# real DEFAULT 2.0, p_min_access integer DEFAULT 1, ...) PG function —
+# the function owns the temporal co-access model; we inherit its own
+# documented defaults rather than inventing new ones. Overridable via
+# CORTEX_VIZ_ASSOC_TEMPORAL_WINDOW_H / _TEMPORAL_MIN_ACCESS.
+DEFAULT_TEMPORAL_WINDOW_HOURS = 2.0
+DEFAULT_TEMPORAL_MIN_ACCESS = 1
+
+# source: measured on 2026-07-07 against the live cortex corpus —
+# 9 715 non-stale memories, all with last_accessed; a seed limit of
+# 10 000 covers the whole corpus and the sparsified query (top-k=8 +
+# symmetrization) returns 24 399 pairs in 1.5 s. The PG function's own
+# default (100) is sized for interactive recall, not for building a
+# full substrate. Overridable via CORTEX_VIZ_ASSOC_TEMPORAL_SEED_LIMIT.
+DEFAULT_TEMPORAL_SEED_LIMIT = 10000
 
 _ASSOCIATION_SQL = """
 WITH live_links AS (
@@ -189,6 +220,46 @@ ORDER BY source_memory_id, target_memory_id
 """
 
 
+# Pair generation is delegated to get_temporal_co_access() (Cortex's
+# PG function — proximity = 1 - dt/window over the p_limit most
+# recently accessed memories). Its raw output is burst cliques, so the
+# same top-k kNN sparsification + symmetrization as the other channels
+# is applied on top (von Luxburg 2007 sec. 2). The function already
+# emits one row per undirected pair (mem_a < mem_b); the mirror into
+# both directions exists only so top-k can be ranked per memory.
+_TEMPORAL_ASSOCIATION_SQL = """
+WITH pairs AS (
+    -- Explicit casts: psycopg binds Python float/int as double
+    -- precision/smallint, and PG's function resolution will not
+    -- implicitly narrow those to the function's (real, integer,
+    -- integer) signature.
+    SELECT mem_a, mem_b, proximity
+    FROM get_temporal_co_access(%s::real, %s::integer, %s::integer)
+),
+directed AS (
+    SELECT mem_a AS memory_id, mem_b AS neighbor_id, proximity FROM pairs
+    UNION ALL
+    SELECT mem_b AS memory_id, mem_a AS neighbor_id, proximity FROM pairs
+),
+ranked AS (
+    SELECT
+        memory_id, neighbor_id, proximity,
+        ROW_NUMBER() OVER (
+            PARTITION BY memory_id ORDER BY proximity DESC, neighbor_id
+        ) AS rn
+    FROM directed
+)
+SELECT
+    LEAST(memory_id, neighbor_id) AS source_memory_id,
+    GREATEST(memory_id, neighbor_id) AS target_memory_id,
+    MAX(proximity) AS weight
+FROM ranked
+WHERE rn <= %s
+GROUP BY LEAST(memory_id, neighbor_id), GREATEST(memory_id, neighbor_id)
+ORDER BY source_memory_id, target_memory_id
+"""
+
+
 def _resolve_top_k(top_k: int | None) -> int:
     if top_k is not None:
         return int(top_k)
@@ -207,6 +278,39 @@ def _resolve_min_sim(min_sim: float | None) -> float:
         )
     except (TypeError, ValueError):
         return DEFAULT_SEMANTIC_MIN_SIM
+
+
+def _resolve_temporal_params() -> tuple[float, int, int]:
+    """Resolve (window_hours, min_access, seed_limit) from the
+    environment, falling back to the sourced defaults above. Env-only
+    knobs (no function parameters): the three values travel together as
+    the ``get_temporal_co_access`` call signature and are operator
+    tuning, not per-call variation."""
+    try:
+        window = float(
+            os.environ.get(
+                "CORTEX_VIZ_ASSOC_TEMPORAL_WINDOW_H", DEFAULT_TEMPORAL_WINDOW_HOURS
+            )
+        )
+    except (TypeError, ValueError):
+        window = DEFAULT_TEMPORAL_WINDOW_HOURS
+    try:
+        min_access = int(
+            os.environ.get(
+                "CORTEX_VIZ_ASSOC_TEMPORAL_MIN_ACCESS", DEFAULT_TEMPORAL_MIN_ACCESS
+            )
+        )
+    except (TypeError, ValueError):
+        min_access = DEFAULT_TEMPORAL_MIN_ACCESS
+    try:
+        seed_limit = int(
+            os.environ.get(
+                "CORTEX_VIZ_ASSOC_TEMPORAL_SEED_LIMIT", DEFAULT_TEMPORAL_SEED_LIMIT
+            )
+        )
+    except (TypeError, ValueError):
+        seed_limit = DEFAULT_TEMPORAL_SEED_LIMIT
+    return window, min_access, seed_limit
 
 
 def load_co_entity_associations(
@@ -303,28 +407,79 @@ def load_semantic_associations(
     ]
 
 
+def load_temporal_associations(
+    pg_store,
+    top_k: int | None = None,
+) -> list[dict[str, Any]]:
+    """Return sparsified temporal co-access memory<->memory associations.
+
+    Args:
+        pg_store: read-only store exposing ``.query(sql, params, *,
+            batch=True)`` — this function only SELECTs (the PG function
+            it calls is STABLE).
+        top_k: associations retained per memory before symmetrizing.
+            ``None`` resolves from ``CORTEX_VIZ_ASSOC_TOPK`` (default
+            ``DEFAULT_ASSOC_TOP_K``) — deliberately the SAME knob as
+            the other channels so all kNN graphs stay equally sparse.
+
+    The ``get_temporal_co_access`` call parameters (window hours,
+    min access count, seed limit) are env-only knobs —
+    ``CORTEX_VIZ_ASSOC_TEMPORAL_WINDOW_H`` / ``_TEMPORAL_MIN_ACCESS`` /
+    ``_TEMPORAL_SEED_LIMIT`` — see ``_resolve_temporal_params``.
+
+    Returns:
+        ``[{"source_memory_id": int, "target_memory_id": int,
+        "weight": float}, ...]`` — one row per undirected pair,
+        ``source_memory_id < target_memory_id``, weight = access
+        proximity in ``(0, 1]`` (1 - dt/window as computed by the PG
+        function). Memories never accessed contribute no rows.
+    """
+    resolved_k = _resolve_top_k(top_k)
+    if resolved_k <= 0:
+        return []
+    window, min_access, seed_limit = _resolve_temporal_params()
+    rows = pg_store.query(
+        _TEMPORAL_ASSOCIATION_SQL,
+        (window, min_access, seed_limit, resolved_k),
+        batch=True,
+    )
+    return [
+        {
+            "source_memory_id": r["source_memory_id"],
+            "target_memory_id": r["target_memory_id"],
+            "weight": float(r["weight"]),
+        }
+        for r in rows
+    ]
+
+
 def combine_associations(
     co_entity_rows: list[dict[str, Any]],
     semantic_rows: list[dict[str, Any]],
+    temporal_rows: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Merge the two channels into one unified association substrate.
+    """Merge the channels into one unified association substrate.
 
-    Pure function — no I/O. Union of the two kNN graphs; per-pair
+    Pure function — no I/O. Union of the kNN graphs; per-pair
     combined weight = MAX over channels of the channel's max-normalized
     weight (see module docstring for the model and its sources).
 
     Returns one row per undirected pair, sorted by
     ``(source_memory_id, target_memory_id)``:
     ``{"source_memory_id", "target_memory_id", "weight" (in [0, 1]),
-    "shared_count" (0 for semantic-only pairs), "reason" ("co-entity",
-    "semantic", or "co-entity+semantic")}``.
+    "shared_count" (0 for pairs without co-entity evidence), "reason"
+    ("co-entity", "semantic", "temporal", or a "+"-join of the
+    channels that evidenced the pair, in that order)}``.
     """
+    temporal_rows = temporal_rows or []
     co_max = max((r["weight"] for r in co_entity_rows), default=0.0)
     sem_max = max((r["weight"] for r in semantic_rows), default=0.0)
+    temp_max = max((r["weight"] for r in temporal_rows), default=0.0)
     combined: dict[tuple[int, int], dict[str, Any]] = {}
     for rows, channel_max, reason in (
         (co_entity_rows, co_max, "co-entity"),
         (semantic_rows, sem_max, "semantic"),
+        (temporal_rows, temp_max, "temporal"),
     ):
         for r in rows:
             pair = (r["source_memory_id"], r["target_memory_id"])
@@ -354,9 +509,9 @@ def load_memory_associations(
     df_ceiling_frac: float = DF_CEILING_FRAC,
     min_sim: float | None = None,
 ) -> list[dict[str, Any]]:
-    """Load both association channels and return the unified substrate.
+    """Load all three association channels and return the unified substrate.
 
-    Two read-only SELECTs (one per channel) + a pure in-Python merge —
+    Three read-only SELECTs (one per channel) + a pure in-Python merge —
     see ``combine_associations`` for the combination model. This is the
     entry point the workflow-graph source delegates to; downstream
     (layout, community detection) consumes the unified substrate and
@@ -366,15 +521,20 @@ def load_memory_associations(
         pg_store, top_k=top_k, df_ceiling_frac=df_ceiling_frac
     )
     semantic_rows = load_semantic_associations(pg_store, top_k=top_k, min_sim=min_sim)
-    return combine_associations(co_rows, semantic_rows)
+    temporal_rows = load_temporal_associations(pg_store, top_k=top_k)
+    return combine_associations(co_rows, semantic_rows, temporal_rows)
 
 
 __all__ = [
     "load_co_entity_associations",
     "load_semantic_associations",
+    "load_temporal_associations",
     "combine_associations",
     "load_memory_associations",
     "DEFAULT_ASSOC_TOP_K",
     "DF_CEILING_FRAC",
     "DEFAULT_SEMANTIC_MIN_SIM",
+    "DEFAULT_TEMPORAL_WINDOW_HOURS",
+    "DEFAULT_TEMPORAL_MIN_ACCESS",
+    "DEFAULT_TEMPORAL_SEED_LIMIT",
 ]

@@ -108,3 +108,15 @@ def test_reason_and_label_follow_the_evidence_channel():
     assert target._edges[0].label == "semantic"
     assert target._edges[1].reason == "co-entity+semantic"
     assert target._edges[1].label == "2 shared"
+
+
+def test_temporal_only_pair_labelled_by_channel():
+    """A temporal-only pair shares no entity (shared_count=0), so its
+    label is the channel tag, same fallback as semantic-only pairs."""
+    target = _FakeTarget({NodeIdFactory.memory_id(5), NodeIdFactory.memory_id(6)})
+    ingest_association(
+        target, {"source_memory_id": 5, "target_memory_id": 6,
+                  "weight": 0.8, "shared_count": 0, "reason": "temporal"}
+    )
+    assert target._edges[0].reason == "temporal"
+    assert target._edges[0].label == "temporal"
