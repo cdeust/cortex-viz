@@ -50,11 +50,15 @@ def _build_interleaved(
         ingest_skill_usage,
         ingest_symbol,
     )
+    from cortex_viz.core.workflow_graph_association import ingest_association
     from cortex_viz.core.workflow_graph_entity import (
         ingest_about_entity,
         ingest_entity,
     )
-    from cortex_viz.core.workflow_graph_schema import GLOBAL_DOMAIN_ID
+    from cortex_viz.core.workflow_graph_schema import (
+        GLOBAL_DOMAIN_ID,
+        NodeIdFactory,
+    )
 
     builder = WorkflowGraphBuilder()
     builder._ensure_domain(GLOBAL_DOMAIN_ID, "global")  # noqa: SLF001
@@ -236,6 +240,13 @@ def _build_interleaved(
     memories_total = 0
     retained_memory_nodes: list[dict] = []
     retained_memory_edges: list[dict] = []
+    # Every memory pg-id actually ingested this build (post domain-filter,
+    # pre-discard) — the ONLY thing association ingestion can trust,
+    # since the uncapped path pops memory Node objects out of
+    # ``builder._nodes`` per-chunk (see the discard block below). Collected
+    # here so the final association pass (after Phase 3) can decide
+    # endpoint presence without re-materializing purged nodes.
+    _retained_memory_pg_ids: set[int] = set()
     # Structural baseline — every node/edge ingested before the memory
     # phase (domains, hubs, files, discussions, entities ≈ 30k). The
     # memory phase is pruned back to this size after every batch.
@@ -285,6 +296,7 @@ def _build_interleaved(
         prev_e = len(builder._edges)  # noqa: SLF001
         for ev in chunk:
             builder._ingest_memory(ev)  # noqa: SLF001
+            _retained_memory_pg_ids.add(ev.get("id"))
         # ABOUT_ENTITY edges for THIS chunk's memories — endpoints are
         # live right now (entities since Phase 1c, memories just above).
         for ev in chunk:
@@ -332,6 +344,54 @@ def _build_interleaved(
 
     # memory_entity_edges are now ingested inside the chunk loop above
     # (per-chunk, while endpoints are live) — see _links_by_mem.
+
+    # ── Phase 3b: co-entity MEMORY↔MEMORY associations (final pass) ──
+    # Must run AFTER every memory chunk above: a memory's top-k
+    # neighbors (see infrastructure.memory_associations) can live in
+    # any chunk, unlike ABOUT_ENTITY whose other endpoint (the entity)
+    # is loaded once up front in Phase 1c and stays live throughout.
+    #
+    # Endpoint presence differs by cap mode:
+    #   * ``_mem_cap > 0`` — memory Node objects stay live in
+    #     ``builder._nodes`` (bounded retention), so ``ingest_association``
+    #     can use the real builder directly.
+    #   * ``_mem_cap <= 0`` — every memory Node was popped out of
+    #     ``builder._nodes`` per-chunk above (the discard block) and
+    #     survives only as a slim dict in ``retained_memory_nodes``.
+    #     Re-inflating full Node objects just to satisfy
+    #     ``ingest_association``'s ``b._nodes`` membership check would be
+    #     wasted work, so a lightweight duck-typed adapter exposing the
+    #     retained pg-id set (as graph node ids) stands in for the
+    #     builder — ``ingest_association`` only ever reads ``_nodes`` for
+    #     membership and appends to ``_edges``, so the adapter satisfies
+    #     its entire contract.
+    class _RetainedNodesView:
+        def __init__(self, node_ids: set[str]):
+            self._nodes = node_ids
+            self._edges: list = []
+
+    if _mem_cap > 0:
+        _assoc_target = builder
+    else:
+        _assoc_target = _RetainedNodesView(
+            {NodeIdFactory.memory_id(pid) for pid in _retained_memory_pg_ids}
+        )
+    _associations = source.load_memory_associations(store)
+    if _mem_cap > 0:
+        _assoc_prev_n = len(builder._nodes)  # noqa: SLF001
+        _assoc_prev_e = len(builder._edges)  # noqa: SLF001
+    for _assoc in _associations:
+        ingest_association(_assoc_target, _assoc)
+    if _mem_cap > 0:
+        _emit_delta("associations", _assoc_prev_n, _assoc_prev_e)
+        _assoc_count = len(builder._edges) - _assoc_prev_e
+    else:
+        retained_memory_edges.extend(
+            _edge_to_dict(_e) for _e in _assoc_target._edges
+        )
+        _assoc_count = len(_assoc_target._edges)
+    if on_source_loaded is not None:
+        on_source_loaded("associations", _assoc_count)
 
     # ── Phase 4: AST symbols (deferred by default in streaming mode) ──
     if stage == "full" and not defer_native_ast:

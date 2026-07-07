@@ -11,6 +11,10 @@ from __future__ import annotations
 import re
 from typing import Any, Iterable
 
+from cortex_viz.infrastructure.memory_associations import (
+    load_co_entity_associations as _load_co_entity_associations,
+)
+
 _FILE_LINE_RE = re.compile(r"\*\*(?:File|Read):\*\*\s*`([^`]+)`")
 # Grep / Glob memory bodies: ``**Grep:** `<pattern>` in `<path>`` and
 # ``**Glob:** `<pattern>` (root=`<path>`)``. We extract the search root
@@ -303,3 +307,17 @@ def load_memory_entity_edges(pg_store) -> list[dict[str, Any]]:
     if not hasattr(pg_store, "list_memory_entity_edges"):
         return []
     return pg_store.list_memory_entity_edges()
+
+
+def load_co_entity_associations(
+    pg_store, top_k: int | None = None
+) -> list[dict[str, Any]]:
+    """Bulk-fetch sparsified co-entity MEMORY<->MEMORY associations.
+
+    Delegates to ``infrastructure.memory_associations.
+    load_co_entity_associations`` (owns the actual SQL). Shape:
+    ``[{source_memory_id, target_memory_id, weight, shared_count}, ...]``.
+    The builder synthesises one ASSOCIATES_WITH edge per row via
+    ``core.workflow_graph_association.ingest_association``, skipping any
+    whose endpoints are not in the graph."""
+    return _load_co_entity_associations(pg_store, top_k=top_k)

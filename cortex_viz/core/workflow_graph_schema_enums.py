@@ -49,6 +49,14 @@ class EdgeKind(str, Enum):
     # the ``memory_entities`` join table. Styled in
     # ``ui/unified/workflow_graph.css`` (``.wfg-link--about_entity``).
     ABOUT_ENTITY = "about_entity"
+    # ASSOCIATES_WITH — MEMORY → MEMORY link (v1 "brain associations").
+    # Produced by ``infrastructure.memory_associations.
+    # load_co_entity_associations`` (co-entity TF-IDF weighting over the
+    # ``memory_entities`` join table) and ingested by
+    # ``core.workflow_graph_association.ingest_association``. Undirected
+    # by construction (source < target); the smaller pg id is always
+    # ``source``.
+    ASSOCIATES_WITH = "associates_with"
     DISCUSSION_TOUCHED_FILE = "discussion_touched_file"
     DISCUSSION_USED_TOOL = "discussion_used_tool"
     DISCUSSION_SPAWNED_AGENT = "discussion_spawned_agent"

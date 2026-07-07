@@ -265,5 +265,13 @@ class WorkflowGraphSource:
         MEMORY→ENTITY ``about_entity`` edge."""
         return _pg.load_memory_entity_edges(pg_store)
 
+    def load_memory_associations(
+        self, pg_store, top_k: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Sparsified co-entity MEMORY↔MEMORY associations (v1 "brain
+        associations" — see ``infrastructure.memory_associations``),
+        one per ``associates_with`` edge."""
+        return _pg.load_co_entity_associations(pg_store, top_k=top_k)
+
 
 __all__ = ["WorkflowGraphSource"]

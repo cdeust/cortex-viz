@@ -27,6 +27,12 @@ EDGE_COLORS = {
     "domain-contains": "#06b6d4",
     "topic-member": "#06b6d480",
     "co-entity": "#a78bfa",
+    # associates_with — memory<->memory co-entity association (v1 "brain
+    # associations"). Distinct hue from about_entity (#40A0B8, teal) and
+    # co-entity (#a78bfa, violet). #e07a5f is the AI Architect design
+    # system's terracotta accent token stand-in (source: ai-architect
+    # design-system aia-* accent palette).
+    "associates_with": "#e07a5f",
 }
 
 PERSISTENT_COLOR = "#ec4899"
