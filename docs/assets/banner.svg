@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 340" width="820" height="340" role="img" aria-label="cortex-viz — the read-only visualization layer for Cortex: six live reading angles over your memory, sessions, and code, rendered but never remembered">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Newsreader:ital,wght@0,400;0,500;1,400&amp;display=swap');
+      .mono  { font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace; }
+      .serif { font-family: 'Newsreader', 'Iowan Old Style', Georgia, 'Times New Roman', serif; }
+      .sans  { font-family: 'Inter Tight', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+    </style>
+    <!-- ============================================================================
+         COLOUR LEGEND — every literal below traces to an AI Architect DS token
+         (the CSS custom properties, written here without their leading dashes so
+         this XML comment stays well-formed). Paper surface. oklch->sRGB values are
+         SCRIPTED (CSS Color 4 math, scratchpad/oklch2srgb.py), never eyeballed.
+           #f1eee7  DS colors.css  paper-0        cream desk ground         scripted oklch->srgb
+           #f8f7f2  DS colors.css  sheet          whiter sheet, mark fill   scripted oklch->srgb
+           #261d17  DS colors.css  pfg-0          primary warm ink          scripted oklch->srgb
+           #61554e  DS colors.css  pfg-2          muted labels              scripted oklch->srgb
+           #a53e00  DS colors.css  accent-deep    terracotta ink on paper   scripted oklch->srgb
+           #3b3129  DS colors.css  paper-line base (ruled hairlines)        scripted oklch->srgb
+         Data-only stage palette (paper re-inked, DS surfaces.css data-surface=paper):
+           #006894 stage-labile · #006a66 stage-early · #0a693c stage-late ·
+           #7d6700 stage-cons  · #753e81 stage-recon   (all scripted oklch->srgb)
+         ============================================================================ -->
+  </defs>
+
+  <!-- Cream desk ground : DS colors.css paper-0 (scripted oklch->srgb) -->
+  <rect width="820" height="340" rx="8" fill="#f1eee7"/>
+  <!-- Dossier frame: quiet hairline, no glow : DS paper-line base #3b3129 (scripted oklch->srgb) -->
+  <rect x="16" y="16" width="788" height="308" rx="6" fill="none" stroke="#3b3129" stroke-opacity="0.28" stroke-width="1"/>
+
+  <!-- Header corners (chrome micro-caps, mono) : DS pfg-2 #61554e (scripted oklch->srgb) -->
+  <text class="mono" x="30" y="35" fill="#61554e" font-size="9.5" letter-spacing="1.4">PYTHON 3.10+  ·  MIT  ·  6 VIEWS</text>
+  <text class="mono" x="790" y="35" fill="#61554e" font-size="9.5" letter-spacing="1.4" text-anchor="end">ai-architect.tools</text>
+
+  <!-- Brand mark: terracotta diamond-in-square with centre node -->
+  <rect x="388" y="44" width="44" height="44" rx="6" fill="#f8f7f2" stroke="#3b3129" stroke-opacity="0.34" stroke-width="1"/>
+  <!-- diamond + node : DS accent-deep #a53e00 (scripted oklch->srgb) -->
+  <path d="M410 50 L426 66 L410 82 L394 66 Z" fill="none" stroke="#a53e00" stroke-width="1.6" stroke-linejoin="round"/>
+  <circle cx="410" cy="66" r="3" fill="#a53e00"/>
+
+  <!-- Appellation lockup : over-line -->
+  <text class="mono" x="410" y="121" fill="#61554e" font-size="10.5" letter-spacing="2.0" text-anchor="middle">MEMORY VISUALIZATION  ·  MCP SERVER</text>
+
+  <!-- Repo name : lowercase mono identifier (DS brand card B-02), DS pfg-0 #261d17 -->
+  <text class="mono" x="410" y="163" fill="#261d17" font-size="34" font-weight="700" letter-spacing="-0.5" text-anchor="middle">cortex-viz</text>
+
+  <!-- Ruled line with terracotta diamond at centre -->
+  <line x1="286" y1="186" x2="398" y2="186" stroke="#3b3129" stroke-opacity="0.5" stroke-width="1"/>
+  <line x1="422" y1="186" x2="534" y2="186" stroke="#3b3129" stroke-opacity="0.5" stroke-width="1"/>
+  <path d="M410 180 L416 186 L410 192 L404 186 Z" fill="#a53e00"/>
+
+  <!-- The record: the product's claim, in the serif voice (Newsreader) -->
+  <text class="serif" x="410" fill="#261d17" font-size="17" text-anchor="middle"><tspan x="410" y="210">A read-only reading surface for your Cortex memory,</tspan><tspan x="410" y="235">sessions, and codebase — it renders, it <tspan font-style="italic" fill="#a53e00">never remembers.</tspan></tspan></text>
+
+  <!-- Sub-line descriptors (mono micro-caps) -->
+  <text class="mono" x="410" y="254" fill="#61554e" font-size="10" letter-spacing="1.9" text-anchor="middle">READ-ONLY  ·  LOCAL-FIRST  ·  MEASURED</text>
+
+  <!-- Tiny data glyphs: the five consolidation stages as an ordered process, stage palette -->
+  <line x1="356" y1="283" x2="464" y2="283" stroke="#3b3129" stroke-opacity="0.3" stroke-width="1"/>
+  <circle cx="356" cy="283" r="3.4" fill="#006894"/>
+  <circle cx="383" cy="283" r="3.4" fill="#006a66"/>
+  <circle cx="410" cy="283" r="3.4" fill="#0a693c"/>
+  <circle cx="437" cy="283" r="3.4" fill="#7d6700"/>
+  <circle cx="464" cy="283" r="3.4" fill="#753e81"/>
+
+  <!-- Measured ledger line (mono) : DS pfg-2 #61554e -->
+  <text class="mono" x="410" y="309" fill="#61554e" font-size="9.5" letter-spacing="0.8" text-anchor="middle">2 MCP TOOLS  ·  6 VIEWS  ·  169 TESTS  ·  PYTHON 3.10+</text>
+</svg>

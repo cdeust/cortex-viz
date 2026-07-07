@@ -1,4 +1,8 @@
 <p align="center">
+  <img src="docs/assets/banner.svg" alt="cortex-viz — the read-only visualization layer for Cortex: six live reading angles over your memory, sessions, and code, rendered but never remembered" width="100%"/>
+</p>
+
+<p align="center">
   <img src="docs/assets/cortex-trace-galaxy.png" alt="cortex-viz Trace galaxy on the paper surface — every Claude Code session is a tight phyllotaxis disk of its own prompt → action → file → memory chain, clustered around its domain's olive hub; the selected chain's disks render solid gold in place while the rest of the galaxy stays legible, and the mono status bar streams the exact counts (CHAIN · 108 STEPS · 6 537/6 537 nodes · 8 696/8 696 edges), never rounded." width="100%"/>
 </p>
 
