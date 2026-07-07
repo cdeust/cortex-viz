@@ -264,6 +264,28 @@ def run_build(store, domain_filter: str | None) -> None:
             memory_limit=_mem_limit,
         )
 
+        # ── Associative community detection (server-side) ──
+        # Replaces the browser-side label-propagation that collapsed the
+        # dense combined association substrate into one mega-community
+        # (87-93% of memories under one label, measured 2026-07-07).
+        # Leiden + CPM (resolution-limit-free) on the SPARSE co-entity
+        # channel only; the brain view still renders all three additive
+        # channels. Stamps community_id on each memory node dict here, so
+        # it rides the cache → snapshot → /api/graph/full to the client,
+        # which now just reads the field instead of computing anything.
+        # Runs in this build child (own GIL) before the bake mutates the
+        # same node dicts with x/y — the two fields coexist.
+        try:
+            from cortex_viz.server.graph_communities import attach_communities
+
+            _comm = attach_communities(baseline)
+            print(f"[cortex] associative communities: {_comm}", file=sys.stderr)
+        except Exception as _exc:  # pragma: no cover - defensive
+            print(
+                f"[cortex] community detection skipped: {_exc}",
+                file=sys.stderr,
+            )
+
         # ── Bake layout coordinates BEFORE the baseline merge ──
         # The merge's SSE emission snapshots each node into the slim
         # wire tuple, so coordinates must exist at emission time.

@@ -273,5 +273,11 @@ class WorkflowGraphSource:
         memory_associations``), one row per ``associates_with`` edge."""
         return _pg.load_memory_associations(pg_store, top_k=top_k)
 
+    def load_supersede_edges(self, pg_store) -> list[dict[str, Any]]:
+        """Recorded MEMORY→MEMORY supersession edges (directional,
+        source = newer memory — see ``infrastructure.memory_supersede``),
+        one row per ``supersedes`` edge."""
+        return _pg.load_supersede_edges(pg_store)
+
 
 __all__ = ["WorkflowGraphSource"]

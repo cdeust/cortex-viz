@@ -345,9 +345,10 @@
        new ones). Before vitals.js. -->
   <script src="/brain/js/vitals_spec.js"></script>
   <script src="/brain/js/vitals.js"></script>
-  <!-- Associative community detection (label propagation), pure graph
-       algorithm — called from boot.js's start(), before node colours and
-       the force-relax pass both need it. Must load before boot.js. -->
+  <!-- Associative community reader — reads the server-side Leiden + CPM
+       community_id off each memory node (detection runs in the build, not
+       the browser); consumed by node colours and the force-relax pass.
+       Must load before boot.js. -->
   <script src="/brain/js/communities.js"></script>
   <script src="/brain/js/boot.js"></script>
 </body>

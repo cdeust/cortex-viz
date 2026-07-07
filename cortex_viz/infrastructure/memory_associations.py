@@ -27,9 +27,16 @@ detection, no per-channel special-casing):
     measured 138 051 pairs for only 1 000 seed memories on the live
     corpus (2026-07-07) — unusable as a substrate without
     sparsification.
-  * ``load_memory_associations`` — runs all three and merges via
-    ``combine_associations`` (union of the kNN graphs, per-pair
-    max of max-normalized channel weights).
+  * ``load_memory_associations`` — runs the active channels and merges
+    via ``combine_associations`` (union of the kNN graphs, per-pair
+    max of max-normalized channel weights). All three channels are
+    active by default (additive render, user directive 2026-07-07);
+    the temporal channel can be disabled with
+    ``CORTEX_VIZ_ASSOC_TEMPORAL=0`` (see ``DEFAULT_TEMPORAL_ENABLED``).
+    Community detection is DECOUPLED from this substrate — it runs
+    server-side on the co-entity channel only
+    (``core.community_detection``), so enabling the temporal channel
+    enriches the render without touching community structure.
 
 Model (fixed — do not change without a new ADR):
 
@@ -109,6 +116,26 @@ DEFAULT_SEMANTIC_MIN_SIM = 0.6
 # CORTEX_VIZ_ASSOC_TEMPORAL_WINDOW_H / _TEMPORAL_MIN_ACCESS.
 DEFAULT_TEMPORAL_WINDOW_HOURS = 2.0
 DEFAULT_TEMPORAL_MIN_ACCESS = 1
+
+# Temporal channel default ON — the three association channels are
+# additive and simultaneously visible in the RENDER (user directive
+# 2026-07-07: co-entity + semantic + temporal complete each other; the
+# temporal channel completes, it does not supplant).
+#
+# The prior opt-in default (OFF) existed for one reason: adding the
+# temporal channel to the COMBINED substrate collapsed the browser-side
+# community detection into one mega-community (label propagation
+# percolated a single label across the extra temporal edges: 87% → 93%
+# of memories in one blob, measured 2026-07-07). That regression is now
+# impossible BY CONSTRUCTION: community detection moved server-side
+# (cortex_viz/core/community_detection.py) and runs on the SPARSE
+# co-entity channel ONLY — temporal edges never enter DETECTION, they
+# only enrich the RENDER. With the detection/rendering split, the
+# "benchmark is proof" concern that justified opt-in (community-structure
+# regression) no longer applies to enabling this channel, so it defaults
+# on. CORTEX_VIZ_ASSOC_TEMPORAL=0 still disables it for an operator who
+# wants the leaner v2 render.
+DEFAULT_TEMPORAL_ENABLED = True
 
 # source: measured on 2026-07-07 against the live cortex corpus —
 # 9 715 non-stale memories, all with last_accessed; a seed limit of
@@ -278,6 +305,17 @@ def _resolve_min_sim(min_sim: float | None) -> float:
         )
     except (TypeError, ValueError):
         return DEFAULT_SEMANTIC_MIN_SIM
+
+
+def _temporal_enabled() -> bool:
+    """Whether the temporal channel participates in the unified
+    substrate. Env knob ``CORTEX_VIZ_ASSOC_TEMPORAL`` ("1"/"true"/"on"
+    enables); default OFF — see ``DEFAULT_TEMPORAL_ENABLED``'s source
+    comment (unproven vs. the validated v2 substrate)."""
+    raw = os.environ.get("CORTEX_VIZ_ASSOC_TEMPORAL")
+    if raw is None:
+        return DEFAULT_TEMPORAL_ENABLED
+    return raw.strip().lower() in ("1", "true", "on", "yes")
 
 
 def _resolve_temporal_params() -> tuple[float, int, int]:
@@ -509,19 +547,30 @@ def load_memory_associations(
     df_ceiling_frac: float = DF_CEILING_FRAC,
     min_sim: float | None = None,
 ) -> list[dict[str, Any]]:
-    """Load all three association channels and return the unified substrate.
+    """Load the association channels and return the unified substrate.
 
-    Three read-only SELECTs (one per channel) + a pure in-Python merge —
+    One read-only SELECT per active channel + a pure in-Python merge —
     see ``combine_associations`` for the combination model. This is the
     entry point the workflow-graph source delegates to; downstream
     (layout, community detection) consumes the unified substrate and
     never distinguishes channels.
+
+    Active channels: co-entity (v1), semantic (v2), and temporal (v3)
+    are all active by default (additive render); temporal can be turned
+    off with ``CORTEX_VIZ_ASSOC_TEMPORAL=0`` (see
+    ``DEFAULT_TEMPORAL_ENABLED`` — the community-collapse regression that
+    once justified opt-in is gone now that detection is decoupled onto
+    the co-entity channel server-side).
     """
     co_rows = load_co_entity_associations(
         pg_store, top_k=top_k, df_ceiling_frac=df_ceiling_frac
     )
     semantic_rows = load_semantic_associations(pg_store, top_k=top_k, min_sim=min_sim)
-    temporal_rows = load_temporal_associations(pg_store, top_k=top_k)
+    temporal_rows = (
+        load_temporal_associations(pg_store, top_k=top_k)
+        if _temporal_enabled()
+        else []
+    )
     return combine_associations(co_rows, semantic_rows, temporal_rows)
 
 
@@ -534,6 +583,7 @@ __all__ = [
     "DEFAULT_ASSOC_TOP_K",
     "DF_CEILING_FRAC",
     "DEFAULT_SEMANTIC_MIN_SIM",
+    "DEFAULT_TEMPORAL_ENABLED",
     "DEFAULT_TEMPORAL_WINDOW_HOURS",
     "DEFAULT_TEMPORAL_MIN_ACCESS",
     "DEFAULT_TEMPORAL_SEED_LIMIT",

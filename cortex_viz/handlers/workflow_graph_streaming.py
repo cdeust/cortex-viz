@@ -51,6 +51,7 @@ def _build_interleaved(
         ingest_symbol,
     )
     from cortex_viz.core.workflow_graph_association import ingest_association
+    from cortex_viz.core.workflow_graph_supersede import ingest_supersede
     from cortex_viz.core.workflow_graph_entity import (
         ingest_about_entity,
         ingest_entity,
@@ -392,6 +393,34 @@ def _build_interleaved(
         _assoc_count = len(_assoc_target._edges)
     if on_source_loaded is not None:
         on_source_loaded("associations", _assoc_count)
+
+    # ── Phase 3c: MEMORY→MEMORY supersession edges (final pass) ──
+    # Same endpoint-presence constraints as Phase 3b (a chain's two
+    # memories can live in any chunk), so it reuses ``_assoc_target``
+    # — the real builder in bounded mode, the retained-node adapter in
+    # full-corpus mode. Directional versioning edges (newer → older),
+    # read from the recorded ``memories.supersedes_id`` column; NOT an
+    # association channel, so they bypass the layout/community
+    # substrate entirely (force_layout/communities filter to
+    # ``associates_with``).
+    _supersede_rows = source.load_supersede_edges(store)
+    if _mem_cap > 0:
+        _sup_prev_n = len(builder._nodes)  # noqa: SLF001
+        _sup_prev_e = len(builder._edges)  # noqa: SLF001
+    else:
+        _sup_prev_e = len(_assoc_target._edges)
+    for _sup in _supersede_rows:
+        ingest_supersede(_assoc_target, _sup)
+    if _mem_cap > 0:
+        _emit_delta("supersede", _sup_prev_n, _sup_prev_e)
+        _sup_count = len(builder._edges) - _sup_prev_e  # noqa: SLF001
+    else:
+        retained_memory_edges.extend(
+            _edge_to_dict(_e) for _e in _assoc_target._edges[_sup_prev_e:]
+        )
+        _sup_count = len(_assoc_target._edges) - _sup_prev_e
+    if on_source_loaded is not None:
+        on_source_loaded("supersede", _sup_count)
 
     # ── Phase 4: AST symbols (deferred by default in streaming mode) ──
     if stage == "full" and not defer_native_ast:
