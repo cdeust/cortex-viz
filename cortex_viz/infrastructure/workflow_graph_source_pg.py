@@ -17,6 +17,9 @@ from cortex_viz.infrastructure.memory_associations import (
 from cortex_viz.infrastructure.memory_associations import (
     load_memory_associations as _load_memory_associations,
 )
+from cortex_viz.infrastructure.memory_supersede import (
+    load_supersede_edges as _load_supersede_edges,
+)
 
 _FILE_LINE_RE = re.compile(r"\*\*(?:File|Read):\*\*\s*`([^`]+)`")
 # Grep / Glob memory bodies: ``**Grep:** `<pattern>` in `<path>`` and
@@ -338,3 +341,16 @@ def load_memory_associations(
     ``[{source_memory_id, target_memory_id, weight, shared_count,
     reason}, ...]``."""
     return _load_memory_associations(pg_store, top_k=top_k)
+
+
+def load_supersede_edges(pg_store) -> list[dict[str, Any]]:
+    """Bulk-fetch recorded MEMORY→MEMORY supersession edges.
+
+    Delegates to ``infrastructure.memory_supersede.load_supersede_edges``
+    (owns the actual SQL — reads the recorded ``memories.supersedes_id``
+    column, never re-derives lineage). Shape: ``[{source_memory_id,
+    target_memory_id}, ...]``, source = newer memory. The builder
+    synthesises one SUPERSEDES edge per row via
+    ``core.workflow_graph_supersede.ingest_supersede``, skipping any
+    whose endpoints are not in the graph."""
+    return _load_supersede_edges(pg_store)

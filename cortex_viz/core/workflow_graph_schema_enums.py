@@ -57,6 +57,17 @@ class EdgeKind(str, Enum):
     # by construction (source < target); the smaller pg id is always
     # ``source``.
     ASSOCIATES_WITH = "associates_with"
+    # SUPERSEDES — MEMORY → MEMORY versioning edge, DIRECTIONAL (the
+    # newer memory points at the older fact it replaces). Produced by
+    # ``infrastructure.memory_supersede.load_supersede_edges`` (reads
+    # the recorded ``memories.supersedes_id`` column — Cortex's
+    # supersede write path owns the lineage, cortex-viz never
+    # re-derives it) and ingested by
+    # ``core.workflow_graph_supersede.ingest_supersede``. Distinct from
+    # ASSOCIATES_WITH: an association is undirected co-evidence, a
+    # supersession is a directed replacement — conflating them would
+    # feed versioning lineage into the community/layout substrate.
+    SUPERSEDES = "supersedes"
     DISCUSSION_TOUCHED_FILE = "discussion_touched_file"
     DISCUSSION_USED_TOOL = "discussion_used_tool"
     DISCUSSION_SPAWNED_AGENT = "discussion_spawned_agent"
