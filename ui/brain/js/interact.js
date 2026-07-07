@@ -105,15 +105,6 @@ window.BRAIN = window.BRAIN || {};
     hoverRing.visible = true;
   }
 
-  // Resolve the node under the cursor the SAME way hover does — screen-space
-  // nearest — so a click selects exactly the node the hover ring pinned. No
-  // world-space raycast: in a dense volumetric cloud it returns the front-most
-  // point along the ray (a surface node), not the one under the crosshair.
-  function pickAt(clientX, clientY, pickPx) {
-    var idx = nearestToCursor(clientX, clientY, pickPx);
-    return idx >= 0 ? { index: idx, world: worldOf(idx) } : null;
-  }
-
   BRAIN.initPicking = function (nodes) {
     BRAIN.scene.add(ring);
     BRAIN.scene.add(hoverRing);
@@ -121,21 +112,53 @@ window.BRAIN = window.BRAIN || {};
     var tip = document.getElementById('brain-tip');
     var down = null;
     var lastHover = 0;
+    var pickIdx = -1;   // node the hover ring currently pins == what a click commits
 
-    dom.addEventListener('pointerdown', function (e) { down = { x: e.clientX, y: e.clientY }; });
+    // Pin the hover ring + tooltip on `idx` (or hide when idx < 0), and record
+    // it as the node a click will select. Shared by the throttled hover and the
+    // pointerdown refresh so the LABEL, the RING, and the eventual SELECTION are
+    // always the same node — the passive hover is throttled and can lag the
+    // cursor in the dense core, which made a click look like it grabbed an
+    // unrelated node (user report 2026-07-08).
+    function pinHover(idx, clientX, clientY) {
+      pickIdx = idx;
+      if (idx < 0) {
+        dom.style.cursor = '';
+        hoverRing.visible = false;
+        if (tip) tip.style.display = 'none';
+        return;
+      }
+      dom.style.cursor = 'pointer';
+      showHoverRing(worldOf(idx));
+      if (tip) {
+        var n = nodes[idx];
+        var kind = n.kind || n.type || '';
+        tip.textContent = (kind ? kind + ' · ' : '') + (n.label || n.id || '').slice(0, 80);
+        tip.style.left = (clientX + 14) + 'px';
+        tip.style.top = (clientY + 14) + 'px';
+        tip.style.display = 'block';
+      }
+    }
+
+    dom.addEventListener('pointerdown', function (e) {
+      down = { x: e.clientX, y: e.clientY };
+      // Recompute the pick at the EXACT press point, unthrottled and with the
+      // forgiving CLICK_PX radius, and snap the ring/tooltip to it — so the
+      // release commits precisely the node shown, not a throttle-stale one.
+      pinHover(nearestToCursor(e.clientX, e.clientY, CLICK_PX), e.clientX, e.clientY);
+    });
 
     dom.addEventListener('pointerup', function (e) {
       // Only a click if the pointer barely moved (else it was an orbit drag).
       if (!down || Math.abs(e.clientX - down.x) > 4 || Math.abs(e.clientY - down.y) > 4) return;
-      var hit = pickAt(e.clientX, e.clientY, CLICK_PX);
-      if (!hit) {
+      if (pickIdx < 0) {
         ring.visible = false;
         if (window.JUG && JUG.deselectNode) JUG.deselectNode();
         return;
       }
-      // Ring placement is handled by the graph:selectNode listener below, so
-      // a node selected via a connection link gets the same highlight.
-      BRAIN.selectNode(nodes[hit.index]);
+      // Ring placement is handled by the graph:selectNode listener below, so a
+      // node selected via a connection link gets the same highlight.
+      BRAIN.selectNode(nodes[pickIdx]);   // exactly the node the ring pinned at press
     });
 
     // Hover: throttled label tooltip + pointer cursor. Skipped while dragging.
@@ -144,23 +167,7 @@ window.BRAIN = window.BRAIN || {};
       var now = (window.performance && performance.now) ? performance.now() : Date.now();
       if (now - lastHover < HOVER_MS) return;
       lastHover = now;
-      var idx = nearestToCursor(e.clientX, e.clientY, HOVER_PX);
-      if (idx < 0) {
-        dom.style.cursor = '';
-        hoverRing.visible = false;
-        if (tip) tip.style.display = 'none';
-        return;
-      }
-      dom.style.cursor = 'pointer';
-      showHoverRing(worldOf(idx));   // pin the exact node a click will select
-      if (tip) {
-        var n = nodes[idx];
-        var kind = n.kind || n.type || '';
-        tip.textContent = (kind ? kind + ' · ' : '') + (n.label || n.id || '').slice(0, 80);
-        tip.style.left = (e.clientX + 14) + 'px';
-        tip.style.top = (e.clientY + 14) + 'px';
-        tip.style.display = 'block';
-      }
+      pinHover(nearestToCursor(e.clientX, e.clientY, HOVER_PX), e.clientX, e.clientY);
     });
 
     dom.addEventListener('pointerleave', function () {
