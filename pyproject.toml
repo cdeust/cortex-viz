@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cortex-viz"
-version = "2.2.0"
+version = "2.2.1"
 description = "Visualization and graph MCP server for Cortex — neural graph, methodology map, workflow graph, and trace UI extracted from the Cortex memory engine"
 readme = "README.md"
 license = "MIT"
