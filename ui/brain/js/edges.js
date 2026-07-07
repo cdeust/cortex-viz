@@ -36,6 +36,12 @@ window.BRAIN = window.BRAIN || {};
   // a node of that kind (either endpoint) keep full alpha; every other edge
   // dims to this fraction. UI-legibility param, not sourced.
   var FILTER_EDGE_DIM = 0.04;
+  // Hover/selection highlight (BRAIN.highlightNode): edges INCIDENT to the
+  // node brighten to at least HL_FLOOR so even faint long-range associations
+  // read; every other edge fades to HL_DIM * its base alpha so the incident
+  // web stands out. UI-legibility params, not sourced.
+  var HL_FLOOR = 0.85;
+  var HL_DIM = 0.05;
 
   function endId(v) { return (typeof v === 'object' && v) ? v.id : v; }
 
@@ -196,6 +202,47 @@ window.BRAIN = window.BRAIN || {};
       for (var v = 0; v < vc; v++) arr[vs + v] = a;
     }
     attr.needsUpdate = true;
+  };
+
+  // Highlight node `row` and its associations: edges INCIDENT to it brighten to
+  // >= HL_FLOOR while every other edge fades to HL_DIM * base, and — in the same
+  // pass — the set of neighbour rows is collected and handed to
+  // BRAIN.highlightPoints so the endpoints those edges lead to swell too. Reuses
+  // the exact per-edge vertex-range splat as repaintEdgeFilter (no geometry
+  // rebuild) and honours BRAIN.filterKind. `row < 0` (or null) restores the
+  // plain filter state for both edges and points. Callers invoke it only when
+  // the highlighted row CHANGES (one buffer re-upload per node, not per tick).
+  BRAIN.highlightNode = function (row) {
+    var idx = BRAIN.edgeIndex, lines = BRAIN.edgeLines;
+    if (!idx || !lines) return;
+    if (row == null || row < 0) {
+      BRAIN.repaintEdgeFilter();
+      if (BRAIN.highlightPoints) BRAIN.highlightPoints(null);
+      return;
+    }
+    var attr = lines.geometry.getAttribute('ealpha');
+    var arr = attr.array;
+    var kind = BRAIN.filterKind, kindByRow = BRAIN.nodeKindByRow;
+    var neighbours = new Set();
+    neighbours.add(row);
+    for (var i = 0; i < idx.vCount.length; i++) {
+      var vc = idx.vCount[i];
+      if (vc === 0) continue;
+      var sr = idx.srcRow[i], dr = idx.dstRow[i];
+      var incident = sr === row || dr === row;
+      if (incident) neighbours.add(sr === row ? dr : sr);
+      var ff = 1.0;
+      if (kind && kindByRow) {
+        var sk = kindByRow[sr], tk = kindByRow[dr];
+        ff = (sk === kind || tk === kind) ? 1.0 : FILTER_EDGE_DIM;
+      }
+      var a = incident ? Math.max(idx.baseAlpha[i], HL_FLOOR) * ff
+                       : idx.baseAlpha[i] * HL_DIM * ff;
+      var vs = idx.vStart[i];
+      for (var v = 0; v < vc; v++) arr[vs + v] = a;
+    }
+    attr.needsUpdate = true;
+    if (BRAIN.highlightPoints) BRAIN.highlightPoints(neighbours);
   };
 
   // Scratch arrays reused across edges to avoid per-edge allocation.

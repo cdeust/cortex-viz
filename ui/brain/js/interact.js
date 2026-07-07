@@ -112,7 +112,21 @@ window.BRAIN = window.BRAIN || {};
     var tip = document.getElementById('brain-tip');
     var down = null;
     var lastHover = 0;
-    var pickIdx = -1;   // node the hover ring currently pins == what a click commits
+    var pickIdx = -1;     // node the hover ring currently pins == what a click commits
+    var hoverRow = -1;    // node currently under the cursor (-1 = none)
+    var selectedRow = -1; // node locked by a click; its highlight persists until deselect
+    var shownRow = -1;    // row whose highlight is currently painted (skips redundant repaints)
+
+    // Show the HOVERED node's associations while hovering; otherwise fall back
+    // to the SELECTED node's (so a committed selection keeps its edges + neighbour
+    // nodes lit until the user clicks away or closes the detail panel — both emit
+    // graph:deselectNode). Repaints only when the effective row changes.
+    function applyHighlight() {
+      var target = hoverRow >= 0 ? hoverRow : selectedRow;
+      if (target === shownRow) return;
+      if (BRAIN.highlightNode) BRAIN.highlightNode(target);
+      shownRow = target;
+    }
 
     // Pin the hover ring + tooltip on `idx` (or hide when idx < 0), and record
     // it as the node a click will select. Shared by the throttled hover and the
@@ -122,6 +136,9 @@ window.BRAIN = window.BRAIN || {};
     // unrelated node (user report 2026-07-08).
     function pinHover(idx, clientX, clientY) {
       pickIdx = idx;
+      // Light up the hovered node's associations (edges + neighbour nodes).
+      hoverRow = idx;
+      applyHighlight();
       if (idx < 0) {
         dom.style.cursor = '';
         hoverRing.visible = false;
@@ -173,6 +190,8 @@ window.BRAIN = window.BRAIN || {};
     dom.addEventListener('pointerleave', function () {
       hoverRing.visible = false;
       if (tip) tip.style.display = 'none';
+      hoverRow = -1;
+      applyHighlight();   // fall back to the selected node's highlight, or clear
     });
 
     if (window.JUG && JUG.on) {
@@ -182,8 +201,14 @@ window.BRAIN = window.BRAIN || {};
         var i = BRAIN.indexOfId ? BRAIN.indexOfId.get(node.id) : null;
         if (i == null) { ring.visible = false; return; }
         showRing(worldOf(i));
+        selectedRow = i;   // lock the highlight on the selection until deselect
+        applyHighlight();
       });
-      JUG.on('graph:deselectNode', function () { ring.visible = false; });
+      JUG.on('graph:deselectNode', function () {
+        ring.visible = false;
+        selectedRow = -1;
+        applyHighlight();
+      });
     }
   };
 })();
