@@ -10,6 +10,26 @@ window.BRAIN = window.BRAIN || {};
 (function () {
   var MODEL_URL = '/brain/models/brain.glb';
 
+  // ?assoc=0 disables the associative relaxation pass (force_layout.js) for
+  // A/B comparison against the pure anatomical placement — default ON.
+  BRAIN.ASSOC_RELAX_ON = location.search.indexOf('assoc=0') === -1;
+
+  // User-driven per-kind isolate filter (points.js/edges.js read this
+  // directly, same namespace pattern as ASSOC_RELAX_ON). null = NO
+  // filtering — every kind renders at full alpha (the required default). Set
+  // by clicking a "Node colours" row in the legend (wireLegendFilter, below);
+  // never driven by a URL param — this replaced a hardcoded ?focus=memory
+  // mode that only ever isolated one hardcoded kind.
+  BRAIN.filterKind = null;
+
+  // Colour MEMORY nodes by their associative community (communities.js +
+  // force_layout.js's per-community attractor) instead of by consolidation
+  // stage. Default true because it directly serves the "distinct
+  // communities" goal Change A exists for; entity/symbol/file/etc. colours
+  // are never touched by this flag (resolveNodeColor below gates it to
+  // kind === 'memory' only).
+  BRAIN.COLOR_BY_COMMUNITY = true;
+
   function setStatus(msg) {
     var el = document.getElementById('loading-sub');
     if (el) el.textContent = msg;
@@ -62,7 +82,24 @@ window.BRAIN = window.BRAIN || {};
   // shared by the point cloud AND the edge web (edges gradient between their
   // endpoints' colours). Falls back to the neutral --field-point token (never
   // a literal hex) when neither JUG nor the node's own colour resolves.
+  // Memory nodes: when COLOR_BY_COMMUNITY is on and BRAIN.communities has
+  // been computed (start(), before this is first called), colour from the
+  // node's associative community instead of the galaxy's per-kind colour.
+  // Every other kind is untouched — falls straight through to the existing
+  // JUG/galaxy resolution below.
   function resolveNodeColor(n) {
+    if (BRAIN.COLOR_BY_COMMUNITY && BRAIN.communities && (n.kind || n.type) === 'memory') {
+      var cid = BRAIN.communities.communityOf.get(n.id);
+      // Only DISTINCT communities (>= BRAIN.MIN_COMMUNITY_SIZE) get a hue —
+      // same gate force_layout.js uses for attractors, so colour and position
+      // agree: a memory in a tiny/singleton community keeps the default
+      // per-kind colour and stays at its anatomical anchor.
+      var big = cid != null && BRAIN.communities.sizes &&
+        (BRAIN.communities.sizes.get(cid) || 0) >= (BRAIN.MIN_COMMUNITY_SIZE || 1);
+      if (big && BRAIN.PALETTE && BRAIN.PALETTE.communityColor) {
+        return BRAIN.PALETTE.communityColor(cid);
+      }
+    }
     return (window.JUG && JUG.getNodeColor) ? JUG.getNodeColor(n) : ((n && n.color) || fieldPointHex());
   }
 
@@ -203,9 +240,16 @@ window.BRAIN = window.BRAIN || {};
     };
     // Dots carry a category TAG, not a baked colour — paintLegendDots()
     // resolves the actual hex immediately after and again on every
-    // cortex:surface-change.
-    var row = function (cat, label, count, cls) {
-      return '<div class="leg-item' + (cls ? ' ' + cls : '') + '">' +
+    // cortex:surface-change. `kindKey`, when given, makes the row a
+    // keyboard-and-click filter toggle (wireLegendFilter, below) — used only
+    // on kind-level rows/headers, never on per-sub-kind rows, since the
+    // filter isolates a whole kind, not a sub-label.
+    var row = function (cat, label, count, cls, kindKey) {
+      var kindAttrs = kindKey
+        ? ' data-kind="' + esc(kindKey) + '" tabindex="0" role="button" aria-pressed="false"'
+        : '';
+      var kindCls = kindKey ? ' leg-clickable' : '';
+      return '<div class="leg-item' + (cls ? ' ' + cls : '') + kindCls + '"' + kindAttrs + '>' +
         '<span class="leg-dot" data-color-cat="' + esc(cat) + '"></span>' +
         '<span class="leg-label">' + esc(label) + '</span>' +
         (count != null ? '<span class="leg-n">' + count.toLocaleString('en-US') +
@@ -225,24 +269,40 @@ window.BRAIN = window.BRAIN || {};
       '(affine fit). Memory depth = heat rank (relative).</div>';
 
     // Exhaustive node legend — every sub-kind, every kind that renders it.
-    html += '<div class="leg-head" style="margin-top:10px">Node colours</div>';
+    // Kind-level rows/headers are click-filterable ("Node colours row →
+    // isolate this kind"); text hint added once as a leg-note below.
+    html += '<div class="leg-head" style="margin-top:10px">Node colours ' +
+      '<span style="text-transform:none;letter-spacing:normal">(click to isolate)</span></div>';
     KIND_ORDER.forEach(function (k) {
       var cmap = byKindCat[k];
       if (!cmap) return;
-      var cats = Object.keys(cmap).sort(function (a, b) { return cmap[b] - cmap[a]; });
       var kindLabel = k.replace('_', ' ');
+      // Memory, coloured by association community (Change A): the per-stage
+      // breakdown below would show one essentially-random community hue per
+      // stage-label row, which is noise, not signal — a single summary row
+      // instead. Falls through to the normal per-stage breakdown when
+      // COLOR_BY_COMMUNITY is off.
+      if (k === 'memory' && BRAIN.COLOR_BY_COMMUNITY && BRAIN.communities) {
+        html += row('info', 'memory — coloured by association community', data.byKind[k], null, k);
+        html += '<div class="leg-note">' + BRAIN.communities.count.toLocaleString('en-US') +
+          ' communities detected (label propagation over associative edges).</div>';
+        return;
+      }
+      var cats = Object.keys(cmap).sort(function (a, b) { return cmap[b] - cmap[a]; });
       var lmap = byKindLabel[k];
       var labels = lmap ? Object.keys(lmap).sort(function (a, b) {
         return lmap[b].n - lmap[a].n;
       }) : [];
       if (labels.length <= 1) {
         // Single sub-kind (or ungraded kind): one row, kind name + total.
-        html += row(cats[0], kindLabel, data.byKind[k]);
+        html += row(cats[0], kindLabel, data.byKind[k], null, k);
         return;
       }
       // Graded kind: header with the kind + total, then one row per sub-kind
       // (count-descending), swatched with its most common rendered category.
-      html += '<div class="leg-subhead">' + esc(kindLabel) +
+      // The header itself (not the sub-rows) is the click-filter target.
+      html += '<div class="leg-subhead leg-clickable" data-kind="' + esc(k) +
+        '" tabindex="0" role="button" aria-pressed="false">' + esc(kindLabel) +
         '<span class="leg-n">' + (data.byKind[k] || 0).toLocaleString('en-US') +
         '</span></div>';
       labels.forEach(function (lab) {
@@ -255,6 +315,51 @@ window.BRAIN = window.BRAIN || {};
     });
     host.innerHTML = html;
     paintLegendDots();
+    wireLegendFilter(host);
+    updateLegendActiveState();
+  }
+
+  // Sets BRAIN.filterKind (toggle off if re-clicking the active kind), then
+  // asks points.js/edges.js to re-derive alpha/size from it — cheap
+  // attribute repaint, no position/geometry rebuild (same shape as
+  // repaintNodeColors above).
+  function toggleFilterKind(kind) {
+    BRAIN.filterKind = (BRAIN.filterKind === kind) ? null : kind;
+    if (BRAIN.repaintPointFilter) BRAIN.repaintPointFilter();
+    if (BRAIN.repaintEdgeFilter) BRAIN.repaintEdgeFilter();
+    updateLegendActiveState();
+  }
+
+  function updateLegendActiveState() {
+    var rows = document.querySelectorAll('#legend [data-kind]');
+    for (var i = 0; i < rows.length; i++) {
+      var active = rows[i].getAttribute('data-kind') === BRAIN.filterKind;
+      rows[i].classList.toggle('leg-active', active);
+      rows[i].setAttribute('aria-pressed', active ? 'true' : 'false');
+    }
+  }
+
+  // Delegated click + keyboard (Enter/Space) handling on the legend host —
+  // wired once (legendWired guard) since fillLegend only rebuilds #legend's
+  // innerHTML on the initial load in this view, but the guard makes a future
+  // re-render safe without double-firing. WCAG 2.1 AA: every filter row is a
+  // real keyboard target (tabindex + role=button + Enter/Space activation),
+  // not a click-only div.
+  var legendWired = false;
+  function wireLegendFilter(host) {
+    if (legendWired) return;
+    legendWired = true;
+    host.addEventListener('click', function (ev) {
+      var el = ev.target.closest ? ev.target.closest('[data-kind]') : null;
+      if (el) toggleFilterKind(el.getAttribute('data-kind'));
+    });
+    host.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter' && ev.key !== ' ' && ev.key !== 'Spacebar') return;
+      var el = ev.target.closest ? ev.target.closest('[data-kind]') : null;
+      if (!el) return;
+      ev.preventDefault();
+      toggleFilterKind(el.getAttribute('data-kind'));
+    });
   }
 
   function start() {
@@ -271,6 +376,29 @@ window.BRAIN = window.BRAIN || {};
         var soup = results[1];
         if (!data.nodes.length) throw new Error('graph returned 0 nodes');
         lastNodes = data.nodes;
+        // indexOfId (id -> row in `positions`/`data.nodes`) is normally built
+        // by installDetailBridge, which runs after buildPoints. Community
+        // detection AND colouring both need it earlier — build the same
+        // ordinal map (nodes[] order == positions row order, per placeNodes)
+        // right after fetch. installDetailBridge rebuilds an identical Map
+        // later; harmless. Per-row kind lookup (BRAIN.nodeKindByRow) rides
+        // along the same pass — edges.js's filter repaint needs it to test
+        // an edge's endpoint kinds without re-touching data.nodes each time.
+        var ordinal = new Map();
+        var kindByRow = new Array(data.nodes.length);
+        for (var oi = 0; oi < data.nodes.length; oi++) {
+          ordinal.set(data.nodes[oi].id, oi);
+          kindByRow[oi] = data.nodes[oi].kind || data.nodes[oi].type;
+        }
+        BRAIN.indexOfId = ordinal;
+        BRAIN.nodeKindByRow = kindByRow;
+        if (BRAIN.detectCommunities) {
+          setStatus('detecting associative communities…');
+          BRAIN.communities = BRAIN.detectCommunities(data.nodes, data.edges, BRAIN.indexOfId);
+          console.log('[brain] associative communities:', BRAIN.communities.count);
+        }
+        // buildNodeColors reads BRAIN.communities via resolveNodeColor, so it
+        // must run AFTER community detection above.
         var nodeColors = buildNodeColors(data.nodes);
         setStatus('building the anatomical atlas…');
         var atlas = BRAIN.buildAtlas(soup.box);
@@ -279,6 +407,12 @@ window.BRAIN = window.BRAIN || {};
         setStatus('placing ' + data.nodes.length.toLocaleString('en-US') + ' nodes by memory system…');
         var placed = BRAIN.placeNodes(data.nodes, atlas, surface, domainInfo);
         var positions = placed.positions;
+        if (BRAIN.ASSOC_RELAX_ON && BRAIN.relaxAssociative) {
+          setStatus('relaxing associative memory clusters…');
+          var relaxStats = BRAIN.relaxAssociative(data.nodes, positions, data.edges, BRAIN.indexOfId, surface,
+            { communities: BRAIN.communities });
+          console.log('[brain] associative relax:', relaxStats);
+        }
         BRAIN.nodePositions = positions;
         setStatus('weaving the cortical net…');
         BRAIN.buildScaffold(soup);

@@ -58,12 +58,20 @@ window.BRAIN = window.BRAIN || {};
   }
 
   // Pull a point inward so it sits just inside the cortical surface in its
-  // own direction. Leaves interior points (already inside) untouched.
+  // own direction, leaving interior points (already inside) untouched.
+  // Exposed as BRAIN.clampToSurface so other modules (force_layout.js) can
+  // keep points inside the hull without re-deriving the radiusInDir math.
+  BRAIN.clampToSurface = function (x, y, z, surface) {
+    var r = Math.sqrt(x * x + y * y + z * z);
+    if (r <= 1e-6) return { x: x, y: y, z: z };
+    var maxR = surface.radiusInDir(x, y, z) * INSET;
+    if (r > maxR) { var k = maxR / r; return { x: x * k, y: y * k, z: z * k }; }
+    return { x: x, y: y, z: z };
+  };
+
   function clampInside(p, surface) {
-    var r = Math.sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
-    if (r <= 1e-6) return;
-    var maxR = surface.radiusInDir(p.x, p.y, p.z) * INSET;
-    if (r > maxR) { var k = maxR / r; p.x *= k; p.y *= k; p.z *= k; }
+    var c = BRAIN.clampToSurface(p.x, p.y, p.z, surface);
+    p.x = c.x; p.y = c.y; p.z = c.z;
   }
 
   // Gaussian blob around a world centre with per-axis sigma.

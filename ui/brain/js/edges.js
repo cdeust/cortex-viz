@@ -30,6 +30,12 @@ window.BRAIN = window.BRAIN || {};
   var FLOOR = 0.04;        // fraction of BASE kept for the longest edges
   var K_CURVE = 6;         // sample points per tract-routed edge (=> 5 segments)
   var BOW_MIN = 0.15, BOW_MAX = 1.0;  // edge-length scaling of the tract bow
+  // User-driven per-kind filter (BRAIN.filterKind, set by clicking a legend
+  // row — boot.js). Default null (NO filtering): every edge keeps its
+  // computed length-based alpha. When a kind is selected, edges INCIDENT to
+  // a node of that kind (either endpoint) keep full alpha; every other edge
+  // dims to this fraction. UI-legibility param, not sourced.
+  var FILTER_EDGE_DIM = 0.04;
 
   function endId(v) { return (typeof v === 'object' && v) ? v.id : v; }
 
@@ -104,16 +110,29 @@ window.BRAIN = window.BRAIN || {};
       }
     }
 
-    // Pass 2: fill segment geometry (2 verts/segment).
+    // Pass 2: fill segment geometry (2 verts/segment). vStart/vCount/baseAlpha
+    // persist per-edge (indexed by the SAME `i` as edges[]) so a later filter
+    // change (repaintEdgeFilter) can re-derive each edge's alpha and splat it
+    // across exactly its own vertex range without rebuilding geometry.
+    // vStart defaults to -1 (untouched = dropped edge, never written below).
     var seg = new Float32Array(totalSeg * 6);
     var alpha = new Float32Array(totalSeg * 2);
     var ecol = new Float32Array(totalSeg * 6);
+    var vStart = new Int32Array(E).fill(-1);
+    var vCount = new Int32Array(E);
+    var baseAlpha = new Float32Array(E);
     var p = 0;  // vertex pointer (counts vertices, *3 for floats)
     var pa = bezierBuffers();
     for (i = 0; i < E; i++) {
       if (srcRow[i] < 0 || segCnt[i] === 0) continue;
-      p = writeEdge(i, srcRow[i] * 3, dstRow[i] * 3, ctrl, segCnt[i], positions,
-        nodeColors, seg, ecol, alpha, p, shortLen, longLen, span, pa);
+      var so = srcRow[i] * 3, to = dstRow[i] * 3;
+      var a = edgeAlpha(positions[so], positions[so + 1], positions[so + 2],
+        positions[to], positions[to + 1], positions[to + 2], shortLen, longLen, span);
+      var vBefore = p;
+      p = writeEdge(i, so, to, ctrl, segCnt[i], positions, nodeColors, seg, ecol, alpha, p, a, pa);
+      vStart[i] = vBefore;
+      vCount[i] = p - vBefore;
+      baseAlpha[i] = a;
     }
 
     var geom = new THREE.BufferGeometry();
@@ -138,6 +157,9 @@ window.BRAIN = window.BRAIN || {};
     BRAIN.edgeCount = totalSeg;
     BRAIN.curvedEdgeCount = curved;
     BRAIN.droppedEdgeCount = dropped;
+    // Persisted for repaintEdgeFilter() (below) — keyed by the same edge
+    // index `i` as the `edges` array passed in.
+    BRAIN.edgeIndex = { srcRow: srcRow, dstRow: dstRow, vStart: vStart, vCount: vCount, baseAlpha: baseAlpha };
     console.log('[brain] edges:', E, '| drawn:', E - dropped, '| tract-routed:', curved,
       '-> segments:', totalSeg);
     if (dropped > 0) {
@@ -148,16 +170,45 @@ window.BRAIN = window.BRAIN || {};
     return lines;
   };
 
+  // Re-derive every edge's alpha from its persisted length-based baseAlpha
+  // and the CURRENT BRAIN.filterKind (null => factor 1.0 for all, matching
+  // the un-filtered build exactly), then splat each edge's factor across
+  // exactly its own vertex range and re-upload — no geometry rebuild, same
+  // cheap repaint shape as points.js's repaintPointFilter. BRAIN.nodeKindByRow
+  // (boot.js) supplies each endpoint's kind by row.
+  BRAIN.repaintEdgeFilter = function () {
+    var idx = BRAIN.edgeIndex, lines = BRAIN.edgeLines;
+    if (!idx || !lines) return;
+    var attr = lines.geometry.getAttribute('ealpha');
+    var arr = attr.array;
+    var kind = BRAIN.filterKind;
+    var kindByRow = BRAIN.nodeKindByRow;
+    for (var i = 0; i < idx.vCount.length; i++) {
+      var vc = idx.vCount[i];
+      if (vc === 0) continue;
+      var ff = 1.0;
+      if (kind && kindByRow) {
+        var sk = kindByRow[idx.srcRow[i]], tk = kindByRow[idx.dstRow[i]];
+        ff = (sk === kind || tk === kind) ? 1.0 : FILTER_EDGE_DIM;
+      }
+      var a = idx.baseAlpha[i] * ff;
+      var vs = idx.vStart[i];
+      for (var v = 0; v < vc; v++) arr[vs + v] = a;
+    }
+    attr.needsUpdate = true;
+  };
+
   // Scratch arrays reused across edges to avoid per-edge allocation.
   function bezierBuffers() { return { cur: [0, 0, 0], nxt: [0, 0, 0] }; }
 
   // Write one edge (straight: 1 segment; curved: K_CURVE-1 Bezier segments) into
-  // the geometry buffers starting at vertex pointer `p`; returns the new pointer.
+  // the geometry buffers starting at vertex pointer `p`; returns the new
+  // pointer. `a` is the edge's final alpha (already length-scaled by the
+  // caller) applied to every vertex this edge writes.
   function writeEdge(i, so, to, ctrl, segCount, positions, nodeColors,
-    seg, ecol, alpha, p, shortLen, longLen, span, pa) {
+    seg, ecol, alpha, p, a, pa) {
     var ax = positions[so], ay = positions[so + 1], az = positions[so + 2];
     var bx = positions[to], by = positions[to + 1], bz = positions[to + 2];
-    var a = edgeAlpha(ax, ay, az, bx, by, bz, shortLen, longLen, span);
     var cx = ctrl[i * 3], cy = ctrl[i * 3 + 1], cz = ctrl[i * 3 + 2];
     var steps = segCount;          // straight => 1, curved => K_CURVE-1
     var cur = pa.cur, nxt = pa.nxt;

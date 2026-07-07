@@ -191,8 +191,27 @@ window.BRAIN = window.BRAIN || {};
     return t ? String(t).toLowerCase() : null;
   }
 
+  // Categorical hue per associative community (communities.js), for Change A
+  // memory-node colouring (BRAIN.COLOR_BY_COMMUNITY). Deterministic: hue
+  // steps by the golden angle (360 * (1 - 1/phi), phi = golden ratio) so
+  // consecutive community ids land maximally far apart on the wheel instead
+  // of clustering near each other — same golden-angle spiral force_layout.js
+  // uses to place the community attractors, applied to hue instead of a
+  // sphere. Visual calibration (saturation/lightness), not a sourced
+  // physical constant — same status as every other UI-legibility constant in
+  // this module; only the hue-STEP angle traces to a source.
+  //   source: 360 * (1 - 1/phi) golden-angle step, see force_layout.js
+  //   GOLDEN_ANGLE_RAD comment (Saff & Kuijlaars 1997).
+  var COMMUNITY_GOLDEN_ANGLE_DEG = 137.50776;
+
+  function communityColor(communityId) {
+    var hue = ((communityId * COMMUNITY_GOLDEN_ANGLE_DEG) % 360 + 360) % 360;
+    return 'hsl(' + hue.toFixed(1) + ', 58%, 42%)';
+  }
+
   BRAIN.PALETTE = {
     STAGE_COLORS: STAGE_COLORS_PROXY,
+    communityColor: communityColor,
     // Sub-label for a NODE: canonical metadata first (entityType /
     // symbol_type / stage), colour reverse-lookup as the documented
     // fallback for payloads that predate the metadata fields.

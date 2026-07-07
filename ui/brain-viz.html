@@ -141,6 +141,15 @@
   .leg-item.sub { margin-left:12px; font-size:11px; }
   .leg-item.sub .leg-label { color:var(--text-muted); }
 
+  /* Click-to-isolate kind rows (boot.js wireLegendFilter / Change B). Applies
+     to both .leg-item and .leg-subhead rows carrying data-kind. Focus-visible
+     ring for keyboard operability (WCAG 2.1 AA — every filter row is a real
+     keyboard target, not a click-only div). */
+  .leg-clickable { cursor:pointer; border-radius:4px; padding:1px 3px; margin:1px -3px; }
+  .leg-clickable:hover { background:var(--selection); }
+  .leg-clickable.leg-active { background:var(--selection); font-weight:600; }
+  .leg-clickable:focus-visible { outline:2px solid var(--accent-ink); outline-offset:1px; }
+
   /* Impact box whose target file isn't a node in this graph — not clickable. */
   .impact-box--dead { opacity:.5; cursor:default !important; }
   .impact-box[data-file]:not(.impact-box--dead):hover { background:var(--selection); }
@@ -324,6 +333,7 @@
   <script src="/brain/js/regions.js"></script>
   <script src="/brain/js/scaffold.js"></script>
   <script src="/brain/js/layout.js"></script>
+  <script src="/brain/js/force_layout.js"></script>
   <script src="/brain/js/points.js"></script>
   <script src="/brain/js/edges.js"></script>
   <script src="/brain/js/detail_bridge.js"></script>
@@ -335,6 +345,10 @@
        new ones). Before vitals.js. -->
   <script src="/brain/js/vitals_spec.js"></script>
   <script src="/brain/js/vitals.js"></script>
+  <!-- Associative community detection (label propagation), pure graph
+       algorithm — called from boot.js's start(), before node colours and
+       the force-relax pass both need it. Must load before boot.js. -->
+  <script src="/brain/js/communities.js"></script>
   <script src="/brain/js/boot.js"></script>
 </body>
 </html>
