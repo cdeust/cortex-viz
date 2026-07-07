@@ -61,8 +61,7 @@ window.BRAIN = window.BRAIN || {};
   }
 
   // Ambient-mass neutral fallback token (DS gate G7: opaque --field-point,
-  // never a literal hex — same token scaffold.js/brain_mesh.js read for their
-  // own ambient tint). CortexPalette.hex() is the primary reader; when the
+  // never a literal hex). CortexPalette.hex() is the primary reader; when the
   // palette script hasn't loaded yet, fall back to reading the CSS custom
   // property straight off the root (surface-toggle.js stamps data-surface
   // before first paint, so the property is already the correct one for the
@@ -414,8 +413,10 @@ window.BRAIN = window.BRAIN || {};
           console.log('[brain] associative relax:', relaxStats);
         }
         BRAIN.nodePositions = positions;
-        setStatus('weaving the cortical net…');
-        BRAIN.buildScaffold(soup);
+        // No cortical scaffold net: the opaque ink shell (brain_mesh.js) already
+        // carries the anatomical form; a knn net of surface vertices read as a
+        // blue wireframe under the membrane that buried the data cloud (user
+        // report 2026-07-07) — textbook-plate = clean silhouette + data over it.
         BRAIN.buildPoints(data.nodes, positions, nodeColors);
         BRAIN.installDetailBridge(data.nodes, data.edges);
         // The real synapses: every graph edge, cross-region ones bowed along the
