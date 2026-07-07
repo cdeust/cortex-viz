@@ -1,24 +1,24 @@
 // Cortex Brain View — selection + hover.
 //
-// Picking a node from a 279k-point additive cloud has to be forgiving: a thin
-// ray rarely lands exactly on a 1px sprite. So a click first tries a wide
-// raycast (front-most hit wins), then falls back to a screen-space nearest
-// search — the node whose projected pixel is closest to the cursor (and, among
-// near ones, closest to the camera). Hover runs the same search, throttled, to
-// show a label tooltip so you can see what you're about to select. The detail
-// card itself is the galaxy's panel, opened via BRAIN.selectNode (detail_bridge).
+// Picking a node from a 279k-point additive cloud is done in SCREEN SPACE: the
+// node whose projected pixel is closest to the cursor wins (with only a slight
+// front-bias to break ties between overlapping nodes). Click and hover run the
+// EXACT SAME search — so the node the hover ring pins is the node a click
+// selects (WYSIWYG). A previous version resolved a click with a front-most
+// raycast instead: inside the brain volume that grabbed whatever surface node
+// sat in front of the interior node under the cursor, selecting an unrelated
+// node (user report 2026-07-08). A world-space ray cannot honour "the node I'm
+// pointing at" in a dense volumetric cloud — only the screen-space projection
+// can. The detail card is the galaxy's panel, opened via BRAIN.selectNode
+// (detail_bridge).
 
 window.BRAIN = window.BRAIN || {};
 
 (function () {
-  var RAY_THRESHOLD = 3.0;   // world-space ray proximity for a direct point hit
-  var CLICK_PX = 34;         // screen-space fallback radius for a click
+  var CLICK_PX = 34;         // screen-space pick radius for a click
   var HOVER_PX = 18;         // tighter radius for the hover tooltip
   var HOVER_MS = 90;         // min gap between hover searches (≈11 Hz)
 
-  var raycaster = new THREE.Raycaster();
-  raycaster.params.Points.threshold = RAY_THRESHOLD;
-  var pointer = new THREE.Vector2();
   var tmp = new THREE.Vector3();
 
   function makeRing(color, opacity, ri, ro) {
@@ -105,13 +105,12 @@ window.BRAIN = window.BRAIN || {};
     hoverRing.visible = true;
   }
 
-  function pickAt(clientX, clientY, fallbackPx) {
-    pointer.x = (clientX / window.innerWidth) * 2 - 1;
-    pointer.y = -(clientY / window.innerHeight) * 2 + 1;
-    raycaster.setFromCamera(pointer, BRAIN.camera);
-    var hits = raycaster.intersectObject(BRAIN.points, false);
-    if (hits.length) return { index: hits[0].index, world: hits[0].point.clone() };
-    var idx = nearestToCursor(clientX, clientY, fallbackPx);
+  // Resolve the node under the cursor the SAME way hover does — screen-space
+  // nearest — so a click selects exactly the node the hover ring pinned. No
+  // world-space raycast: in a dense volumetric cloud it returns the front-most
+  // point along the ray (a surface node), not the one under the crosshair.
+  function pickAt(clientX, clientY, pickPx) {
+    var idx = nearestToCursor(clientX, clientY, pickPx);
     return idx >= 0 ? { index: idx, world: worldOf(idx) } : null;
   }
 
