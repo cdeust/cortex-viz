@@ -140,6 +140,16 @@ window.BRAIN = window.BRAIN || {};
   // plain filter state. Same cheap two-attribute re-upload as
   // repaintPointFilter; callers invoke it only on a hovered/selected CHANGE.
   var HL_SIZE_GAIN = 2.2;
+  // Non-neighbour nodes dim only LIGHTLY on hover/selection — they stay clearly
+  // visible as spatial context, they just recede so the hovered node (full
+  // alpha + HL_SIZE_GAIN swell) pops out of the mass. This is the contrast the
+  // user asked for: "dimmed, not inexistant" (2026-07-09). An earlier pass
+  // faded them to FILTER_DIM_ALPHA (0.05) to rescue the ~20 incident edges from
+  // the 93k-point cloud, but that erased the whole field and lost the hovered
+  // node with it; the edges are now carried by the bold LineSegments2 overlay
+  // (edges.js), so the cloud no longer has to vanish for them to read. Tunable
+  // UI-legibility param, not sourced.
+  var HL_DIM_ALPHA = 0.4;
   BRAIN.highlightPoints = function (rowSet) {
     if (!BRAIN.points || !BRAIN.pointNodes) return;
     if (!rowSet || rowSet.size === 0) { BRAIN.repaintPointFilter(); return; }
@@ -151,8 +161,11 @@ window.BRAIN = window.BRAIN || {};
         sizeAttr.array[i] = nodeSize(nodes[i]) * HL_SIZE_GAIN;
         alphaAttr.array[i] = POINT_ALPHA;
       } else {
+        // Light dim: keep the context cloud visible, just subordinate. Size
+        // unchanged so the field keeps its spatial shape. Math.min honours an
+        // already-tighter per-kind filter (a filtered-out kind stays at 0.05).
         sizeAttr.array[i] = nodeSize(nodes[i]);
-        alphaAttr.array[i] = nodeAlpha(nodes[i]);
+        alphaAttr.array[i] = Math.min(nodeAlpha(nodes[i]), HL_DIM_ALPHA);
       }
     }
     sizeAttr.needsUpdate = true;
