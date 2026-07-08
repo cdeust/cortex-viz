@@ -65,7 +65,6 @@ def _build_interleaved(
     from cortex_viz.handlers.workflow_graph_streaming_wiki import (
         ingest_wiki_memory_edges,
         ingest_wiki_pages_and_links,
-        ingest_wiki_source_edges,
     )
     from cortex_viz.core.workflow_graph_schema import (
         GLOBAL_DOMAIN_ID,
@@ -202,24 +201,19 @@ def _build_interleaved(
 
     # ── Phase 1d: wiki nodes + wiki links ("brain wiki nodes") — see
     # ``handlers.workflow_graph_streaming_wiki.ingest_wiki_pages_and_links``.
+    # NOTE: wiki -> FILE edges (ADR-0051 wiki.page_sources) are deliberately
+    # NOT resolved here. Their FILE endpoint is only complete after the L6 AST
+    # sweep (AST-indexed files land there, not in the baseline), so resolving
+    # at baseline time missed every AST-only file. They are resolved once, at
+    # finalisation, over the cumulative cache — see
+    # ``server.graph_build_wiki_source.resolve_wiki_source_over_cache`` and
+    # ``server.graph_build_run._resolve_wiki_source_edges`` (VOLET ①, mem 4262203).
     if _WIKI_ON:
         ingest_wiki_pages_and_links(
             builder=builder,
             source=source,
             store=store,
             filter_by_domain=_filter,
-            notify_loaded=notify_loaded,
-            ingest_loop=_ingest_loop,
-        )
-        # Wiki -> file edges (ADR-0051 wiki.page_sources) — must run AFTER
-        # wiki nodes exist (just above) and files are finalised (Phase 1b,
-        # already ran). See ingest_wiki_source_edges docstring: no
-        # _RetainedNodesView widening needed in either cap mode (FILE
-        # nodes are never purged).
-        ingest_wiki_source_edges(
-            builder=builder,
-            source=source,
-            store=store,
             notify_loaded=notify_loaded,
             ingest_loop=_ingest_loop,
         )
