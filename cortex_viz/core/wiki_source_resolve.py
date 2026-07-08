@@ -16,10 +16,12 @@ requires reconstructing that absolute path: ``<project source root>/
 <source_path>``.
 
 The project's source root is resolved via ``wiki_coverage.
-_project_source_root``, the SAME git-repo-discovery registry
-(``shared.domain_mapping``) that function already uses for the file-level
-wiki-coverage audit — reusing the existing convention rather than
-inventing a second one.
+source_roots_for_domain``, the SAME git-repo-discovery registry
+(``shared.domain_mapping``) the file-level wiki-coverage audit uses —
+reusing the existing convention rather than inventing a second one. A
+domain can be a *family* (``cortex`` collapses five sibling repos), so
+that function returns EVERY candidate root and ``_select_root``
+disambiguates to the one repo that actually holds the file on disk.
 
 Best-effort by construction: this is a STRING match (reconstructed
 absolute path -> hash -> dict lookup), not a filesystem walk. If the
@@ -38,12 +40,51 @@ Pure core logic plus the same accepted filesystem-read exception
 
 from __future__ import annotations
 
+import os
 import posixpath
 
-from cortex_viz.core.wiki_coverage import _project_source_root
+from cortex_viz.core.wiki_coverage import source_roots_for_domain
 from cortex_viz.core.workflow_graph_schema import NodeIdFactory
 
 _DOMAIN_PREFIX = "domain:"
+
+
+def _select_root(roots: list[str], source_path: str) -> str | None:
+    """Pick the single source root that actually holds ``source_path``.
+
+    ``roots`` are every checked-out repo backing the wiki page's domain
+    (a *family* like ``cortex`` collapses five sibling repos — see
+    ``wiki_coverage.source_roots_for_domain``). The file lives in exactly
+    one of them; the domain tag alone cannot say which, so we disambiguate
+    by filesystem presence — the same filesystem-read discipline this
+    module already documents.
+
+    Resolution (precision over recall — the wiki->file join must be
+    ``sans erreur``):
+
+    * exactly one repo → that repo (fast path; identical to the historic
+      single-root behaviour, no disk read);
+    * a family, and exactly ONE sibling holds the file on disk → that one;
+    * a family, and NONE hold it on disk → the primary (first) root, so a
+      symlink/casing skew still yields a *candidate* id the caller's
+      node-set check will confirm-or-skip (never a fabricated edge);
+    * a family, and MORE THAN ONE sibling holds the same relative path →
+      genuinely ambiguous → ``None`` (skip rather than guess wrong).
+    """
+    if not roots:
+        return None
+    if len(roots) == 1:
+        return roots[0]
+    present = [
+        root
+        for root in roots
+        if os.path.exists(posixpath.join(root.rstrip("/"), source_path))
+    ]
+    if len(present) == 1:
+        return present[0]
+    if not present:
+        return roots[0]
+    return None
 
 
 def resolve_file_node_id(domain_id: str | None, source_path: str | None) -> str | None:
@@ -77,7 +118,7 @@ def resolve_file_node_id(domain_id: str | None, source_path: str | None) -> str 
     if not source_path:
         return None
     canonical = domain_id[len(_DOMAIN_PREFIX) :]
-    root = _project_source_root(canonical)
+    root = _select_root(source_roots_for_domain(canonical), source_path)
     if not root:
         return None
     abs_path = posixpath.join(root.rstrip("/"), source_path)
