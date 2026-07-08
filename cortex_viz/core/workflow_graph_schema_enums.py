@@ -106,8 +106,10 @@ class EdgeKind(str, Enum):
     # / 'derived') and ``confidence`` its recorded confidence, so the
     # frontend can style the three provenance kinds distinctly without a
     # separate EdgeKind per kind. Produced by ``infrastructure.wiki_graph.
-    # load_wiki_page_sources`` and ingested by
-    # ``core.workflow_graph_wiki.ingest_wiki_source``. Endpoint resolution
+    # load_wiki_page_sources`` and resolved at build finalisation by
+    # ``server.graph_build_wiki_source.resolve_wiki_source_over_cache`` —
+    # AFTER the L6 AST sweep, so the FILE endpoint set is complete (VOLET ①,
+    # mem 4262203). Endpoint resolution
     # (``core.wiki_source_resolve.resolve_file_node_id``) is best-effort —
     # a row whose ``source_path`` doesn't resolve to a live FILE node is
     # silently skipped (no fabricated node), same contract as WIKI_LINKS.

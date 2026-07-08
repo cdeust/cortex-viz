@@ -406,10 +406,11 @@ def load_wiki_page_sources(pg_store) -> list[dict[str, Any]]:
     (``wiki.page_sources``, ADR-0051), every ``link_kind`` included.
 
     Delegates to ``infrastructure.wiki_graph.load_wiki_page_sources``.
-    Shape: ``[{page_id, source_path, link_kind, confidence}, ...]``. The
-    builder synthesises one WIKI_SOURCE edge per row (once
+    Shape: ``[{page_id, source_path, link_kind, confidence}, ...]``. One
+    WIKI_SOURCE edge is synthesised per row at build finalisation (once
     ``core.wiki_source_resolve.resolve_file_node_id`` resolves
-    ``source_path`` to a live FILE node id) via
-    ``core.workflow_graph_wiki.ingest_wiki_source``, skipping any row
+    ``source_path`` to a live FILE node id) by
+    ``server.graph_build_wiki_source.resolve_wiki_source_over_cache`` —
+    after the L6 AST sweep completes the FILE-node set — skipping any row
     whose page or resolved file endpoint is not in the graph."""
     return _load_wiki_page_sources(pg_store)

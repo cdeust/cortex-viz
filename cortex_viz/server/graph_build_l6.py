@@ -61,6 +61,10 @@ def run_l6(
     from cortex_viz.infrastructure.ap_bridge import (
         resolve_graph_paths,
     )
+    from cortex_viz.infrastructure.ap_graph_root import (
+        absolutize,
+        graph_source_root,
+    )
     from cortex_viz.infrastructure.workflow_graph_source_ast import (
         WorkflowGraphASTSource,
     )
@@ -240,6 +244,34 @@ def run_l6(
                 continue
             # Persist for the next run.
             _cache_store(proj_name, sig, list(syms), list(edgs))
+
+        # ── Normalize AP paths to ABSOLUTE (VOLET ①, 2026-07-08, mem 4262203) ──
+        # AP emits repo-RELATIVE file paths (its graph stays portable). Every
+        # OTHER FILE node in the workflow graph is keyed by the ABSOLUTE path —
+        # tool-event files use the absolute ``ev["file_path"]``, and
+        # ``wiki_source_resolve.resolve_file_node_id`` reconstructs
+        # ``<repo root>/<source_path>``. Reconstruct ``<root>/<relative>`` HERE,
+        # once, so every FILE node, SYMBOL id, and AST edge this project mints
+        # below shares that ONE canonical scheme. Two payoffs: a tool-touched
+        # file and its AST symbols collapse onto a single node (instead of a
+        # relative-keyed duplicate), and wiki pages can link to AST-indexed
+        # files (the previously-broken ``décision -> code`` join). ``root`` is
+        # AP's ``meta.json`` sidecar (canonical) or the repo registry
+        # (transitional, pre-re-index); when neither resolves, ``absolutize``
+        # returns the path unchanged — the pre-fix behaviour, no regression.
+        # Both file_path (symbols) AND src_file/dst_file (edges) are rewritten
+        # so symbol ids computed from either side stay consistent.
+        _root = graph_source_root(gp, proj_name)
+        if _root:
+            for _s in syms:
+                _fp = _s.get("file_path")
+                if _fp:
+                    _s["file_path"] = absolutize(_root, _fp)
+            for _e in edgs:
+                for _k in ("src_file", "dst_file"):
+                    _v = _e.get(_k)
+                    if _v:
+                        _e[_k] = absolutize(_root, _v)
 
         # Each symbol belongs to ITS PROJECT's domain — not the
         # global hub. The L0 phase emits domain ids as

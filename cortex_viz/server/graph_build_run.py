@@ -159,6 +159,35 @@ def run_build(store, domain_filter: str | None) -> None:
         # event stream module is available. Fresh dedup state per build.
         _merge = make_merge(domain_filter, _events)
 
+        def _resolve_wiki_source_edges() -> None:
+            """Resolve wiki.page_sources -> FILE edges over the cumulative
+            cache, at finalisation, when the FILE-node set is COMPLETE.
+
+            wiki_source is the ONE wiki edge whose endpoint (a FILE) is
+            completed by a LATER pipeline stage — tool-touched files land at
+            the baseline, AST files at L6 — so, unlike wiki<->wiki and
+            wiki->memory (both endpoints builder-local), it cannot resolve
+            inside the baseline builder without missing every AST-only file
+            (VOLET ①, mem 4262203). Called from BOTH finalisation points: the
+            AP-disabled early return (baseline IS the full graph) and the
+            post-L6 completion.
+            """
+            try:
+                from cortex_viz.server.graph_build_wiki_source import (
+                    resolve_wiki_source_over_cache,
+                )
+
+                count = resolve_wiki_source_over_cache(store, merge=_merge)
+                print(
+                    f"[cortex] wiki_source edges resolved: {count}",
+                    file=sys.stderr,
+                )
+            except Exception as _exc:  # pragma: no cover - defensive
+                print(
+                    f"[cortex] wiki_source resolution skipped: {_exc}",
+                    file=sys.stderr,
+                )
+
         from cortex_viz.handlers.workflow_graph import _node_to_dict
 
         def _on_source_loaded(label: str, count: int) -> None:
@@ -402,6 +431,9 @@ def run_build(store, domain_filter: str | None) -> None:
             # Persist the authoritative full layout for the tile path
             # (no L6/AST nodes when AP is disabled, so the baseline IS the
             # full graph). Runs in this child process — own GIL.
+            # Resolve wiki -> file edges first: with AP off the baseline is the
+            # complete FILE set, so this is the sole resolution point.
+            _resolve_wiki_source_edges()
             _set_progress(
                 phase="layout",
                 pct=0.95,
@@ -447,6 +479,10 @@ def run_build(store, domain_filter: str | None) -> None:
         )
         if not reached_done:
             return
+
+        # Wiki -> source-file edges, now that L6 has materialised every
+        # AST FILE node (see _resolve_wiki_source_edges).
+        _resolve_wiki_source_edges()
 
         # Done.
         cur = state._graph_cache["data"]

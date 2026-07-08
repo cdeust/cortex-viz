@@ -20,9 +20,7 @@ from cortex_viz.core.workflow_graph_wiki import (
     ingest_wiki_link,
     ingest_wiki_memory,
     ingest_wiki_page,
-    ingest_wiki_source,
 )
-import cortex_viz.core.workflow_graph_wiki as workflow_graph_wiki_mod
 from cortex_viz.handlers.workflow_graph_streaming import _build_interleaved
 
 
@@ -130,103 +128,14 @@ def test_ingest_wiki_memory_missing_memory_endpoint_dropped_silently():
     assert target._edges == []
 
 
-# ── ingest_wiki_source ──────────────────────────────────────────────
-
-
-class _FakeNode:
-    def __init__(self, domain_id):
-        self.domain_id = domain_id
-
-
-class _FakeNodeTarget:
-    """Like ``_FakeTarget`` but ``_nodes`` is a dict (id -> node-like
-    object with ``.domain_id``), matching ``ingest_wiki_source``'s real
-    contract (it reads ``b._nodes.get(page_id).domain_id``, not just
-    membership)."""
-
-    def __init__(self, nodes: dict):
-        self._nodes = nodes
-        self._edges: list = []
-
-
-def test_ingest_wiki_source_creates_edge_when_resolved_and_present(monkeypatch):
-    page_id = NodeIdFactory.wiki_id(1)
-    file_id = NodeIdFactory.file_id("/repo/cortex/foo.py")
-    target = _FakeNodeTarget(
-        {page_id: _FakeNode("domain:cortex"), file_id: object()}
-    )
-    monkeypatch.setattr(
-        workflow_graph_wiki_mod,
-        "resolve_file_node_id",
-        lambda domain_id, source_path: file_id,
-    )
-    ingest_wiki_source(
-        target,
-        {
-            "page_id": 1,
-            "source_path": "foo.py",
-            "link_kind": "documents",
-            "confidence": 1.0,
-        },
-    )
-    assert len(target._edges) == 1
-    edge = target._edges[0]
-    assert edge.source == page_id
-    assert edge.target == file_id
-    assert edge.kind == EdgeKind.WIKI_SOURCE.value
-    assert edge.label == "documents"
-    assert edge.confidence == 1.0
-
-
-def test_ingest_wiki_source_missing_page_node_dropped_silently(monkeypatch):
-    target = _FakeNodeTarget({})
-    monkeypatch.setattr(
-        workflow_graph_wiki_mod,
-        "resolve_file_node_id",
-        lambda domain_id, source_path: "file:doesnotmatter",
-    )
-    ingest_wiki_source(target, {"page_id": 1, "source_path": "foo.py"})
-    assert target._edges == []
-
-
-def test_ingest_wiki_source_unresolved_path_dropped_silently(monkeypatch):
-    page_id = NodeIdFactory.wiki_id(1)
-    target = _FakeNodeTarget({page_id: _FakeNode("domain:cortex")})
-    monkeypatch.setattr(
-        workflow_graph_wiki_mod,
-        "resolve_file_node_id",
-        lambda domain_id, source_path: None,
-    )
-    ingest_wiki_source(target, {"page_id": 1, "source_path": "foo.py"})
-    assert target._edges == []
-
-
-def test_ingest_wiki_source_resolved_but_file_node_absent_dropped_silently(
-    monkeypatch,
-):
-    """The core "no fabricated node" contract: resolution can produce a
-    candidate id, but if no FILE node with that id exists in the graph
-    (the file was never touched by any Claude tool event), no edge is
-    drawn."""
-    page_id = NodeIdFactory.wiki_id(1)
-    target = _FakeNodeTarget({page_id: _FakeNode("domain:cortex")})
-    monkeypatch.setattr(
-        workflow_graph_wiki_mod,
-        "resolve_file_node_id",
-        lambda domain_id, source_path: "file:not-in-graph",
-    )
-    ingest_wiki_source(target, {"page_id": 1, "source_path": "foo.py"})
-    assert target._edges == []
-
-
-def test_ingest_wiki_source_none_ids_skipped():
-    target = _FakeNodeTarget({})
-    ingest_wiki_source(target, {"page_id": None, "source_path": "foo.py"})
-    ingest_wiki_source(target, {"page_id": 1, "source_path": None})
-    assert target._edges == []
-
-
 # ── Full-build regression guard: both cap modes ────────────────────
+#
+# wiki -> FILE (``wiki_source``) edges are NO LONGER emitted by
+# ``_build_interleaved``: their FILE endpoint is only complete after the L6 AST
+# sweep, so they are resolved at finalisation over the cumulative cache. Those
+# edges are covered by ``test_graph_build_wiki_source.py``; the tests below
+# guard only the wiki NODE + wiki->memory (``documents``) behaviour, which
+# stays builder-local (VOLET ①, mem 4262203).
 
 
 class _FakeWikiSource:
@@ -360,35 +269,17 @@ def test_wiki_node_and_edges_emitted_in_bounded_cap_mode():
     assert result["meta"]["counts"]["wiki"] == 1
 
 
-def test_wiki_source_edge_emitted_in_bounded_cap_mode(monkeypatch):
-    """FILE nodes are never purged in either cap mode, so the wiki->file
-    phase needs no _RetainedNodesView widening — this is the bounded-mode
-    half of that regression guard."""
+def test_no_wiki_source_edges_in_interleaved_output(monkeypatch):
+    """``_build_interleaved`` must NOT emit wiki_source edges anymore — the
+    FILE endpoint is incomplete until L6, so resolution moved to the
+    finalisation pass (``graph_build_wiki_source``). Guards against a
+    regression that re-adds the premature baseline-time resolution."""
     import cortex_viz.core.wiki_source_resolve as resolve_mod
 
-    monkeypatch.setattr(resolve_mod, "_project_source_root", lambda c: "/repo")
-    result = _run(memory_limit=10)
-    edges = result["edges"]
-    source_edges = [e for e in edges if e["kind"] == "wiki_source"]
-    assert len(source_edges) == 1
-    assert source_edges[0]["label"] == "documents"
-    # The second page_sources row ("not-a-real-file.py") resolves to a
-    # candidate id with no matching FILE node — correctly dropped, not
-    # fabricated.
-    assert all(e["target"] != NodeIdFactory.file_id("/repo/not-a-real-file.py")
-               for e in edges)
-
-
-def test_wiki_source_edge_survives_uncapped_mode(monkeypatch):
-    """Uncapped mode (memory_limit=0) purges MEMORY nodes per-chunk but
-    never touches FILE or WIKI nodes — the wiki->file phase must still
-    see both endpoints live without any adapter widening."""
-    import cortex_viz.core.wiki_source_resolve as resolve_mod
-
-    monkeypatch.setattr(resolve_mod, "_project_source_root", lambda c: "/repo")
-    result = _run(memory_limit=0)
-    source_edges = [e for e in result["edges"] if e["kind"] == "wiki_source"]
-    assert len(source_edges) == 1
+    monkeypatch.setattr(resolve_mod, "source_roots_for_domain", lambda c: ["/repo"])
+    for cap in (10, 0):
+        result = _run(memory_limit=cap)
+        assert [e for e in result["edges"] if e["kind"] == "wiki_source"] == []
 
 
 def test_wiki_memory_edge_survives_uncapped_mode_regression_guard():

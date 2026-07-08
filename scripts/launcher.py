@@ -10,11 +10,13 @@ Usage:
     python3 scripts/launcher.py <module>            # any module entry point
 
 Modelled on Cortex's launcher (husk-detection, atomic --target install,
-PEP 668 handling), trimmed to cortex-viz's needs: the base MCP runtime plus
-the Postgres trio the read-only bridges hard-import. The heavy viz-tile
-extras (datashader/igraph/pyarrow) are NOT installed here — they back only
-the opt-in ``?viz=tilemap`` renderer, whose startup warmup and request paths
-already degrade gracefully when the extra is absent.
+PEP 668 handling), trimmed to cortex-viz's needs: the base MCP runtime, the
+Postgres trio the read-only bridges hard-import, and the community-detection
+pair (igraph + leidenalg) the default brain view depends on. The remaining
+heavy viz-tile extras (datashader/pyarrow) are NOT installed here — they back
+only the opt-in ``?viz=tilemap`` renderer, whose startup warmup and request
+paths already degrade gracefully when the extra is absent (community
+detection does NOT degrade gracefully — see ``_REQUIRED``).
 """
 
 from __future__ import annotations
@@ -42,6 +44,20 @@ def _resolve_paths() -> tuple[str, str]:
 # (import_name, pip_spec) — the base MCP runtime + the Postgres trio that
 # memory_read/pg_store hard-import at module load. Mirrors pyproject's base
 # deps + the ``data`` extra.
+#
+# igraph + leidenalg (pyproject's ``community`` extra) are REQUIRED, not an
+# opt-in viz extra: the default brain view detects associative communities
+# server-side (Leiden + CPM over the co-entity channel — see
+# core.community_detection). When they are absent, detect_communities
+# degrades to an empty mapping, NO memory node gets a community_id, and the
+# brain view collapses to "0 communities detected" — the exact regression
+# observed 2026-07-08 when a deps_dir rebuilt without them. That degradation
+# is silent and user-visible, so these belong in the guaranteed runtime set.
+# Both ship as abi3 wheels (igraph cp39-abi3, leidenalg cp38-abi3) → no
+# compilation, and they load on any CPython >= 3.8 including 3.14.
+# source: fix validated 2026-07-08 — install into deps_dir restored 4706
+# communities (largest 1.57%) on the live corpus; see also pyproject
+# ``[community]`` and its Traag et al. 2019/2011 citations.
 _REQUIRED = [
     ("fastmcp", "fastmcp>=2.0.0"),
     ("pydantic", "pydantic>=2.0.0"),
@@ -50,6 +66,8 @@ _REQUIRED = [
     ("psycopg", "psycopg[binary]>=3.1"),
     ("psycopg_pool", "psycopg_pool>=3.2"),
     ("pgvector", "pgvector>=0.3"),
+    ("igraph", "igraph>=0.11"),
+    ("leidenalg", "leidenalg>=0.10"),
 ]
 
 

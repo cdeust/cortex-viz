@@ -124,22 +124,48 @@ _SKIP_DIRECTORIES: Final[frozenset[str]] = frozenset(
 )
 
 
+def source_roots_for_domain(domain: str) -> list[str]:
+    """Return every filesystem source root whose repo canonicalises to
+    ``domain``, in registry-discovery order.
+
+    A single ``canonical`` name can back MORE THAN ONE checked-out repo:
+    ``shared.domain_mapping._group_repos`` deliberately collapses a repo
+    family to one canonical for cognitive-domain grouping (all
+    ``cortex-*`` siblings share ``domain:cortex`` so the viz shows one
+    hub, not five). That grouping is correct for domains and hubs, but it
+    means "the source root for domain X" is ambiguous whenever X is a
+    family — callers that must land on the ONE repo containing a specific
+    file (wiki page -> source-file edges) need every candidate root, then
+    disambiguate by which one actually holds the file on disk.
+
+    Returns an empty list when the domain isn't tied to any git repo
+    (e.g. the ``_general`` catch-all, or a memory-only tag with no
+    checked-out tree).
+    """
+    try:
+        from cortex_viz.shared.domain_mapping import _build_registry
+    except Exception:
+        return []
+    registry = _build_registry()
+    return [repo.fs_path for repo in registry.repos if repo.canonical == domain]
+
+
 def _project_source_root(domain: str) -> str | None:
-    """Resolve a domain name to its filesystem source root.
+    """Resolve a domain name to its *primary* filesystem source root.
+
+    The primary root is the first repo discovered for the domain — the
+    family's main repo in practice (``cortex`` before ``cortex-viz``).
+    Sufficient for the file-level coverage audit, which reports against a
+    single tree. For the repo-exact join that wiki-page -> source-file
+    edges need, use :func:`source_roots_for_domain` and disambiguate by
+    filesystem presence.
 
     Returns ``None`` when the domain isn't tied to a git repo (e.g.
     the ``_general`` catch-all bucket, or a domain that exists only as
     a memory tag without a checked-out tree).
     """
-    try:
-        from cortex_viz.shared.domain_mapping import _build_registry
-    except Exception:
-        return None
-    registry = _build_registry()
-    for repo in registry.repos:
-        if repo.canonical == domain:
-            return repo.fs_path
-    return None
+    roots = source_roots_for_domain(domain)
+    return roots[0] if roots else None
 
 
 def list_source_files(root: str) -> list[str]:
