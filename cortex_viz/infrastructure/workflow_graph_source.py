@@ -296,5 +296,11 @@ class WorkflowGraphSource:
         ``workflow_graph_source_pg.load_wiki_memory_links``."""
         return _pg.load_wiki_memory_links(pg_store)
 
+    def load_wiki_page_sources(self, pg_store) -> list[dict[str, Any]]:
+        """Page-to-source-file links (``wiki.page_sources``, ADR-0051),
+        one per ``wiki_source`` edge. See
+        ``workflow_graph_source_pg.load_wiki_page_sources``."""
+        return _pg.load_wiki_page_sources(pg_store)
+
 
 __all__ = ["WorkflowGraphSource"]

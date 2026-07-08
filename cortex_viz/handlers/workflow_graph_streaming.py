@@ -65,6 +65,7 @@ def _build_interleaved(
     from cortex_viz.handlers.workflow_graph_streaming_wiki import (
         ingest_wiki_memory_edges,
         ingest_wiki_pages_and_links,
+        ingest_wiki_source_edges,
     )
     from cortex_viz.core.workflow_graph_schema import (
         GLOBAL_DOMAIN_ID,
@@ -207,6 +208,18 @@ def _build_interleaved(
             source=source,
             store=store,
             filter_by_domain=_filter,
+            notify_loaded=notify_loaded,
+            ingest_loop=_ingest_loop,
+        )
+        # Wiki -> file edges (ADR-0051 wiki.page_sources) — must run AFTER
+        # wiki nodes exist (just above) and files are finalised (Phase 1b,
+        # already ran). See ingest_wiki_source_edges docstring: no
+        # _RetainedNodesView widening needed in either cap mode (FILE
+        # nodes are never purged).
+        ingest_wiki_source_edges(
+            builder=builder,
+            source=source,
+            store=store,
             notify_loaded=notify_loaded,
             ingest_loop=_ingest_loop,
         )

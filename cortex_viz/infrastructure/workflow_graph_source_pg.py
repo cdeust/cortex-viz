@@ -27,6 +27,9 @@ from cortex_viz.infrastructure.wiki_graph import (
     load_wiki_memory_links as _load_wiki_memory_links,
 )
 from cortex_viz.infrastructure.wiki_graph import (
+    load_wiki_page_sources as _load_wiki_page_sources,
+)
+from cortex_viz.infrastructure.wiki_graph import (
     load_wiki_pages as _load_wiki_pages,
 )
 
@@ -396,3 +399,17 @@ def load_wiki_memory_links(pg_store) -> list[dict[str, Any]]:
     ``core.workflow_graph_wiki.ingest_wiki_memory``, skipping any
     whose endpoints are not in the graph."""
     return _load_wiki_memory_links(pg_store)
+
+
+def load_wiki_page_sources(pg_store) -> list[dict[str, Any]]:
+    """Bulk-fetch every wiki-page -> source-file link
+    (``wiki.page_sources``, ADR-0051), every ``link_kind`` included.
+
+    Delegates to ``infrastructure.wiki_graph.load_wiki_page_sources``.
+    Shape: ``[{page_id, source_path, link_kind, confidence}, ...]``. The
+    builder synthesises one WIKI_SOURCE edge per row (once
+    ``core.wiki_source_resolve.resolve_file_node_id`` resolves
+    ``source_path`` to a live FILE node id) via
+    ``core.workflow_graph_wiki.ingest_wiki_source``, skipping any row
+    whose page or resolved file endpoint is not in the graph."""
+    return _load_wiki_page_sources(pg_store)

@@ -98,6 +98,13 @@ window.BRAIN = window.BRAIN || {};
     entity: 'atl',                 // semantic (Squire 2004)
     symbol: 'parietal_temporal',   // structural knowledge (design analogy)
     file: 'parahippocampal',       // episodic context / source documents
+    // wiki -> lateral_temporal: curated documentation is consolidated
+    // declarative knowledge ABOUT the codebase, distinct from the raw
+    // episodic file/memory record — same semantic-neocortex family as
+    // `entity` (Squire 2004) but the lateral (not anterior) temporal
+    // region, alongside `atl`, so the two node kinds sit near but not
+    // on top of each other. Design analogy, not a mapping Squire makes.
+    wiki: 'lateral_temporal',
     discussion: 'precuneus_pcc',   // session context (default-mode hub)
     skill: 'striatum',             // procedural: habit learning (Knowlton 1996)
     command: 'striatum',
@@ -205,6 +212,11 @@ window.BRAIN = window.BRAIN || {};
   BRAIN.MEMORY_SYSTEMS = [
     { label: 'episodic (memory, files)', repKind: 'memory', colorCat: 'episodic', regions: ['hippocampus', 'parahippocampal', 'amygdala'] },
     { label: 'semantic (entities)', repKind: 'entity', colorCat: 'info', regions: ['atl', 'lateral_temporal'] },
+    // wiki shares the lateral_temporal region with entities (both
+    // semantic/declarative) but gets its own legend row + accent colour
+    // (JUG._tok.accentDeep, config.js getNodeColor) so curated wiki pages
+    // are visually distinct from raw knowledge-graph entities.
+    { label: 'documentation (wiki pages)', repKind: 'wiki', colorCat: 'accentDeep', regions: ['lateral_temporal'] },
     { label: 'structural (symbols)', repKind: 'symbol', colorCat: 'info', regions: ['parietal_temporal'] },
     { label: 'procedural (skills, tools, agents)', repKind: 'skill', colorCat: 'info', regions: ['striatum', 'cerebellum'] },
     { label: 'hubs (domains)', repKind: 'domain', colorCat: 'hub', regions: ['precuneus_pcc', 'superior_frontal', 'thalamus'] },

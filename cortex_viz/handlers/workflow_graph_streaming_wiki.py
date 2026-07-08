@@ -21,6 +21,7 @@ from cortex_viz.core.workflow_graph_wiki import (
     ingest_wiki_link,
     ingest_wiki_memory,
     ingest_wiki_page,
+    ingest_wiki_source,
 )
 
 
@@ -57,6 +58,37 @@ def ingest_wiki_pages_and_links(
     wiki_links = source.load_wiki_links(store)
     notify_loaded("wiki_links", wiki_links)
     ingest_loop("wiki_links", wiki_links, ingest_wiki_link, fn_takes_builder=True)
+
+
+def ingest_wiki_source_edges(
+    *,
+    builder,
+    source,
+    store,
+    notify_loaded: Callable[[str, list], None],
+    ingest_loop: Callable[..., None],
+) -> None:
+    """Phase 1d (cont'd): WIKI -> FILE ``wiki_source`` edges from
+    ``wiki.page_sources`` (ADR-0051).
+
+    Must run AFTER ``ingest_wiki_pages_and_links`` (WIKI nodes must
+    exist) — caller enforces this by calling it immediately after in
+    ``_build_interleaved``. Files are finalised in Phase 1b, strictly
+    before Phase 1d, so both endpoints are already candidates by the
+    time this runs.
+
+    UNLIKE Phase 3d's wiki->memory edges, this phase needs NO
+    ``_RetainedNodesView`` widening in either cap mode: FILE nodes are
+    part of the structural baseline (like WIKI and entity nodes) and
+    are NEVER purged from ``builder._nodes`` — only MEMORY nodes are
+    purged per-chunk in uncapped mode. The real builder is therefore
+    always the correct ingest target, in both cap modes.
+    """
+    wiki_sources = source.load_wiki_page_sources(store)
+    notify_loaded("wiki_sources", wiki_sources)
+    ingest_loop(
+        "wiki_sources", wiki_sources, ingest_wiki_source, fn_takes_builder=True
+    )
 
 
 def ingest_wiki_memory_edges(
@@ -115,4 +147,8 @@ def ingest_wiki_memory_edges(
     return count
 
 
-__all__ = ["ingest_wiki_pages_and_links", "ingest_wiki_memory_edges"]
+__all__ = [
+    "ingest_wiki_pages_and_links",
+    "ingest_wiki_source_edges",
+    "ingest_wiki_memory_edges",
+]

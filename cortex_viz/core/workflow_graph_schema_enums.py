@@ -100,6 +100,18 @@ class EdgeKind(str, Enum):
     # load_wiki_memory_links`` and ingested by
     # ``core.workflow_graph_wiki.ingest_wiki_memory``.
     DOCUMENTS = "documents"
+    # WIKI_SOURCE — wiki → file link: the page documents/references/
+    # derives-from a source file (``wiki.page_sources`` row, ADR-0051).
+    # ``label`` carries the row's ``link_kind`` ('documents' / 'references'
+    # / 'derived') and ``confidence`` its recorded confidence, so the
+    # frontend can style the three provenance kinds distinctly without a
+    # separate EdgeKind per kind. Produced by ``infrastructure.wiki_graph.
+    # load_wiki_page_sources`` and ingested by
+    # ``core.workflow_graph_wiki.ingest_wiki_source``. Endpoint resolution
+    # (``core.wiki_source_resolve.resolve_file_node_id``) is best-effort —
+    # a row whose ``source_path`` doesn't resolve to a live FILE node is
+    # silently skipped (no fabricated node), same contract as WIKI_LINKS.
+    WIKI_SOURCE = "wiki_source"
 
 
 class ToolKind(str, Enum):

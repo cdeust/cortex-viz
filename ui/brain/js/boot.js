@@ -52,7 +52,7 @@ window.BRAIN = window.BRAIN || {};
   }
 
   var KIND_ORDER = ['domain', 'skill', 'command', 'hook', 'agent', 'mcp', 'tool_hub',
-    'file', 'discussion', 'memory', 'entity', 'symbol'];
+    'file', 'discussion', 'memory', 'entity', 'symbol', 'wiki'];
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>]/g, function (c) {

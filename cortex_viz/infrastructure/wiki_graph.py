@@ -1,7 +1,7 @@
 """Read-only wiki-page loaders for the workflow graph ("brain wiki
 nodes", v1 — reliable edges only).
 
-Three independent SELECTs, each best-effort (degrades to ``[]`` on any
+Four independent SELECTs, each best-effort (degrades to ``[]`` on any
 exception — matches ``infrastructure.wiki_pg``'s style: the ``wiki.*``
 schema is a separate, optional Cortex feature and the workflow graph
 must render fine without it):
@@ -14,15 +14,19 @@ must render fine without it):
     ``wiki.pages.memory_id`` (a page's anchor memory) and
     ``wiki.citations`` (memories cited while writing the page),
     projected into ``documents`` edges.
+  * ``load_wiki_page_sources`` — page-to-source-file links from
+    ``wiki.page_sources`` (ADR-0051), projected into ``wiki_source``
+    edges once ``core.wiki_source_resolve`` resolves ``source_path`` to
+    a live FILE node id.
 
-Deliberately scoped to these three channels. A wiki→source-file edge
-was investigated and DROPPED (see caller): wiki pages carry no
-file-linkage frontmatter field, and ``reference`` pages document whole
-systems/repos rather than single files — there is no backing data to
-project, and inventing one would violate the "no source, no
-implementation" rule.
+A wiki→source-file edge was originally investigated and DROPPED in v1
+(no ``wiki.page_sources`` table existed yet, and wiki pages carried no
+reliable file-linkage frontmatter field). ADR-0051 (STEP 2, Cortex
+side) added that table with real provenance tracking, superseding the
+v1 decision — see ``load_wiki_page_sources`` below and
+``core.wiki_source_resolve.resolve_file_node_id``.
 
-No I/O beyond three read-only ``pg_store.query`` SELECTs — this module
+No I/O beyond four read-only ``pg_store.query`` SELECTs — this module
 never INSERTs, UPDATEs, or DELETEs; cortex-viz is a read-only bridge
 over Cortex's shared Postgres store.
 """
@@ -58,6 +62,15 @@ SELECT page_id, memory_id FROM (
     FROM wiki.citations
     WHERE memory_id IS NOT NULL
 ) unioned
+"""
+
+# Every link_kind is read (not just 'documents') — 'references' rows are
+# added in parallel by another agent against the same table; this loader
+# must not depend on their presence to compile or degrade. Styling per
+# link_kind is the ingest layer's concern (label carried through verbatim).
+_WIKI_PAGE_SOURCES_SQL = """
+SELECT page_id, source_path, link_kind, confidence
+FROM wiki.page_sources
 """
 
 
@@ -114,4 +127,26 @@ def load_wiki_memory_links(pg_store) -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
-__all__ = ["load_wiki_pages", "load_wiki_links", "load_wiki_memory_links"]
+def load_wiki_page_sources(pg_store) -> list[dict[str, Any]]:
+    """Return every wiki-page -> source-file link (``wiki.page_sources``,
+    ADR-0051), every ``link_kind`` included.
+
+    Returns:
+        ``[{"page_id": int, "source_path": str, "link_kind": str,
+        "confidence": float}, ...]``. Empty list when the table is
+        absent (pre-ADR-0051 databases) or the query otherwise fails
+        (best-effort, matches the other three loaders in this module).
+    """
+    try:
+        rows = pg_store.query(_WIKI_PAGE_SOURCES_SQL, (), batch=True)
+    except Exception:
+        return []
+    return [dict(r) for r in rows]
+
+
+__all__ = [
+    "load_wiki_pages",
+    "load_wiki_links",
+    "load_wiki_memory_links",
+    "load_wiki_page_sources",
+]
