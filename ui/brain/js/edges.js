@@ -37,30 +37,134 @@ window.BRAIN = window.BRAIN || {};
   // dims to this fraction. UI-legibility param, not sourced.
   var FILTER_EDGE_DIM = 0.04;
   // Hover/selection highlight (BRAIN.highlightNode): edges INCIDENT to the
-  // node brighten to at least HL_FLOOR so even faint long-range associations
-  // read; every other edge fades to HL_DIM * its base alpha so the incident
-  // web stands out. UI-legibility params, not sourced.
-  var HL_FLOOR = 0.85;
-  var HL_DIM = 0.05;
+  // node go fully opaque (HL_FLOOR) AND recolour to the terracotta selection
+  // accent (ehl=1 -> mix in the shader), while every other edge fades to
+  // HL_DIM * its base alpha so the incident web is the only thing lit. Floor
+  // raised 0.85->1.0 and dim lowered 0.05->0.02 to widen the separation on
+  // the dense cloud (screenshot: "Read .c" 25 links lost in 358k edges).
+  // UI-legibility params, not sourced.
+  var HL_FLOOR = 1.0;
+  var HL_DIM = 0.02;
+  // Screen-space stroke width (CSS px) for the selected node's incident edges,
+  // drawn as a LineSegments2 fat-line OVERLAY on top of the 1px web. Plain
+  // THREE.LineSegments ignores lineWidth>1 on WebGL/ANGLE, so the terracotta
+  // web was hairline-thin and lost in the dense cloud even after the non-
+  // neighbour dimming (user report 2026-07-09: "je te demande des lignes
+  // bold"). 2.5px reads as a deliberate bold trace without haloing. Overlay is
+  // built on select / disposed on deselect (only ~20 incident edges), so the
+  // fat-line cost never touches the full 358k-edge cloud. UI-legibility param.
+  var HL_BOLD_PX = 2.5;
+  // The fat-line overlay for the current selection (LineSegments2), or null when
+  // nothing is highlighted. Rebuilt per selection change, disposed on deselect.
+  var overlay = null;
+  var overlayRes = new THREE.Vector2();
 
   function endId(v) { return (typeof v === 'object' && v) ? v.id : v; }
 
   var VERT = [
     'attribute float ealpha;',
     'attribute vec3 ecolor;',
+    'attribute float ehl;',
     'varying float vA;',
     'varying vec3 vC;',
+    'varying float vHL;',
     'void main() {',
-    '  vA = ealpha; vC = ecolor;',
+    '  vA = ealpha; vC = ecolor; vHL = ehl;',
     '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
     '}',
   ].join('\n');
 
   var FRAG = [
+    'uniform vec3 uAccent;',
     'varying float vA;',
     'varying vec3 vC;',
-    'void main() { gl_FragColor = vec4(vC, vA); }',
+    'varying float vHL;',
+    // The selected node's incident edges mix toward the terracotta SELECTION
+    // accent (--accent-ink) so they read as one lit web — the same accent the
+    // selection ring uses (interact.js). vHL is 0 for every non-incident edge,
+    // so the rest of the web keeps its data colours. NOT glow: a normal-blended
+    // opaque line, no additive bloom (DS gate G6). Terracotta-as-selection is
+    // the one sanctioned accent use (DS gate G4). source: AI Architect DS gate.
+    'void main() { gl_FragColor = vec4(mix(vC, uAccent, vHL), vA); }',
   ].join('\n');
+
+  // Terracotta selection accent, read live from the DS token reader (same
+  // source + fallback as the selection ring in interact.js). Baked into the
+  // material uniform at build; re-read on a surface toggle below.
+  function accentHex() {
+    return (window.CortexPalette && window.CortexPalette.hex('--accent-ink')) || '#8a4420';
+  }
+
+  // Three.js bakes the accent into the material uniform, so a surface toggle
+  // (paper <-> ink) needs an explicit re-read + re-tint — same pattern as the
+  // selection ring (interact.js) and the brain mesh. Attached once.
+  window.addEventListener('cortex:surface-change', function () {
+    var lines = BRAIN.edgeLines;
+    if (lines && lines.material.uniforms && lines.material.uniforms.uAccent) {
+      lines.material.uniforms.uAccent.value.set(accentHex());
+    }
+    // The fat-line overlay bakes the same accent into its own material uniform,
+    // so it needs the identical re-read on a paper<->ink toggle.
+    if (overlay) overlay.material.color.set(accentHex());
+  });
+
+  // LineMaterial draws in screen space, so its `resolution` uniform must track
+  // the canvas size or the stroke width scales wrong after a window resize.
+  // Kept in sync here (the overlay is short-lived, but a resize mid-selection
+  // must not leave it stale).
+  window.addEventListener('resize', function () {
+    if (overlay) {
+      BRAIN.renderer.getSize(overlayRes);
+      overlay.material.resolution.copy(overlayRes);
+    }
+  });
+
+  // Tear down the current fat-line overlay (geometry + material are GPU
+  // resources — dispose them, don't just detach). No-op when none exists.
+  function disposeHighlightOverlay() {
+    if (!overlay) return;
+    BRAIN.world.remove(overlay);
+    overlay.geometry.dispose();
+    overlay.material.dispose();
+    overlay = null;
+  }
+
+  // Build a fat-line overlay for the edges whose indices are in `edgeRows`
+  // (the selected node's incident edges). Their segment vertices already live
+  // in the base geometry's position buffer as consecutive start/end PAIRS —
+  // exactly LineSegments2's expected layout — so we copy each edge's own vertex
+  // range out and hand the flat array to LineSegmentsGeometry.setPositions. The
+  // overlay draws terracotta (the selection accent, DS gate G4) at HL_BOLD_PX,
+  // normal-blended (no additive glow, DS gate G6), depth-test off so it floats
+  // over the hull like the base web, at a renderOrder between the web (1) and
+  // the node cloud (2). Replaces any previous overlay.
+  function buildHighlightOverlay(edgeRows) {
+    disposeHighlightOverlay();
+    if (!edgeRows.length) return;
+    var idx = BRAIN.edgeIndex;
+    var posArr = BRAIN.edgeLines.geometry.getAttribute('position').array;
+    var flat = [];
+    for (var j = 0; j < edgeRows.length; j++) {
+      var i = edgeRows[j];
+      var from = idx.vStart[i] * 3, to = from + idx.vCount[i] * 3;
+      for (var f = from; f < to; f++) flat.push(posArr[f]);
+    }
+    var geo = new THREE.LineSegmentsGeometry();
+    geo.setPositions(flat);
+    BRAIN.renderer.getSize(overlayRes);
+    var mat = new THREE.LineMaterial({
+      color: new THREE.Color(accentHex()),
+      linewidth: HL_BOLD_PX,
+      worldUnits: false,          // linewidth is CSS px, not world units
+      transparent: true,
+      depthTest: false,
+    });
+    mat.resolution.copy(overlayRes);
+    overlay = new THREE.LineSegments2(geo, mat);
+    overlay.renderOrder = 1.5;    // above the 1px web (1), under the node cloud (2)
+    overlay.frustumCulled = false;
+    BRAIN.world.add(overlay);
+  }
 
   // Resolve the tract control point for an edge, or null when it stays straight.
   function controlPoint(atlas, regA, hemiA, regB, hemiB, ax, ay, az, bx, by, bz, R) {
@@ -145,9 +249,14 @@ window.BRAIN = window.BRAIN || {};
     geom.setAttribute('position', new THREE.BufferAttribute(seg, 3));
     geom.setAttribute('ealpha', new THREE.BufferAttribute(alpha, 1));
     geom.setAttribute('ecolor', new THREE.BufferAttribute(ecol, 3));
+    // Highlight flag per vertex (0 = data colour, 1 = mix to accent). Splatted
+    // by highlightNode over an edge's own vertex range, exactly like ealpha;
+    // starts all-zero so a fresh build shows no selection tint.
+    geom.setAttribute('ehl', new THREE.BufferAttribute(new Float32Array(totalSeg * 2), 1));
 
     var mat = new THREE.ShaderMaterial({
       vertexShader: VERT, fragmentShader: FRAG,
+      uniforms: { uAccent: { value: new THREE.Color(accentHex()) } },
       transparent: true, blending: THREE.NormalBlending, depthWrite: false,
       // depthTest off so the synapse web floats OVER the opaque brain hull — the
       // opaque shell (depthWrite:true) would otherwise occlude every interior
@@ -187,6 +296,10 @@ window.BRAIN = window.BRAIN || {};
     if (!idx || !lines) return;
     var attr = lines.geometry.getAttribute('ealpha');
     var arr = attr.array;
+    // Clear any selection tint too: back to the plain filter state means no
+    // node is highlighted, so every edge reverts to its data colour (ehl=0).
+    var hlAttr = lines.geometry.getAttribute('ehl');
+    var hlArr = hlAttr.array;
     var kind = BRAIN.filterKind;
     var kindByRow = BRAIN.nodeKindByRow;
     for (var i = 0; i < idx.vCount.length; i++) {
@@ -199,9 +312,13 @@ window.BRAIN = window.BRAIN || {};
       }
       var a = idx.baseAlpha[i] * ff;
       var vs = idx.vStart[i];
-      for (var v = 0; v < vc; v++) arr[vs + v] = a;
+      for (var v = 0; v < vc; v++) { arr[vs + v] = a; hlArr[vs + v] = 0; }
     }
     attr.needsUpdate = true;
+    hlAttr.needsUpdate = true;
+    // Back to the plain filter state == no selection, so the fat-line overlay
+    // for the previous selection must go too.
+    disposeHighlightOverlay();
   };
 
   // Highlight node `row` and its associations: edges INCIDENT to it brighten to
@@ -222,15 +339,18 @@ window.BRAIN = window.BRAIN || {};
     }
     var attr = lines.geometry.getAttribute('ealpha');
     var arr = attr.array;
+    var hlAttr = lines.geometry.getAttribute('ehl');
+    var hlArr = hlAttr.array;
     var kind = BRAIN.filterKind, kindByRow = BRAIN.nodeKindByRow;
     var neighbours = new Set();
     neighbours.add(row);
+    var incidentRows = [];   // edge indices to redraw as the fat-line overlay
     for (var i = 0; i < idx.vCount.length; i++) {
       var vc = idx.vCount[i];
       if (vc === 0) continue;
       var sr = idx.srcRow[i], dr = idx.dstRow[i];
       var incident = sr === row || dr === row;
-      if (incident) neighbours.add(sr === row ? dr : sr);
+      if (incident) { neighbours.add(sr === row ? dr : sr); incidentRows.push(i); }
       var ff = 1.0;
       if (kind && kindByRow) {
         var sk = kindByRow[sr], tk = kindByRow[dr];
@@ -238,10 +358,16 @@ window.BRAIN = window.BRAIN || {};
       }
       var a = incident ? Math.max(idx.baseAlpha[i], HL_FLOOR) * ff
                        : idx.baseAlpha[i] * HL_DIM * ff;
+      var hv = incident ? 1 : 0;
       var vs = idx.vStart[i];
-      for (var v = 0; v < vc; v++) arr[vs + v] = a;
+      for (var v = 0; v < vc; v++) { arr[vs + v] = a; hlArr[vs + v] = hv; }
     }
     attr.needsUpdate = true;
+    hlAttr.needsUpdate = true;
+    // Redraw just this node's incident edges as true bold strokes on top of the
+    // now-recoloured 1px web (the thin terracotta web still shows through where
+    // the fat line doesn't cover, keeping the connection visible end to end).
+    buildHighlightOverlay(incidentRows);
     if (BRAIN.highlightPoints) BRAIN.highlightPoints(neighbours);
   };
 

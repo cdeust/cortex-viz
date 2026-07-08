@@ -294,6 +294,14 @@
   <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
   <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
   <script src="https://unpkg.com/three@0.137.0/examples/js/loaders/GLTFLoader.js"></script>
+  <!-- Fat-line addons (screen-space linewidth). THREE.LineSegments (r137) drops
+       lineWidth>1 on WebGL/ANGLE, so the SELECTED node's incident edges are
+       redrawn as a LineSegments2 overlay (edges.js buildHighlightOverlay) with
+       a true ~2.5px terracotta stroke. Load order matters: geometry, then
+       material, then the object that defaults to both. -->
+  <script src="https://unpkg.com/three@0.137.0/examples/js/lines/LineSegmentsGeometry.js"></script>
+  <script src="https://unpkg.com/three@0.137.0/examples/js/lines/LineMaterial.js"></script>
+  <script src="https://unpkg.com/three@0.137.0/examples/js/lines/LineSegments2.js"></script>
   <!-- Surface-correct sRGB reader for the Three.js/WebGL renderers below —
        must load after ds.css (tokens resolved) and before any script that
        bakes colour. -->
