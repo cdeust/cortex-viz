@@ -279,5 +279,22 @@ class WorkflowGraphSource:
         one row per ``supersedes`` edge."""
         return _pg.load_supersede_edges(pg_store)
 
+    # ── 13. Wiki pages + links (PG, best-effort) ──────────────────────
+    def load_wiki_pages(self, pg_store) -> list[dict[str, Any]]:
+        """Live ``wiki.pages`` rows projected into workflow-graph WIKI
+        nodes. See ``workflow_graph_source_pg.load_wiki_pages``."""
+        return _pg.load_wiki_pages(pg_store)
+
+    def load_wiki_links(self, pg_store) -> list[dict[str, Any]]:
+        """Page-to-page ``wiki.links`` rows, one per ``wiki_links``
+        edge. See ``workflow_graph_source_pg.load_wiki_links``."""
+        return _pg.load_wiki_links(pg_store)
+
+    def load_wiki_memory_links(self, pg_store) -> list[dict[str, Any]]:
+        """Page-to-memory links (anchor memory + citations), one per
+        ``documents`` edge. See
+        ``workflow_graph_source_pg.load_wiki_memory_links``."""
+        return _pg.load_wiki_memory_links(pg_store)
+
 
 __all__ = ["WorkflowGraphSource"]

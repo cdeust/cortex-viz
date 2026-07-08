@@ -1,0 +1,117 @@
+"""Read-only wiki-page loaders for the workflow graph ("brain wiki
+nodes", v1 — reliable edges only).
+
+Three independent SELECTs, each best-effort (degrades to ``[]`` on any
+exception — matches ``infrastructure.wiki_pg``'s style: the ``wiki.*``
+schema is a separate, optional Cortex feature and the workflow graph
+must render fine without it):
+
+  * ``load_wiki_pages`` — one row per live (non-stale) ``wiki.pages``
+    entry, projected into WIKI workflow-graph nodes.
+  * ``load_wiki_links`` — page-to-page links from ``wiki.links``,
+    projected into ``wiki_links`` edges.
+  * ``load_wiki_memory_links`` — page-to-memory links, the UNION of
+    ``wiki.pages.memory_id`` (a page's anchor memory) and
+    ``wiki.citations`` (memories cited while writing the page),
+    projected into ``documents`` edges.
+
+Deliberately scoped to these three channels. A wiki→source-file edge
+was investigated and DROPPED (see caller): wiki pages carry no
+file-linkage frontmatter field, and ``reference`` pages document whole
+systems/repos rather than single files — there is no backing data to
+project, and inventing one would violate the "no source, no
+implementation" rule.
+
+No I/O beyond three read-only ``pg_store.query`` SELECTs — this module
+never INSERTs, UPDATEs, or DELETEs; cortex-viz is a read-only bridge
+over Cortex's shared Postgres store.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+_WIKI_PAGES_SQL = """
+SELECT id, title, kind, domain, status, heat, rel_path, memory_id
+FROM wiki.pages
+WHERE NOT is_stale
+"""
+
+_WIKI_LINKS_SQL = """
+SELECT src_page_id, dst_page_id, link_kind
+FROM wiki.links
+WHERE dst_page_id IS NOT NULL
+"""
+
+# UNION of the two page->memory evidence sources: a page's own anchor
+# memory (wiki.pages.memory_id, may be NULL) and every memory cited
+# while writing the page (wiki.citations, one row per citation event).
+# DISTINCT collapses a page citing the same memory more than once —
+# the workflow graph draws presence, not citation frequency.
+_WIKI_MEMORY_LINKS_SQL = """
+SELECT page_id, memory_id FROM (
+    SELECT id AS page_id, memory_id
+    FROM wiki.pages
+    WHERE memory_id IS NOT NULL AND NOT is_stale
+    UNION
+    SELECT page_id, memory_id
+    FROM wiki.citations
+    WHERE memory_id IS NOT NULL
+) unioned
+"""
+
+
+def load_wiki_pages(pg_store) -> list[dict[str, Any]]:
+    """Return every live wiki page as a dict ready for
+    ``core.workflow_graph_wiki.ingest_wiki_page``.
+
+    Args:
+        pg_store: read-only store exposing ``.query(sql, params, *,
+            batch=True)`` (``MemoryReader`` — see
+            ``infrastructure.memory_read``). Read-only: this function
+            only SELECTs.
+
+    Returns:
+        ``[{"id": int, "title": str, "kind": str, "domain": str,
+        "status": str, "heat": float, "rel_path": str,
+        "memory_id": int | None}, ...]``. Empty list when the
+        ``wiki.*`` schema is absent or the query otherwise fails
+        (best-effort, matches ``infrastructure.wiki_pg``).
+    """
+    try:
+        rows = pg_store.query(_WIKI_PAGES_SQL, (), batch=True)
+    except Exception:
+        return []
+    return [dict(r) for r in rows]
+
+
+def load_wiki_links(pg_store) -> list[dict[str, Any]]:
+    """Return every page-to-page wiki link.
+
+    Returns:
+        ``[{"src_page_id": int, "dst_page_id": int,
+        "link_kind": str | None}, ...]``. Empty list on any failure
+        (best-effort).
+    """
+    try:
+        rows = pg_store.query(_WIKI_LINKS_SQL, (), batch=True)
+    except Exception:
+        return []
+    return [dict(r) for r in rows]
+
+
+def load_wiki_memory_links(pg_store) -> list[dict[str, Any]]:
+    """Return every page-to-memory link (anchor memory + citations).
+
+    Returns:
+        ``[{"page_id": int, "memory_id": int}, ...]``. Empty list on
+        any failure (best-effort).
+    """
+    try:
+        rows = pg_store.query(_WIKI_MEMORY_LINKS_SQL, (), batch=True)
+    except Exception:
+        return []
+    return [dict(r) for r in rows]
+
+
+__all__ = ["load_wiki_pages", "load_wiki_links", "load_wiki_memory_links"]

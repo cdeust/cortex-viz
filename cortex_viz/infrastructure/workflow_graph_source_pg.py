@@ -20,6 +20,15 @@ from cortex_viz.infrastructure.memory_associations import (
 from cortex_viz.infrastructure.memory_supersede import (
     load_supersede_edges as _load_supersede_edges,
 )
+from cortex_viz.infrastructure.wiki_graph import (
+    load_wiki_links as _load_wiki_links,
+)
+from cortex_viz.infrastructure.wiki_graph import (
+    load_wiki_memory_links as _load_wiki_memory_links,
+)
+from cortex_viz.infrastructure.wiki_graph import (
+    load_wiki_pages as _load_wiki_pages,
+)
 
 _FILE_LINE_RE = re.compile(r"\*\*(?:File|Read):\*\*\s*`([^`]+)`")
 # Grep / Glob memory bodies: ``**Grep:** `<pattern>` in `<path>`` and
@@ -354,3 +363,36 @@ def load_supersede_edges(pg_store) -> list[dict[str, Any]]:
     ``core.workflow_graph_supersede.ingest_supersede``, skipping any
     whose endpoints are not in the graph."""
     return _load_supersede_edges(pg_store)
+
+
+def load_wiki_pages(pg_store) -> list[dict[str, Any]]:
+    """Bulk-fetch every live ``wiki.pages`` row.
+
+    Delegates to ``infrastructure.wiki_graph.load_wiki_pages`` (owns
+    the actual SQL, best-effort against an absent ``wiki.*`` schema).
+    Shape: ``[{id, title, kind, domain, status, heat, rel_path,
+    memory_id}, ...]``. The builder synthesises one WIKI node per row
+    via ``core.workflow_graph_wiki.ingest_wiki_page``."""
+    return _load_wiki_pages(pg_store)
+
+
+def load_wiki_links(pg_store) -> list[dict[str, Any]]:
+    """Bulk-fetch every page-to-page ``wiki.links`` row.
+
+    Delegates to ``infrastructure.wiki_graph.load_wiki_links``. Shape:
+    ``[{src_page_id, dst_page_id, link_kind}, ...]``. The builder
+    synthesises one WIKI_LINKS edge per row via
+    ``core.workflow_graph_wiki.ingest_wiki_link``, skipping any whose
+    endpoints are not in the graph."""
+    return _load_wiki_links(pg_store)
+
+
+def load_wiki_memory_links(pg_store) -> list[dict[str, Any]]:
+    """Bulk-fetch every page-to-memory link (anchor memory + citations).
+
+    Delegates to ``infrastructure.wiki_graph.load_wiki_memory_links``.
+    Shape: ``[{page_id, memory_id}, ...]``. The builder synthesises one
+    DOCUMENTS edge per row via
+    ``core.workflow_graph_wiki.ingest_wiki_memory``, skipping any
+    whose endpoints are not in the graph."""
+    return _load_wiki_memory_links(pg_store)

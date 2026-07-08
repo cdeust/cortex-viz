@@ -32,6 +32,13 @@ class NodeKind(str, Enum):
     # AST by the ``automatised-pipeline`` sibling plugin (ADR-0046).
     # ``symbol_type`` on the node body carries the sub-kind.
     SYMBOL = "symbol"
+    # WIKI — a wiki.pages row (Cortex's durable documentation surface,
+    # see ``infrastructure.wiki_pg``). Produced by
+    # ``workflow_graph_source_pg.load_wiki_pages`` and ingested by
+    # ``core.workflow_graph_wiki.ingest_wiki_page``. Single-domain (NOT
+    # in ``_MULTI_DOMAIN_KINDS`` below) — one page belongs to one
+    # domain, unlike a FILE which can be touched cross-project.
+    WIKI = "wiki"
 
 
 class EdgeKind(str, Enum):
@@ -82,6 +89,17 @@ class EdgeKind(str, Enum):
     CALLS = "calls"  # caller symbol → callee symbol
     IMPORTS = "imports"  # file → imported symbol or file
     MEMBER_OF = "member_of"  # function → class / class → module
+    # WIKI_LINKS — wiki → wiki page-to-page link (``wiki.links`` row).
+    # Produced by ``infrastructure.wiki_graph.load_wiki_links`` and
+    # ingested by ``core.workflow_graph_wiki.ingest_wiki_link``.
+    WIKI_LINKS = "wiki_links"
+    # DOCUMENTS — wiki → memory link: the page documents/cites a
+    # memory. Union of ``wiki.pages.memory_id`` (the page's anchor
+    # memory) and ``wiki.citations`` (memories cited while writing the
+    # page). Produced by ``infrastructure.wiki_graph.
+    # load_wiki_memory_links`` and ingested by
+    # ``core.workflow_graph_wiki.ingest_wiki_memory``.
+    DOCUMENTS = "documents"
 
 
 class ToolKind(str, Enum):

@@ -49,6 +49,11 @@ ENTITY_COLORS = {
 }
 
 DISCUSSION_COLOR = "#F43F5E"
+# WIKI_COLOR — wiki-page nodes (documentation surface). Deep indigo,
+# distinct hue from every other constant in this module (nearest
+# neighbour is ENTITY_COLORS["dependency"] at hue ~250 vs this hue
+# ~275) so wiki nodes read as their own visual cluster.
+WIKI_COLOR = "#4A3F8A"
 
 EDGE_COLORS = {
     "has-category": "#B0B0B0",
