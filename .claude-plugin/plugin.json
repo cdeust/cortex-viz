@@ -1,7 +1,7 @@
 {
   "name": "cortex-viz",
   "description": "Standalone visualization MCP for Cortex — a live neural-graph galaxy of every project, file, symbol, memory, discussion and wiki page, plus a per-session execution trace. Read-only bridge over Cortex's shared PostgreSQL and the ~/.claude artifacts.",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "author": {
     "name": "Clement Deust",
     "email": "admin@ai-architect.tools"
