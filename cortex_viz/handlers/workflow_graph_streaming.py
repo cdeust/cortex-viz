@@ -10,12 +10,18 @@ non-streaming counterpart.
 
 from __future__ import annotations
 
+import os
 
 from cortex_viz.core.workflow_graph_schema import validate_graph
 from cortex_viz.handlers.workflow_graph_serialize import (
     _edge_to_dict,
     _node_to_dict,
 )
+
+# Env gate for wiki-node ingestion ("brain wiki nodes", v1). Default ON
+# (loaders degrade to [] on an absent wiki.* schema); CORTEX_VIZ_WIKI_NODES=0
+# opts out for a leaner render.
+_WIKI_ON = os.getenv("CORTEX_VIZ_WIKI_NODES", "1") != "0"
 
 
 def _build_interleaved(
@@ -55,6 +61,11 @@ def _build_interleaved(
     from cortex_viz.core.workflow_graph_entity import (
         ingest_about_entity,
         ingest_entity,
+    )
+    from cortex_viz.handlers.workflow_graph_streaming_wiki import (
+        ingest_wiki_memory_edges,
+        ingest_wiki_pages_and_links,
+        ingest_wiki_source_edges,
     )
     from cortex_viz.core.workflow_graph_schema import (
         GLOBAL_DOMAIN_ID,
@@ -188,6 +199,30 @@ def _build_interleaved(
     entities = _filter(source.load_entities(store))
     notify_loaded("entities", entities)
     _ingest_loop("entities", entities, ingest_entity, fn_takes_builder=True)
+
+    # ── Phase 1d: wiki nodes + wiki links ("brain wiki nodes") — see
+    # ``handlers.workflow_graph_streaming_wiki.ingest_wiki_pages_and_links``.
+    if _WIKI_ON:
+        ingest_wiki_pages_and_links(
+            builder=builder,
+            source=source,
+            store=store,
+            filter_by_domain=_filter,
+            notify_loaded=notify_loaded,
+            ingest_loop=_ingest_loop,
+        )
+        # Wiki -> file edges (ADR-0051 wiki.page_sources) — must run AFTER
+        # wiki nodes exist (just above) and files are finalised (Phase 1b,
+        # already ran). See ingest_wiki_source_edges docstring: no
+        # _RetainedNodesView widening needed in either cap mode (FILE
+        # nodes are never purged).
+        ingest_wiki_source_edges(
+            builder=builder,
+            source=source,
+            store=store,
+            notify_loaded=notify_loaded,
+            ingest_loop=_ingest_loop,
+        )
 
     # ── Phase 2: relational edges (need phase 1 nodes) ──
     discussion_files = _filter(source.load_discussion_files())
@@ -422,6 +457,21 @@ def _build_interleaved(
     if on_source_loaded is not None:
         on_source_loaded("supersede", _sup_count)
 
+    # ── Phase 3d: wiki→memory edges — see
+    # ``handlers.workflow_graph_streaming_wiki.ingest_wiki_memory_edges``.
+    if _WIKI_ON:
+        ingest_wiki_memory_edges(
+            builder=builder,
+            source=source,
+            store=store,
+            mem_cap=_mem_cap,
+            assoc_target=_assoc_target,
+            retained_memory_edges=retained_memory_edges,
+            emit_delta=_emit_delta,
+            on_source_loaded=on_source_loaded,
+            edge_to_dict=_edge_to_dict,
+        )
+
     # ── Phase 4: AST symbols (deferred by default in streaming mode) ──
     if stage == "full" and not defer_native_ast:
         from cortex_viz.infrastructure.workflow_graph_source_ast import (
@@ -458,6 +508,7 @@ def _build_interleaved(
     discussion_count = sum(1 for n in nodes if n.kind == "discussion")
     symbol_count = sum(1 for n in nodes if n.kind == "symbol")
     entity_node_count = sum(1 for n in nodes if n.kind == "entity")
+    wiki_count = sum(1 for n in nodes if n.kind == "wiki")
     # Retained memory dicts join AFTER validate_graph: their edges are
     # memory→domain in_domain links plus memory→entity about_entity
     # links whose non-memory endpoint is in the validated structural
@@ -493,6 +544,7 @@ def _build_interleaved(
                 "files": file_count,
                 "symbols": symbol_count,
                 "entities": entity_node_count,
+                "wiki": wiki_count,
             },
             "ast_enabled": (stage == "full" and not defer_native_ast),
             "streaming": "interleaved",

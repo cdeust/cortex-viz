@@ -84,12 +84,12 @@ Because the full graph (278k+ nodes, 5.5M edges) is far larger than a browser ca
 </p>
 
 <p align="center">
-<img src="docs/assets/cortex-consolidation-board.png" width="100%" alt="Board view — five columns for labile, early LTP, late LTP, consolidated, and reconsolidating memories on the paper surface; each column header states the exact live count (117 · 2841 · 41 · 1 · 0) with its measured stage physics (decay ×, vulnerability %, plasticity %) and the factual advance rule; below, domain and feeling facet chips with exact counts filter the cards, and the empty reconsolidating column shows an honest 'No memories' instead of hiding" />
+<img src="docs/assets/cortex-consolidation-board.png" width="100%" alt="Board view — five columns for labile, early LTP, late LTP, consolidated, and reconsolidating memories on the paper surface; each column header states the exact live count (117 · 2841 · 41 · 1 · 0) with its reference stage physics (decay ×, vulnerability %, plasticity %, from the DD-02 spec) and the factual advance rule; below, domain and feeling facet chips with exact counts filter the cards, and the empty reconsolidating column shows an honest 'No memories' instead of hiding" />
 </p>
 
 ### Board — consolidation as a kanban
 
-Five columns by consolidation stage (`labile` · `early_ltp` · `late_ltp` · `consolidated` · `reconsolidating`). Each header reads live bucket metrics — decay rate, vulnerability, plasticity, heat / importance / encoding / interference medians, hippocampal dependency, replay count — with the advancement rule (`replay ≥ 3` — or `≥ 1` when `schema > 0.5`; `DA ≥ 1 or imp > 0.3`) printed under the bar. Cards carry heat, importance, surprise, valence, arousal, and the exact tool that created the memory.
+Five columns by consolidation stage (`labile` · `early_ltp` · `late_ltp` · `consolidated` · `reconsolidating`). Each header states the stage's live count (server-side truth, not the loaded page) above its reference stage physics — decay ×, vulnerability %, plasticity % — and the stage's advancement rule (e.g. `replays ≥ 1 or imp > 0.3` at `labile`, `replays ≥ 3` at `early_ltp`). Those physics rows and advance rules are constants from the DD-02 stage spec, not per-bucket medians recomputed live. Cards carry live heat, importance, surprise, valence, arousal, and the exact tool that created the memory.
 
 **Detail panel — every measurement explained.** Clicking any node opens a panel with the raw value *and* a one-line plain-language explanation. Consolidation stage, activity (heat), importance, surprise, emotional tone and intensity, confidence, plasticity, stability — each a labeled bar with a sentence like *"How unexpected this memory was when it arrived. Surprises stick better than routine events."*
 

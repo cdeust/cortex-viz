@@ -167,6 +167,13 @@ JUG.getNodeColor = function(node) {
   if (t === 'memory') return node.storeType === 'semantic' ? JUG._tok.semantic : JUG._tok.episodic;
   if (t === 'discussion') return JUG._tok.episodic;
   if (JUG._hubTypes[t]) return JUG._tok.hub;
+  // wiki — curated documentation pages are a human-authored artifact
+  // category, distinct from the raw memory/entity/file data they
+  // document; the single non-selection use of --accent-deep in the
+  // graph (G4's "selection only" rule governs the SELECTION highlight,
+  // not this permanent per-kind token — the two never collide since a
+  // wiki node's accent is its resting colour, not a transient state).
+  if (t === 'wiki') return JUG._tok.accentDeep;
   // entity (any entityType) / topic / bridge-entity / entry-point /
   // recurring-pattern / tool-preference / behavioral-feature — the
   // informational leaf family (DD-04 "entity/file").

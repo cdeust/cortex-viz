@@ -1,0 +1,409 @@
+"""Unit tests for the "brain wiki nodes" feature (v1 — reliable edges
+only): ``core.workflow_graph_wiki`` ingestion + a full
+``_build_interleaved`` regression guard for the cap-mode endpoint
+widening in ``handlers.workflow_graph_streaming_wiki.
+ingest_wiki_memory_edges``.
+
+Mirrors ``test_workflow_graph_association.py``'s style for the pure
+ingestion unit tests, and adds an integration-level test driving
+``_build_interleaved`` directly (with a fake ``WorkflowGraphSource``)
+because that is the ONLY path that exercises the
+``_RetainedNodesView`` widening — a regression there silently drops
+every wiki->memory edge in the uncapped (full-corpus) build, which a
+pure-ingestion unit test cannot catch.
+"""
+
+from __future__ import annotations
+
+from cortex_viz.core.workflow_graph_schema import EdgeKind, NodeIdFactory, NodeKind
+from cortex_viz.core.workflow_graph_wiki import (
+    ingest_wiki_link,
+    ingest_wiki_memory,
+    ingest_wiki_page,
+    ingest_wiki_source,
+)
+import cortex_viz.core.workflow_graph_wiki as workflow_graph_wiki_mod
+from cortex_viz.handlers.workflow_graph_streaming import _build_interleaved
+
+
+class _FakeTarget:
+    """Minimal duck-typed stand-in for a builder — matches
+    ``test_workflow_graph_association.py``'s ``_FakeTarget``."""
+
+    def __init__(self, node_ids):
+        self._nodes = set(node_ids)
+        self._edges: list = []
+
+
+# ── ingest_wiki_page ────────────────────────────────────────────────
+
+
+class _FakeBuilder:
+    """Real ``_add_child``/``_ensure_domain``/``_assign_domain`` surface,
+    borrowed from the actual builder so ``ingest_wiki_page`` is tested
+    against its real contract rather than a re-implemented stub."""
+
+    def __init__(self):
+        from cortex_viz.core.workflow_graph_builder import WorkflowGraphBuilder
+
+        self._impl = WorkflowGraphBuilder()
+
+    def __getattr__(self, name):
+        return getattr(self._impl, name)
+
+
+def test_ingest_wiki_page_creates_node_with_in_domain_edge():
+    b = _FakeBuilder()
+    ingest_wiki_page(
+        b,
+        {
+            "id": 7,
+            "title": "ADR-0046",
+            "kind": "reference",
+            "domain": None,
+            "status": "active",
+            "heat": 0.5,
+            "rel_path": "adr/0046.md",
+        },
+    )
+    wiki_id = NodeIdFactory.wiki_id(7)
+    assert wiki_id in b._nodes
+    node = b._nodes[wiki_id]
+    assert node.kind == NodeKind.WIKI.value
+    assert node.label == "ADR-0046"
+    in_domain_edges = [e for e in b._edges if e.source == wiki_id]
+    assert len(in_domain_edges) == 1
+    assert in_domain_edges[0].kind == EdgeKind.IN_DOMAIN.value
+
+
+def test_ingest_wiki_page_missing_id_raises():
+    b = _FakeBuilder()
+    try:
+        ingest_wiki_page(b, {"title": "no id"})
+        raise AssertionError("expected ValueError")
+    except ValueError:
+        pass
+
+
+# ── ingest_wiki_link ────────────────────────────────────────────────
+
+
+def test_ingest_wiki_link_creates_edge_when_both_endpoints_present():
+    target = _FakeTarget({NodeIdFactory.wiki_id(1), NodeIdFactory.wiki_id(2)})
+    ingest_wiki_link(target, {"src_page_id": 1, "dst_page_id": 2, "link_kind": "ref"})
+    assert len(target._edges) == 1
+    edge = target._edges[0]
+    assert edge.source == NodeIdFactory.wiki_id(1)
+    assert edge.target == NodeIdFactory.wiki_id(2)
+    assert edge.kind == EdgeKind.WIKI_LINKS.value
+    assert edge.label == "ref"
+
+
+def test_ingest_wiki_link_missing_endpoint_dropped_silently():
+    target = _FakeTarget({NodeIdFactory.wiki_id(1)})
+    ingest_wiki_link(target, {"src_page_id": 1, "dst_page_id": 2, "link_kind": None})
+    assert target._edges == []
+
+
+def test_ingest_wiki_link_none_ids_skipped():
+    target = _FakeTarget({NodeIdFactory.wiki_id(1), NodeIdFactory.wiki_id(2)})
+    ingest_wiki_link(target, {"src_page_id": None, "dst_page_id": 2})
+    assert target._edges == []
+
+
+# ── ingest_wiki_memory ──────────────────────────────────────────────
+
+
+def test_ingest_wiki_memory_creates_documents_edge_when_both_present():
+    target = _FakeTarget({NodeIdFactory.wiki_id(1), NodeIdFactory.memory_id(100)})
+    ingest_wiki_memory(target, {"page_id": 1, "memory_id": 100})
+    assert len(target._edges) == 1
+    edge = target._edges[0]
+    assert edge.source == NodeIdFactory.wiki_id(1)
+    assert edge.target == NodeIdFactory.memory_id(100)
+    assert edge.kind == EdgeKind.DOCUMENTS.value
+
+
+def test_ingest_wiki_memory_missing_memory_endpoint_dropped_silently():
+    target = _FakeTarget({NodeIdFactory.wiki_id(1)})
+    ingest_wiki_memory(target, {"page_id": 1, "memory_id": 100})
+    assert target._edges == []
+
+
+# ── ingest_wiki_source ──────────────────────────────────────────────
+
+
+class _FakeNode:
+    def __init__(self, domain_id):
+        self.domain_id = domain_id
+
+
+class _FakeNodeTarget:
+    """Like ``_FakeTarget`` but ``_nodes`` is a dict (id -> node-like
+    object with ``.domain_id``), matching ``ingest_wiki_source``'s real
+    contract (it reads ``b._nodes.get(page_id).domain_id``, not just
+    membership)."""
+
+    def __init__(self, nodes: dict):
+        self._nodes = nodes
+        self._edges: list = []
+
+
+def test_ingest_wiki_source_creates_edge_when_resolved_and_present(monkeypatch):
+    page_id = NodeIdFactory.wiki_id(1)
+    file_id = NodeIdFactory.file_id("/repo/cortex/foo.py")
+    target = _FakeNodeTarget(
+        {page_id: _FakeNode("domain:cortex"), file_id: object()}
+    )
+    monkeypatch.setattr(
+        workflow_graph_wiki_mod,
+        "resolve_file_node_id",
+        lambda domain_id, source_path: file_id,
+    )
+    ingest_wiki_source(
+        target,
+        {
+            "page_id": 1,
+            "source_path": "foo.py",
+            "link_kind": "documents",
+            "confidence": 1.0,
+        },
+    )
+    assert len(target._edges) == 1
+    edge = target._edges[0]
+    assert edge.source == page_id
+    assert edge.target == file_id
+    assert edge.kind == EdgeKind.WIKI_SOURCE.value
+    assert edge.label == "documents"
+    assert edge.confidence == 1.0
+
+
+def test_ingest_wiki_source_missing_page_node_dropped_silently(monkeypatch):
+    target = _FakeNodeTarget({})
+    monkeypatch.setattr(
+        workflow_graph_wiki_mod,
+        "resolve_file_node_id",
+        lambda domain_id, source_path: "file:doesnotmatter",
+    )
+    ingest_wiki_source(target, {"page_id": 1, "source_path": "foo.py"})
+    assert target._edges == []
+
+
+def test_ingest_wiki_source_unresolved_path_dropped_silently(monkeypatch):
+    page_id = NodeIdFactory.wiki_id(1)
+    target = _FakeNodeTarget({page_id: _FakeNode("domain:cortex")})
+    monkeypatch.setattr(
+        workflow_graph_wiki_mod,
+        "resolve_file_node_id",
+        lambda domain_id, source_path: None,
+    )
+    ingest_wiki_source(target, {"page_id": 1, "source_path": "foo.py"})
+    assert target._edges == []
+
+
+def test_ingest_wiki_source_resolved_but_file_node_absent_dropped_silently(
+    monkeypatch,
+):
+    """The core "no fabricated node" contract: resolution can produce a
+    candidate id, but if no FILE node with that id exists in the graph
+    (the file was never touched by any Claude tool event), no edge is
+    drawn."""
+    page_id = NodeIdFactory.wiki_id(1)
+    target = _FakeNodeTarget({page_id: _FakeNode("domain:cortex")})
+    monkeypatch.setattr(
+        workflow_graph_wiki_mod,
+        "resolve_file_node_id",
+        lambda domain_id, source_path: "file:not-in-graph",
+    )
+    ingest_wiki_source(target, {"page_id": 1, "source_path": "foo.py"})
+    assert target._edges == []
+
+
+def test_ingest_wiki_source_none_ids_skipped():
+    target = _FakeNodeTarget({})
+    ingest_wiki_source(target, {"page_id": None, "source_path": "foo.py"})
+    ingest_wiki_source(target, {"page_id": 1, "source_path": None})
+    assert target._edges == []
+
+
+# ── Full-build regression guard: both cap modes ────────────────────
+
+
+class _FakeWikiSource:
+    """Minimal ``WorkflowGraphSource``-shaped stand-in. Every stream is
+    empty EXCEPT one wiki page, one wiki link, one memory, and one
+    wiki->memory link — just enough to exercise every ingestion phase
+    ``_build_interleaved`` runs, without a live database."""
+
+    def load_skills(self):
+        return []
+
+    def load_hooks(self):
+        return []
+
+    def load_agent_events(self):
+        return []
+
+    def load_command_events(self, store):
+        return []
+
+    def load_discussions(self):
+        return []
+
+    def load_tool_events(self, store):
+        return [
+            {
+                "tool": "Read",
+                "domain": None,
+                "file_path": "/repo/one.py",
+                "count": 1,
+            }
+        ]
+
+    def load_entities(self, store):
+        return []
+
+    def load_wiki_pages(self, store):
+        return [
+            {
+                "id": 1,
+                "title": "Wiki Page One",
+                "kind": "reference",
+                "domain": None,
+                "status": "active",
+                "heat": 0.4,
+                "rel_path": "one.md",
+                "memory_id": None,
+            }
+        ]
+
+    def load_wiki_links(self, store):
+        return []
+
+    def load_wiki_page_sources(self, store):
+        return [
+            {
+                "page_id": 1,
+                "source_path": "one.py",
+                "link_kind": "documents",
+                "confidence": 1.0,
+            },
+            {
+                "page_id": 1,
+                "source_path": "not-a-real-file.py",
+                "link_kind": "references",
+                "confidence": 0.5,
+            },
+        ]
+
+    def load_discussion_files(self):
+        return []
+
+    def load_command_files(self, store, known_paths):
+        return []
+
+    def load_skill_usage(self):
+        return []
+
+    def load_mcp_usage(self):
+        return []
+
+    def load_discussion_tool_uses(self):
+        return []
+
+    def load_discussion_agents(self):
+        return []
+
+    def load_discussion_commands(self):
+        return []
+
+    def load_memory_entity_edges(self, store):
+        return []
+
+    def iter_memories_chunked(self, store, min_heat=0.0, chunk_size=1000, limit=0):
+        yield [{"id": 100, "domain": None, "content": "a memory"}]
+
+    def load_memory_associations(self, store):
+        return []
+
+    def load_supersede_edges(self, store):
+        return []
+
+    def load_wiki_memory_links(self, store):
+        return [{"page_id": 1, "memory_id": 100}]
+
+
+def _run(memory_limit: int) -> dict:
+    return _build_interleaved(
+        store=object(),
+        source=_FakeWikiSource(),
+        domain_filter=None,
+        min_memory_heat=0.0,
+        memory_limit=memory_limit,
+        stage="full",
+        defer_native_ast=True,
+        on_source_loaded=None,
+        on_batch=None,
+        notify_loaded=lambda *_a: None,
+    )
+
+
+def test_wiki_node_and_edges_emitted_in_bounded_cap_mode():
+    """``memory_limit > 0`` -> ``_mem_cap > 0`` -> ``_assoc_target`` IS
+    the real builder, so wiki->memory endpoint presence needs no
+    widening (both node kinds already live in ``builder._nodes``)."""
+    result = _run(memory_limit=10)
+    kinds = {n["kind"] for n in result["nodes"]}
+    assert "wiki" in kinds
+    edge_kinds = [e["kind"] for e in result["edges"]]
+    assert "documents" in edge_kinds
+    assert result["meta"]["counts"]["wiki"] == 1
+
+
+def test_wiki_source_edge_emitted_in_bounded_cap_mode(monkeypatch):
+    """FILE nodes are never purged in either cap mode, so the wiki->file
+    phase needs no _RetainedNodesView widening — this is the bounded-mode
+    half of that regression guard."""
+    import cortex_viz.core.wiki_source_resolve as resolve_mod
+
+    monkeypatch.setattr(resolve_mod, "_project_source_root", lambda c: "/repo")
+    result = _run(memory_limit=10)
+    edges = result["edges"]
+    source_edges = [e for e in edges if e["kind"] == "wiki_source"]
+    assert len(source_edges) == 1
+    assert source_edges[0]["label"] == "documents"
+    # The second page_sources row ("not-a-real-file.py") resolves to a
+    # candidate id with no matching FILE node — correctly dropped, not
+    # fabricated.
+    assert all(e["target"] != NodeIdFactory.file_id("/repo/not-a-real-file.py")
+               for e in edges)
+
+
+def test_wiki_source_edge_survives_uncapped_mode(monkeypatch):
+    """Uncapped mode (memory_limit=0) purges MEMORY nodes per-chunk but
+    never touches FILE or WIKI nodes — the wiki->file phase must still
+    see both endpoints live without any adapter widening."""
+    import cortex_viz.core.wiki_source_resolve as resolve_mod
+
+    monkeypatch.setattr(resolve_mod, "_project_source_root", lambda c: "/repo")
+    result = _run(memory_limit=0)
+    source_edges = [e for e in result["edges"] if e["kind"] == "wiki_source"]
+    assert len(source_edges) == 1
+
+
+def test_wiki_memory_edge_survives_uncapped_mode_regression_guard():
+    """``memory_limit=0`` -> ``_mem_cap <= 0`` -> memories are purged
+    from ``builder._nodes`` per chunk and the association/supersede
+    passes use the ``_RetainedNodesView`` adapter, whose ``_nodes`` set
+    is built from retained MEMORY pg-ids only. Without widening it with
+    every wiki node id (see
+    ``handlers.workflow_graph_streaming_wiki.ingest_wiki_memory_edges``),
+    ``ingest_wiki_memory`` would skip every row on the wiki-page side
+    and this assertion would fail — this IS the load-bearing regression
+    guard the task brief calls for."""
+    result = _run(memory_limit=0)
+    kinds = {n["kind"] for n in result["nodes"]}
+    assert "wiki" in kinds
+    edge_kinds = [e["kind"] for e in result["edges"]]
+    assert edge_kinds.count("documents") > 0
+    assert result["meta"]["counts"]["wiki"] == 1

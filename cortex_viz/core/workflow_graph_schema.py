@@ -189,6 +189,14 @@ class NodeIdFactory:
         """
         return f"entity:{pg_id}"
 
+    @staticmethod
+    def wiki_id(pg_id: str | int) -> str:
+        """Deterministic id for a wiki page, keyed on ``wiki.pages.id``.
+        Used by ``workflow_graph_wiki.ingest_wiki_page`` so wiki-link
+        and wiki-memory edges stay stable across runs.
+        """
+        return f"wiki:{pg_id}"
+
 
 # ── Edge provenance defaults (Gap 6) ──────────────────────────────────
 
