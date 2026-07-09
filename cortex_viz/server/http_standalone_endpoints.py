@@ -88,8 +88,11 @@ def serve_graph_full(handler, store) -> None:
     """
     try:
         from cortex_viz.infrastructure import snapshot_pg_store
+        from cortex_viz.shared.instance_scope import resolve_instance_scope
 
-        snap = snapshot_pg_store.read_latest_snapshot(store)
+        snap = snapshot_pg_store.read_latest_snapshot(
+            store, scope=resolve_instance_scope()
+        )
     except Exception as e:  # pragma: no cover - defensive
         send_json_error(handler, e)
         return

@@ -137,9 +137,13 @@ def _persist_snapshot(store, fingerprint) -> None:
         if not data or not (data.get("nodes")):
             return
         from cortex_viz.infrastructure import snapshot_pg_store
+        from cortex_viz.shared.instance_scope import resolve_instance_scope
 
         res = snapshot_pg_store.write_snapshot(
-            store, fingerprint=fingerprint or "unknown", graph=data
+            store,
+            fingerprint=fingerprint or "unknown",
+            graph=data,
+            scope=resolve_instance_scope(),
         )
         print(
             f"[cortex] full graph snapshot persisted: {res['node_count']} nodes"
