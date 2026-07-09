@@ -10,9 +10,19 @@ from cortex_viz.core.workflow_graph_schema import NodeIdFactory
 
 
 def test_resolve_source_target_ids_matches_wiki_source_resolve(monkeypatch):
-    import cortex_viz.core.wiki_source_resolve as resolve_mod
-
-    monkeypatch.setattr(resolve_mod, "_project_source_root", lambda c: "/repo/cortex")
+    # Boundary: resolve_source_target_ids delegates the source_path ->
+    # FILE-node-id reconstruction entirely to resolve_file_node_id (the
+    # sole public export of core.wiki_source_resolve post PR#11). Patching
+    # that boundary -- rather than the resolver's private root lookup --
+    # proves resolve_source_target_ids' own join/dict-building logic
+    # without coupling this test to the resolver's internals.
+    monkeypatch.setattr(
+        mod,
+        "resolve_file_node_id",
+        lambda domain_id, source_path: NodeIdFactory.file_id(f"/repo/cortex/{source_path}")
+        if domain_id == "domain:cortex"
+        else None,
+    )
     sources = [
         {"source_path": "foo.py", "link_kind": "documents"},
         {"source_path": "bar.py", "link_kind": "references"},
@@ -25,9 +35,9 @@ def test_resolve_source_target_ids_matches_wiki_source_resolve(monkeypatch):
 
 
 def test_resolve_source_target_ids_drops_unresolvable_domain(monkeypatch):
-    import cortex_viz.core.wiki_source_resolve as resolve_mod
-
-    monkeypatch.setattr(resolve_mod, "_project_source_root", lambda c: None)
+    # resolve_file_node_id returning None (e.g. a memory-only domain with
+    # no checked-out repo) must drop the source rather than fabricate an id.
+    monkeypatch.setattr(mod, "resolve_file_node_id", lambda domain_id, source_path: None)
     got = mod.resolve_source_target_ids(
         "domain:no-repo", [{"source_path": "foo.py"}]
     )

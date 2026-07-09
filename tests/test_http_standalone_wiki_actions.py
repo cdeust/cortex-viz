@@ -11,11 +11,22 @@ Task-A path-unified join (``core.wiki_page_actions``).
 
 from __future__ import annotations
 
+import cortex_viz.core.wiki_page_actions as wiki_page_actions_mod
 import cortex_viz.infrastructure.activity_store as activity_store_mod
 import cortex_viz.infrastructure.wiki_page_actions_pg as pg_mod
-import cortex_viz.core.wiki_source_resolve as resolve_mod
 from cortex_viz.core.activity_paths import file_target_id
 from cortex_viz.server.http_standalone_wiki import _page_actions
+
+# Boundary: _page_actions resolves source_path -> FILE-node-id via
+# core.wiki_page_actions.resolve_file_node_id (imported from
+# core.wiki_source_resolve, whose sole public export post PR#11 is
+# resolve_file_node_id -- the module's private root-lookup helpers are
+# implementation detail). Patching resolve_file_node_id at the
+# wiki_page_actions boundary -- rather than wiki_source_resolve's
+# internals -- keeps these orchestration tests decoupled from the
+# resolver's multi-root/basename-fallback resolution strategy.
+def _fake_resolve_file_node_id(domain_id, source_path):
+    return file_target_id(f"/repo/cortex/{source_path}", cwd="") if domain_id else None
 
 
 def test_page_not_found_degrades_to_empty_valid_shape(monkeypatch):
@@ -60,7 +71,7 @@ def test_page_with_sources_but_no_matching_activity(monkeypatch):
         pg_mod, "load_page_sources",
         lambda store, pid: [{"source_path": "foo.py", "link_kind": "documents", "confidence": 1.0}],
     )
-    monkeypatch.setattr(resolve_mod, "_project_source_root", lambda c: "/repo/cortex")
+    monkeypatch.setattr(wiki_page_actions_mod, "resolve_file_node_id", _fake_resolve_file_node_id)
     monkeypatch.setattr(activity_store_mod, "find_by_target_ids", lambda store, ids, limit=2000: [])
     monkeypatch.setattr(activity_store_mod, "scan_legacy_file_rows", lambda store, limit=2000: [])
     got = _page_actions(store=None, params={"page_id": "7"})
@@ -78,7 +89,7 @@ def test_page_with_sources_and_matching_activity(monkeypatch):
         pg_mod, "load_page_sources",
         lambda store, pid: [{"source_path": "foo.py", "link_kind": "documents", "confidence": 1.0}],
     )
-    monkeypatch.setattr(resolve_mod, "_project_source_root", lambda c: "/repo/cortex")
+    monkeypatch.setattr(wiki_page_actions_mod, "resolve_file_node_id", _fake_resolve_file_node_id)
     tid = file_target_id("/repo/cortex/foo.py", cwd="")
     monkeypatch.setattr(
         activity_store_mod, "find_by_target_ids",
@@ -106,7 +117,7 @@ def test_limit_is_bounded_and_reports_truncation(monkeypatch):
         pg_mod, "load_page_sources",
         lambda store, pid: [{"source_path": "foo.py", "link_kind": "documents", "confidence": 1.0}],
     )
-    monkeypatch.setattr(resolve_mod, "_project_source_root", lambda c: "/repo/cortex")
+    monkeypatch.setattr(wiki_page_actions_mod, "resolve_file_node_id", _fake_resolve_file_node_id)
     tid = file_target_id("/repo/cortex/foo.py", cwd="")
     rows = [
         {"id": i, "session_id": "s1", "ts": float(i), "tool": "Edit", "action": "edit",
