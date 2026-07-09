@@ -34,7 +34,16 @@ CREATE INDEX IF NOT EXISTS session_activity_recent_idx
     ON session_activity (id DESC);
 CREATE INDEX IF NOT EXISTS session_activity_session_idx
     ON session_activity (session_id, id);
+CREATE INDEX IF NOT EXISTS session_activity_target_idx
+    ON session_activity (target_kind, target_id);
 """
+
+# A post-P4 (path-unification) FILE target_id is ``file:<10-hex-hash>``
+# (``core.activity_paths.is_canonical_file_target_id``'s Python-side
+# definition, mirrored here as a Postgres regex so the legacy-scan query can
+# push the "already canonical, skip it" filter down to the server instead of
+# fetching every file-kind row and filtering in Python).
+_LEGACY_FILE_ID_SQL = "target_kind = 'file' AND target_id !~ '^file:[0-9a-f]{10}$'"
 
 
 def _conn(store):
@@ -110,3 +119,53 @@ def read_recent(store, *, limit: int = 2000, since_id: int = 0) -> list[dict]:
         d["seq"] = d["id"]
         out.append(d)
     return out
+
+
+def find_by_target_ids(store, target_ids: list[str], *, limit: int = 2000) -> list[dict]:
+    """Activity rows whose ``target_id`` is in ``target_ids`` — the fast
+    path for ``core.wiki_page_actions`` (page -> source-file -> activity):
+    an indexed equality lookup (``session_activity_target_idx``) against the
+    canonical post-P4 ``file:<hash>`` ids ``core.wiki_page_actions`` already
+    resolved. ``limit`` mirrors ``read_recent``'s replay bound (2000) so a
+    hot file with a huge activity history can't stall the request.
+    """
+    if not target_ids:
+        return []
+    _ensure_table(store)
+    sql = (
+        "SELECT id, session_id, ts, event_type, tool, action, target_id, "
+        "       target_kind, target_label, edge_kind, cwd, detail "
+        "FROM session_activity WHERE target_kind = 'file' AND target_id = ANY(%s) "
+        "ORDER BY id DESC LIMIT %s"
+    )
+    with _conn(store) as conn, conn.cursor() as cur:
+        cur.execute(sql, (list(target_ids), int(limit)))
+        rows = cur.fetchall()
+    return [dict(r) for r in rows]
+
+
+def scan_legacy_file_rows(store, *, limit: int = 2000) -> list[dict]:
+    """Bounded, newest-first scan of pre-P4 FILE rows — ``target_id`` still
+    embeds the raw literal path (``file:<raw path>``) instead of the
+    canonical hash (see ``core.activity_paths``' module docstring for why
+    these exist: rows written before the path-unification fix shipped).
+
+    Callers (``core.wiki_page_actions.match_activity_rows``) recompute each
+    row's canonical id from its embedded raw path + stored ``cwd`` and match
+    against the same resolved target-id set the fast path
+    (``find_by_target_ids``) uses — so old activity still joins to its wiki
+    page without a DB migration. ``limit`` mirrors ``read_recent``'s replay
+    bound (2000): a large legacy backlog degrades to "the N most recent
+    legacy rows checked" rather than an unbounded scan.
+    """
+    _ensure_table(store)
+    sql = (
+        "SELECT id, session_id, ts, event_type, tool, action, target_id, "
+        "       target_kind, target_label, edge_kind, cwd, detail "
+        f"FROM session_activity WHERE {_LEGACY_FILE_ID_SQL} "
+        "ORDER BY id DESC LIMIT %s"
+    )
+    with _conn(store) as conn, conn.cursor() as cur:
+        cur.execute(sql, (int(limit),))
+        rows = cur.fetchall()
+    return [dict(r) for r in rows]
