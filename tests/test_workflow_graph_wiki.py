@@ -17,11 +17,13 @@ from __future__ import annotations
 
 from cortex_viz.core.workflow_graph_schema import EdgeKind, NodeIdFactory, NodeKind
 from cortex_viz.core.workflow_graph_wiki import (
+    ingest_wiki_citation,
     ingest_wiki_link,
     ingest_wiki_memory,
     ingest_wiki_page,
 )
 from cortex_viz.handlers.workflow_graph_streaming import _build_interleaved
+from cortex_viz.infrastructure.wiki_graph import load_wiki_session_links
 
 
 class _FakeTarget:
@@ -128,6 +130,77 @@ def test_ingest_wiki_memory_missing_memory_endpoint_dropped_silently():
     assert target._edges == []
 
 
+# ── ingest_wiki_citation ────────────────────────────────────────────
+
+
+def test_ingest_wiki_citation_creates_cited_in_edge_when_both_present():
+    target = _FakeTarget({NodeIdFactory.wiki_id(1), "discussion:sess-abc"})
+    ingest_wiki_citation(
+        target, {"page_id": 1, "session_id": "sess-abc", "cited_at": "2026-07-09"}
+    )
+    assert len(target._edges) == 1
+    edge = target._edges[0]
+    assert edge.source == NodeIdFactory.wiki_id(1)
+    assert edge.target == "discussion:sess-abc"
+    assert edge.kind == EdgeKind.CITED_IN.value
+    assert edge.label == "2026-07-09"
+
+
+def test_ingest_wiki_citation_missing_discussion_endpoint_dropped_silently():
+    target = _FakeTarget({NodeIdFactory.wiki_id(1)})
+    ingest_wiki_citation(target, {"page_id": 1, "session_id": "sess-abc"})
+    assert target._edges == []
+
+
+def test_ingest_wiki_citation_missing_page_endpoint_dropped_silently():
+    target = _FakeTarget({"discussion:sess-abc"})
+    ingest_wiki_citation(target, {"page_id": 1, "session_id": "sess-abc"})
+    assert target._edges == []
+
+
+def test_ingest_wiki_citation_empty_session_id_skipped():
+    target = _FakeTarget({NodeIdFactory.wiki_id(1), "discussion:"})
+    ingest_wiki_citation(target, {"page_id": 1, "session_id": ""})
+    assert target._edges == []
+
+
+def test_ingest_wiki_citation_none_ids_skipped():
+    target = _FakeTarget({NodeIdFactory.wiki_id(1), "discussion:sess-abc"})
+    ingest_wiki_citation(target, {"page_id": None, "session_id": "sess-abc"})
+    assert target._edges == []
+
+
+def test_ingest_wiki_citation_omits_label_when_cited_at_absent():
+    target = _FakeTarget({NodeIdFactory.wiki_id(1), "discussion:sess-abc"})
+    ingest_wiki_citation(target, {"page_id": 1, "session_id": "sess-abc"})
+    assert target._edges[0].label is None
+
+
+# ── load_wiki_session_links (infrastructure loader) ────────────────
+
+
+class _RaisingPgStore:
+    def query(self, sql, params, *, batch=True):
+        raise RuntimeError("wiki.citations absent (pre-ADR-0051 DB)")
+
+
+class _RowPgStore:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def query(self, sql, params, *, batch=True):
+        return self._rows
+
+
+def test_load_wiki_session_links_degrades_to_empty_on_exception():
+    assert load_wiki_session_links(_RaisingPgStore()) == []
+
+
+def test_load_wiki_session_links_returns_rows():
+    rows = [{"page_id": 1, "session_id": "sess-abc", "cited_at": "2026-07-09"}]
+    assert load_wiki_session_links(_RowPgStore(rows)) == rows
+
+
 # ── Full-build regression guard: both cap modes ────────────────────
 #
 # wiki -> FILE (``wiki_source``) edges are NO LONGER emitted by
@@ -157,7 +230,7 @@ class _FakeWikiSource:
         return []
 
     def load_discussions(self):
-        return []
+        return [{"session_id": "sess-abc", "domain": None, "message_count": 3}]
 
     def load_tool_events(self, store):
         return [
@@ -241,6 +314,9 @@ class _FakeWikiSource:
     def load_wiki_memory_links(self, store):
         return [{"page_id": 1, "memory_id": 100}]
 
+    def load_wiki_session_links(self, store):
+        return [{"page_id": 1, "session_id": "sess-abc", "cited_at": "2026-07-09"}]
+
 
 def _run(memory_limit: int) -> dict:
     return _build_interleaved(
@@ -266,6 +342,7 @@ def test_wiki_node_and_edges_emitted_in_bounded_cap_mode():
     assert "wiki" in kinds
     edge_kinds = [e["kind"] for e in result["edges"]]
     assert "documents" in edge_kinds
+    assert "cited_in" in edge_kinds
     assert result["meta"]["counts"]["wiki"] == 1
 
 
@@ -297,4 +374,12 @@ def test_wiki_memory_edge_survives_uncapped_mode_regression_guard():
     assert "wiki" in kinds
     edge_kinds = [e["kind"] for e in result["edges"]]
     assert edge_kinds.count("documents") > 0
+    # CITED_IN needs NO _RetainedNodesView widening (unlike documents):
+    # both endpoints (wiki, discussion) are structural-baseline nodes
+    # never purged in either cap mode — see
+    # ingest_wiki_citation_edges' docstring. Asserting it survives the
+    # SAME uncapped mode that requires the documents-edge widening is
+    # the regression guard that this simplification is actually correct
+    # and not merely untested.
+    assert edge_kinds.count("cited_in") > 0
     assert result["meta"]["counts"]["wiki"] == 1

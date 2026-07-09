@@ -15,6 +15,14 @@ workflow graph:
     ``DOCUMENTS`` edge per row of
     ``infrastructure.wiki_graph.load_wiki_memory_links``. Same
     skip-missing-endpoint contract.
+  * ``ingest_wiki_citation(b, row)`` — creates one WIKI -> DISCUSSION
+    ``CITED_IN`` edge per row of
+    ``infrastructure.wiki_graph.load_wiki_session_links``. Same
+    skip-missing-endpoint contract. Unlike ``ingest_wiki_memory``,
+    DISCUSSION nodes are keyed on a literal ``f"discussion:{session_id}"``
+    string (see ``core.workflow_graph_builder_relational``), not
+    ``NodeIdFactory`` — mirrored here verbatim rather than adding a
+    factory method for a one-caller id shape.
 
 WIKI -> FILE ``wiki_source`` edges (ADR-0051) are NOT ingested here: their
 FILE endpoint is only complete after the L6 AST sweep, so they are resolved
@@ -142,8 +150,42 @@ def ingest_wiki_memory(b, row: dict) -> None:
     )
 
 
+def ingest_wiki_citation(b, row: dict) -> None:
+    """Create one WIKI -> DISCUSSION ``CITED_IN`` edge.
+
+    ``row`` carries ``page_id`` + ``session_id`` (+ optional
+    ``cited_at``) — see
+    ``infrastructure.wiki_graph.load_wiki_session_links``. Same
+    skip-missing-endpoint contract as ``ingest_wiki_memory``. The
+    DISCUSSION endpoint id is the literal ``f"discussion:{session_id}"``
+    string every relational discussion-edge ingester in
+    ``workflow_graph_builder_relational`` already uses — kept identical
+    here rather than introduced as a new ``NodeIdFactory`` method, since
+    that module is the sole precedent for this id shape.
+    """
+    page_pg = row.get("page_id")
+    sid = row.get("session_id")
+    if page_pg is None or not sid:
+        return
+    page_id = NodeIdFactory.wiki_id(page_pg)
+    disc_id = f"discussion:{sid}"
+    if page_id not in b._nodes or disc_id not in b._nodes:
+        return
+    cited_at = row.get("cited_at")
+    b._edges.append(
+        WorkflowEdge(
+            source=page_id,
+            target=disc_id,
+            kind=EdgeKind.CITED_IN,
+            label=str(cited_at) if cited_at is not None else None,
+            reason="wiki-citation",
+        )
+    )
+
+
 __all__ = [
     "ingest_wiki_page",
     "ingest_wiki_link",
     "ingest_wiki_memory",
+    "ingest_wiki_citation",
 ]

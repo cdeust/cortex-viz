@@ -114,6 +114,18 @@ class EdgeKind(str, Enum):
     # a row whose ``source_path`` doesn't resolve to a live FILE node is
     # silently skipped (no fabricated node), same contract as WIKI_LINKS.
     WIKI_SOURCE = "wiki_source"
+    # CITED_IN — wiki -> discussion link: the page was cited while a
+    # Claude Code session was in progress (``wiki.citations.session_id``,
+    # already used for ``DOCUMENTS`` via the ``memory_id`` column on the
+    # same table — this edge projects the sibling ``session_id`` column,
+    # never previously projected). Produced by
+    # ``infrastructure.wiki_graph.load_wiki_session_links`` and ingested
+    # by ``core.workflow_graph_wiki.ingest_wiki_citation``. Cheapest
+    # documents->actions/decisions bridge available: it does not depend
+    # on ``wiki_source_resolve``'s ~5% file-resolution ceiling (mem
+    # 4262064/4262320) because its target is a DISCUSSION node keyed on
+    # session id, not a FILE node keyed on a resolved path.
+    CITED_IN = "cited_in"
 
 
 class ToolKind(str, Enum):

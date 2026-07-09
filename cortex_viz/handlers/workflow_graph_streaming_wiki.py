@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from cortex_viz.core.workflow_graph_wiki import (
+    ingest_wiki_citation,
     ingest_wiki_link,
     ingest_wiki_memory,
     ingest_wiki_page,
@@ -57,6 +58,41 @@ def ingest_wiki_pages_and_links(
     wiki_links = source.load_wiki_links(store)
     notify_loaded("wiki_links", wiki_links)
     ingest_loop("wiki_links", wiki_links, ingest_wiki_link, fn_takes_builder=True)
+
+
+def ingest_wiki_citation_edges(
+    *,
+    builder,
+    source,
+    store,
+    notify_loaded: Callable[[str, list], None],
+    ingest_loop: Callable[..., None],
+) -> None:
+    """Phase 1d (continued): WIKI -> DISCUSSION ``cited_in`` edges.
+
+    Deliberately run here, NOT mirrored onto Phase 3d's
+    ``_RetainedNodesView`` widening dance: that widening exists solely
+    because MEMORY nodes are purged from ``builder._nodes`` per-chunk in
+    uncapped mode (see ``ingest_wiki_memory_edges``). DISCUSSION nodes,
+    like WIKI nodes, are ingested in Phase 1a/1d — both are part of the
+    structural baseline captured BEFORE the memory-purge loop runs (see
+    ``_struct_n`` in ``workflow_graph_streaming._build_interleaved``) and
+    are NEVER purged in either cap mode. Both ``CITED_IN`` endpoints are
+    therefore live in ``builder._nodes`` regardless of ``mem_cap``,
+    requiring no cap-mode branching at all — verified by reading the
+    discard block's node-kind scope before writing this function.
+
+    Caller must run this AFTER discussions (Phase 1a) and wiki pages
+    (Phase 1d, same function group) are ingested.
+    """
+    wiki_session_links = source.load_wiki_session_links(store)
+    notify_loaded("wiki_citations", wiki_session_links)
+    ingest_loop(
+        "wiki_citations",
+        wiki_session_links,
+        ingest_wiki_citation,
+        fn_takes_builder=True,
+    )
 
 
 def ingest_wiki_memory_edges(
@@ -117,5 +153,6 @@ def ingest_wiki_memory_edges(
 
 __all__ = [
     "ingest_wiki_pages_and_links",
+    "ingest_wiki_citation_edges",
     "ingest_wiki_memory_edges",
 ]
