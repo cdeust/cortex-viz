@@ -104,6 +104,7 @@ JUG.NODE_LABELS = {
   'topic': 'Topic',
   'bridge-entity': 'Bridge',
   'discussion': 'Discussion',
+  'wiki': 'Wiki Page',
 };
 
 JUG.CONSOLIDATION_COLORS = {

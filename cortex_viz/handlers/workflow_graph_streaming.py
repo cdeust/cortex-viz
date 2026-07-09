@@ -63,6 +63,7 @@ def _build_interleaved(
         ingest_entity,
     )
     from cortex_viz.handlers.workflow_graph_streaming_wiki import (
+        ingest_wiki_citation_edges,
         ingest_wiki_memory_edges,
         ingest_wiki_pages_and_links,
     )
@@ -214,6 +215,18 @@ def _build_interleaved(
             source=source,
             store=store,
             filter_by_domain=_filter,
+            notify_loaded=notify_loaded,
+            ingest_loop=_ingest_loop,
+        )
+        # CITED_IN (wiki -> discussion): both endpoint kinds (wiki above,
+        # discussions in Phase 1a) are already live in builder._nodes and
+        # are part of the structural baseline never purged by the later
+        # memory-cap discard loop — see ingest_wiki_citation_edges'
+        # docstring for why no _RetainedNodesView widening is needed here.
+        ingest_wiki_citation_edges(
+            builder=builder,
+            source=source,
+            store=store,
             notify_loaded=notify_loaded,
             ingest_loop=_ingest_loop,
         )

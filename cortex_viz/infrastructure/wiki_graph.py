@@ -18,6 +18,13 @@ must render fine without it):
     ``wiki.page_sources`` (ADR-0051), projected into ``wiki_source``
     edges once ``core.wiki_source_resolve`` resolves ``source_path`` to
     a live FILE node id.
+  * ``load_wiki_session_links`` — page-to-discussion links, the
+    ``session_id`` column of ``wiki.citations`` (a sibling of the
+    ``memory_id`` column already read by ``load_wiki_memory_links``),
+    projected into ``cited_in`` edges. DISCUSSION nodes are keyed on
+    session id (not a resolved file path), so this bridge is immune to
+    ``wiki_source_resolve``'s ~5% resolution ceiling — see
+    ``core.workflow_graph_schema_enums.EdgeKind.CITED_IN``.
 
 A wiki→source-file edge was originally investigated and DROPPED in v1
 (no ``wiki.page_sources`` table existed yet, and wiki pages carried no
@@ -71,6 +78,21 @@ SELECT page_id, memory_id FROM (
 _WIKI_PAGE_SOURCES_SQL = """
 SELECT page_id, source_path, link_kind, confidence
 FROM wiki.page_sources
+"""
+
+# session_id defaults to '' (NOT NULL DEFAULT ''::text) rather than being
+# nullable, so the emptiness check is textual, not an IS NULL check —
+# matches the column's actual constraint (verified via \d wiki.citations
+# against the live dev DB, 2026-07-09). GROUP BY collapses repeated
+# citations of the same page within the same session (one row per
+# memory cited) into a single edge — the workflow graph draws presence,
+# same convention as ``_WIKI_MEMORY_LINKS_SQL``'s DISTINCT — keeping the
+# most recent ``cited_at`` as the edge's recency signal.
+_WIKI_SESSION_LINKS_SQL = """
+SELECT page_id, session_id, MAX(cited_at) AS cited_at
+FROM wiki.citations
+WHERE session_id IS NOT NULL AND session_id <> ''
+GROUP BY page_id, session_id
 """
 
 
@@ -144,9 +166,27 @@ def load_wiki_page_sources(pg_store) -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
+def load_wiki_session_links(pg_store) -> list[dict[str, Any]]:
+    """Return every wiki-page -> discussion-session link
+    (``wiki.citations.session_id``, projected for the first time).
+
+    Returns:
+        ``[{"page_id": int, "session_id": str, "cited_at":
+        datetime}, ...]``. Empty list when the table is absent or the
+        query otherwise fails (best-effort, matches the other loaders
+        in this module).
+    """
+    try:
+        rows = pg_store.query(_WIKI_SESSION_LINKS_SQL, (), batch=True)
+    except Exception:
+        return []
+    return [dict(r) for r in rows]
+
+
 __all__ = [
     "load_wiki_pages",
     "load_wiki_links",
     "load_wiki_memory_links",
     "load_wiki_page_sources",
+    "load_wiki_session_links",
 ]

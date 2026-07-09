@@ -32,6 +32,9 @@ from cortex_viz.infrastructure.wiki_graph import (
 from cortex_viz.infrastructure.wiki_graph import (
     load_wiki_pages as _load_wiki_pages,
 )
+from cortex_viz.infrastructure.wiki_graph import (
+    load_wiki_session_links as _load_wiki_session_links,
+)
 
 _FILE_LINE_RE = re.compile(r"\*\*(?:File|Read):\*\*\s*`([^`]+)`")
 # Grep / Glob memory bodies: ``**Grep:** `<pattern>` in `<path>`` and
@@ -414,3 +417,15 @@ def load_wiki_page_sources(pg_store) -> list[dict[str, Any]]:
     after the L6 AST sweep completes the FILE-node set — skipping any row
     whose page or resolved file endpoint is not in the graph."""
     return _load_wiki_page_sources(pg_store)
+
+
+def load_wiki_session_links(pg_store) -> list[dict[str, Any]]:
+    """Bulk-fetch every wiki-page -> discussion-session link
+    (``wiki.citations.session_id``).
+
+    Delegates to ``infrastructure.wiki_graph.load_wiki_session_links``.
+    Shape: ``[{page_id, session_id, cited_at}, ...]``. The builder
+    synthesises one CITED_IN edge per row via
+    ``core.workflow_graph_wiki.ingest_wiki_citation``, skipping any
+    whose endpoints are not in the graph."""
+    return _load_wiki_session_links(pg_store)

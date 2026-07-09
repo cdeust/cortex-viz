@@ -90,6 +90,10 @@
       'imports': 'Imports',
       'calls': 'Calls',
       'has-discussion': 'Discussion in',
+      'wiki_links': 'Related page',
+      'documents': 'Documents memory',
+      'wiki_source': 'Documents file',
+      'cited_in': 'Cited in session',
     };
 
     var h = '<div class="section-title">Connections (' + edges.length + ')</div>';
@@ -135,6 +139,32 @@
     return h;
   }
 
+  // ── Wiki-page section ──
+  // Wiki nodes previously fell through to the generic (non-discussion)
+  // branch below, which renders memory-shaped sections (emotion / bio /
+  // badges) that make no sense for a documentation page. This builder
+  // surfaces the fields ``core.workflow_graph_wiki.ingest_wiki_page``
+  // actually attaches (page_kind/status/heat/path — see
+  // ``WorkflowNode``'s ``extra="allow"`` passthrough) instead.
+  function buildWikiDetail(data) {
+    var h = '<div class="section-title">Page</div>';
+    h += '<div class="disc-timeline">';
+    if (data.page_kind) {
+      h += '<div class="disc-timeline-row"><span>Kind</span><span class="disc-val">' + JUG._fmt.esc(data.page_kind) + '</span></div>';
+    }
+    if (data.domain) {
+      h += '<div class="disc-timeline-row"><span>Domain</span><span class="disc-val">' + JUG._fmt.esc(data.domain) + '</span></div>';
+    }
+    if (data.status) {
+      h += '<div class="disc-timeline-row"><span>Status</span><span class="disc-val">' + JUG._fmt.esc(data.status) + '</span></div>';
+    }
+    if (data.path) {
+      h += '<div class="disc-timeline-row"><span>Path</span><span class="disc-val">' + JUG._fmt.esc(data.path) + '</span></div>';
+    }
+    h += '</div>';
+    return h;
+  }
+
   // ── Main panel builder ──
 
   function openDetailPanel(data) {
@@ -169,6 +199,15 @@
       h += JUG._fmt.header(data, col, typeLabel);
       h += JUG._fmt.quality(data);
       h += JUG._disc.buildDiscussionDetail(data);
+      h += buildConnections(data, edges);
+    } else if (data.type === 'wiki') {
+      // Title/kind/domain + citations (linked discussions via the
+      // cited_in edge, "Documents memory"/"Related page" via documents/
+      // wiki_links) — buildConnections already groups by edge type and
+      // wireInteractions (called below, common to every branch) wires
+      // its .conn-item clicks, so citations are click-to-select for free.
+      h += JUG._fmt.header(data, col, typeLabel);
+      h += buildWikiDetail(data);
       h += buildConnections(data, edges);
     } else {
       h += JUG._fmt.header(data, col, typeLabel);
