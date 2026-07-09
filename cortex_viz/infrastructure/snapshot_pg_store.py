@@ -9,38 +9,41 @@ cache loops/empties between builds, but a persisted snapshot is stable.
 Written once at build completion (where the in-process cache holds the
 finished graph); read by ``serve_graph_full`` / ``serve_graph_full_stream``.
 
-Scoping (D10, inc5.5): the table is shared PostgreSQL — every viz server
-instance, on every checkout, writes into the SAME table. Prior to D10 this
-was "last write wins" (``DELETE`` all + single-row ``INSERT``, no
-discriminant): two instances serving different checkouts of this repo could
-overwrite each other's snapshot, so one instance could end up serving the
-graph of an unrelated checkout. ``scope`` is that discriminant — see
-``cortex_viz.shared.instance_scope.resolve_instance_scope``. Both
-``write_snapshot`` and ``read_latest_snapshot`` take a caller-supplied
-``scope`` (composition-root wiring, not resolved inside this infra module).
+Scoping (D10, inc5.5) + table isolation (D11, inc5.5b): every viz server
+instance, on every checkout, needs its own snapshot row so two instances
+serving different checkouts of this repo never overwrite or read each
+other's graph. inc5.5's ``scope`` column closed this for same-version
+deployments but left two risks open when an OLD (pre-D10) binary runs
+concurrently against the SAME shared table: (1) the old binary's unscoped
+``DELETE FROM workflow_graph_snapshot`` (no WHERE) still wipes every
+scope's row, not just its own; (2) the primary key was ``fingerprint``
+alone, so a fingerprint collision between two scopes would fail the
+``INSERT``. inc5.5b closes both BY CONSTRUCTION rather than by procedure:
+current (D11+) code reads and writes a DEDICATED table,
+``workflow_graph_snapshot_scoped``, whose name the old binary does not
+know and therefore cannot reach — its unscoped ``DELETE``/``INSERT``/
+``SELECT`` still run, but only against the legacy ``workflow_graph_snapshot``
+table, which current code no longer writes to. The new table's primary key
+is the composite ``(scope, fingerprint)``, so a fingerprint collision
+across two scopes is not a key collision — both rows coexist. ``scope`` is
+resolved by ``cortex_viz.shared.instance_scope.resolve_instance_scope``;
+both ``write_snapshot`` and ``read_latest_snapshot`` take it as a
+caller-supplied argument (composition-root wiring, not resolved inside
+this infra module).
 
-Two-way version compat (additive migration — ``ADD COLUMN IF NOT EXISTS``,
-no data loss, no rewritten rows):
-
-* OLD code (pre-D10) running against a NEW (post-D10) table: its unscoped
-  ``INSERT`` names explicit columns, not ``scope``, so PostgreSQL fills
-  ``scope`` from the column DEFAULT (``'default'``) — the insert still
-  succeeds. Its unscoped ``DELETE FROM workflow_graph_snapshot`` (no WHERE)
-  still runs, though, and removes EVERY scope's row, not just its own — an
-  old writer coexisting with new (scoped) writers can still wipe another
-  instance's snapshot. This is an accepted residual risk of running mixed
-  code versions against one shared table simultaneously; it does not affect
-  same-version deployments (this increment's acceptance criterion), and the
-  old code is out of scope for this change. Its unscoped ``SELECT ... ORDER
-  BY created_at DESC LIMIT 1`` (no WHERE) also stays global — an old reader
-  picks whichever scope was written most recently by ANYONE, i.e. keeps the
-  pre-D10 "last write wins" read behaviour for itself even after the schema
-  migrates.
-* NEW code running against an OLD (pre-migration) table: ``_ensure_table``
-  runs the additive ``ALTER TABLE ADD COLUMN IF NOT EXISTS`` on every call
-  (idempotent, same pattern as the pre-existing ``format`` column), so the
-  column always exists before the scoped ``DELETE``/``INSERT``/``SELECT``
-  execute. No manual migration step required.
+Legacy-table migration (one-time, idempotent, additive): ``_ensure_table``
+still issues ``CREATE TABLE IF NOT EXISTS`` for the legacy
+``workflow_graph_snapshot`` table (so an old binary that later starts up
+still has a table to write into — unaffected by this change) and, only
+when the new table is still empty, copies the legacy table's single most
+recent row into ``workflow_graph_snapshot_scoped`` under
+``scope='default'`` — the historical "last write wins" snapshot becomes
+that checkout's starting point instead of forcing every existing
+deployment to pay for a from-scratch rebuild (multi-hour: see the module
+docstring's ``ndjson.v1`` note). The legacy table itself is never written
+to by current code again and is not dropped in this increment; its
+decommission is a future increment once no pre-D11 binary is expected to
+run against this database anymore.
 
 Storage formats (the ``format`` column):
 
@@ -75,10 +78,15 @@ import gzip
 import io
 import json
 
-# DDL — self-ensured on first use (CREATE TABLE IF NOT EXISTS), same pattern
-# as lod_pg_store. ``created_at`` orders "latest" when (defensively) more than
-# one row is ever present; the writer keeps exactly one.
-_DDL = """
+# Legacy table (pre-D11). Current code never writes to it again — it is
+# created here ONLY so an old (pre-D11) binary that starts up later still
+# has a table, and so the one-time migration SELECT below always has a
+# valid (possibly empty) source. Kept verbatim (same DDL as inc5.5) for an
+# old binary's continued operation; not touched by write_snapshot/
+# read_latest_snapshot below. Decommission is a future increment.
+_LEGACY_TABLE = "workflow_graph_snapshot"
+
+_DDL_LEGACY = """
 CREATE TABLE IF NOT EXISTS workflow_graph_snapshot (
     fingerprint TEXT PRIMARY KEY,
     payload BYTEA NOT NULL,
@@ -88,23 +96,52 @@ CREATE TABLE IF NOT EXISTS workflow_graph_snapshot (
 );
 """
 
-# Additive migration for pre-format rows; existing rows are single-document
-# gzip(JSON), which is exactly what the default declares.
-_DDL_FORMAT = """
+_DDL_LEGACY_FORMAT = """
 ALTER TABLE workflow_graph_snapshot
     ADD COLUMN IF NOT EXISTS format TEXT NOT NULL DEFAULT 'json.v1';
 """
 
-# D10 (inc5.5): additive scope column. Backfill value is the literal string
-# 'default' — pre-D10 rows were written by the old unscoped writer (global
-# DELETE + single-row INSERT), so they represent the one-and-only snapshot
-# that existed under the old "last write wins" model. 'default' is also the
-# column's own DEFAULT, so pre-D10 AND pre-migration writers (see module
-# docstring's compat note) land in the same bucket rather than a distinct
-# unreachable one.
-_DDL_SCOPE = """
+_DDL_LEGACY_SCOPE = """
 ALTER TABLE workflow_graph_snapshot
     ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT 'default';
+"""
+
+# D11 (inc5.5b): the dedicated, scope-isolated table. An old binary does not
+# know this name and therefore cannot reach it — this is what closes both
+# residual risks BY CONSTRUCTION (see module docstring). Primary key is the
+# composite (scope, fingerprint): a fingerprint collision between two scopes
+# is not a key collision, both rows coexist.
+_TABLE = "workflow_graph_snapshot_scoped"
+
+_DDL_SCOPED = """
+CREATE TABLE IF NOT EXISTS workflow_graph_snapshot_scoped (
+    scope TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    payload BYTEA NOT NULL,
+    node_count INT NOT NULL,
+    edge_count INT NOT NULL,
+    format TEXT NOT NULL DEFAULT 'json.v1',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (scope, fingerprint)
+);
+"""
+
+# One-time, idempotent backfill: only fires while the new table is still
+# empty (``WHERE NOT EXISTS (SELECT 1 FROM workflow_graph_snapshot_scoped)``)
+# — once any scope has written a row, this INSERT selects nothing on every
+# subsequent call, so running it on every _ensure_table is cheap and safe.
+# Picks the legacy table's single most recent row (its "last write wins"
+# model kept at most one) and labels it scope='default', so an existing
+# deployment's cache survives the table split instead of an expensive
+# rebuild (see module docstring).
+_DDL_MIGRATE_LEGACY = """
+INSERT INTO workflow_graph_snapshot_scoped
+    (scope, fingerprint, payload, node_count, edge_count, format, created_at)
+SELECT 'default', fingerprint, payload, node_count, edge_count, format, created_at
+FROM workflow_graph_snapshot
+WHERE NOT EXISTS (SELECT 1 FROM workflow_graph_snapshot_scoped)
+ORDER BY created_at DESC
+LIMIT 1;
 """
 
 FORMAT_NDJSON_V1 = "ndjson.v1"
@@ -134,11 +171,14 @@ def _conn(store):
 
 
 def _ensure_table(store) -> None:
-    """Idempotently create the snapshot table + format column."""
+    """Idempotently create the scoped table (+ the legacy table, for an old
+    binary's continued operation) and run the one-time legacy backfill."""
     with _conn(store) as conn, conn.cursor() as cur:
-        cur.execute(_DDL)
-        cur.execute(_DDL_FORMAT)
-        cur.execute(_DDL_SCOPE)
+        cur.execute(_DDL_LEGACY)
+        cur.execute(_DDL_LEGACY_FORMAT)
+        cur.execute(_DDL_LEGACY_SCOPE)
+        cur.execute(_DDL_SCOPED)
+        cur.execute(_DDL_MIGRATE_LEGACY)
         conn.commit()
 
 
@@ -172,24 +212,30 @@ def write_snapshot(store, *, fingerprint: str, graph: dict, scope: str) -> dict:
     — the finished build cache; ``scope`` identifies the writing instance
     (``cortex_viz.shared.instance_scope.resolve_instance_scope``, resolved by
     the caller — this module stays a pure persistence boundary and does not
-    resolve its own scope). Post: the table holds exactly one row for
-    ``scope`` (this snapshot, format ``ndjson.v1``); any PRIOR row for the
-    SAME ``scope`` is removed. Rows belonging to other scopes are untouched
-    (D10 — this is the fix for the pre-scope "last write wins" contamination
-    between instances serving different checkouts). Returns
-    ``{"node_count", "edge_count", "bytes"}``.
+    resolve its own scope). Post: the dedicated table
+    (``workflow_graph_snapshot_scoped``) holds exactly one row for ``scope``
+    (this snapshot, format ``ndjson.v1``); any PRIOR row for the SAME
+    ``scope`` is removed. Rows belonging to other scopes are untouched —
+    both because the ``DELETE`` is scope-filtered (D10) and because this
+    table's primary key is the composite ``(scope, fingerprint)`` (D11), so
+    a fingerprint collision with another scope's row cannot block the
+    ``INSERT``. An old (pre-D11) binary cannot reach this table at all — it
+    only knows the legacy table's name (D11 — see module docstring).
+    Returns ``{"node_count", "edge_count", "bytes"}``.
     """
     _ensure_table(store)
     nodes = graph.get("nodes") or []
     edges = graph.get("edges") or graph.get("links") or []
     payload = _encode_ndjson_gzip(nodes, edges, graph.get("meta") or {})
     with _conn(store) as conn, conn.cursor() as cur:
-        cur.execute("DELETE FROM workflow_graph_snapshot WHERE scope = %s", (scope,))
         cur.execute(
-            "INSERT INTO workflow_graph_snapshot "
-            "(fingerprint, payload, node_count, edge_count, format, scope) "
+            "DELETE FROM workflow_graph_snapshot_scoped WHERE scope = %s", (scope,)
+        )
+        cur.execute(
+            "INSERT INTO workflow_graph_snapshot_scoped "
+            "(scope, fingerprint, payload, node_count, edge_count, format) "
             "VALUES (%s, %s, %s, %s, %s, %s)",
-            (fingerprint, payload, len(nodes), len(edges), FORMAT_NDJSON_V1, scope),
+            (scope, fingerprint, payload, len(nodes), len(edges), FORMAT_NDJSON_V1),
         )
         conn.commit()
     return {
@@ -206,12 +252,14 @@ def read_latest_snapshot(store, *, scope: str) -> dict | None:
     ``write_snapshot``'s ``scope`` — the caller wires both from the same
     source). Result: ``{"fingerprint", "payload_gzip": bytes, "node_count",
     "edge_count", "format"}``. ``payload_gzip`` is the stored bytes exactly
-    as written; interpret them per ``format`` (see module docstring).
+    as written; interpret them per ``format`` (see module docstring). Reads
+    the dedicated table (``workflow_graph_snapshot_scoped``) — an old
+    (pre-D11) reader cannot reach it (D11, see module docstring).
     """
     _ensure_table(store)
     sql = (
         "SELECT fingerprint, payload, node_count, edge_count, format "
-        "FROM workflow_graph_snapshot WHERE scope = %s "
+        "FROM workflow_graph_snapshot_scoped WHERE scope = %s "
         "ORDER BY created_at DESC LIMIT 1"
     )
     with _conn(store) as conn, conn.cursor() as cur:

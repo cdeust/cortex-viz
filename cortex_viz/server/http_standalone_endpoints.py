@@ -65,11 +65,11 @@ def serve_graph_full(handler, store) -> None:
     """GET /api/graph/full — the COMPLETE graph from the durable PG snapshot.
 
     Serves the persisted full graph (every entity, AST symbol, memory, file,
-    command + all edges — the README-hero view) directly from
-    ``workflow_graph_snapshot``. Unlike ``/api/graph`` this does NOT read the
-    volatile in-process build cache and never lazy-kicks a build, so it is
-    stable across the build's rebuild loop: once a build has completed once,
-    the snapshot is always available and identical.
+    command + all edges — the README-hero view) directly from the durable
+    snapshot store (``snapshot_pg_store``). Unlike ``/api/graph`` this does
+    NOT read the volatile in-process build cache and never lazy-kicks a
+    build, so it is stable across the build's rebuild loop: once a build
+    has completed once, the snapshot is always available and identical.
 
     A ``json.v1`` row is already gzip(JSON); it is streamed verbatim with
     ``Content-Encoding: gzip`` (the browser inflates transparently) — no
