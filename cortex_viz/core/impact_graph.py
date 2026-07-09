@@ -3,21 +3,25 @@
 P3 — live impact mapping. When a file edit/write is captured (P0 activity
 spine), the server asks AP for that file's blast radius (``impact_for_path``)
 and this turns the result into nodes/edges that hang off the SAME
-``file:<path>`` node the edit action already points to, so the graph shows —
-live, the moment you save — what your change affects:
+``file:<hash>`` node the edit action already points to (P4 node-unification —
+see ``core.activity_paths``), so the graph shows — live, the moment you
+save — what your change affects:
 
     caller-symbol ──impacts──▶ file(edited) ──uses──▶ dependency-symbol
     reverse-dep-file ──impacts──▶ file(edited)
 
 Directional by construction: ``impacts`` edges point INTO the edited file
 (these break if it changes — the blast radius), ``uses`` edges point OUT (what
-the file depends on). Pure: zero I/O, stdlib only. Bounded by ``max_items`` so
-a hot file can't flood the stream.
+the file depends on). Pure: zero I/O, stdlib only (``NodeIdFactory.file_id``
+is a pure hash, no filesystem access). Bounded by ``max_items`` so a hot file
+can't flood the stream.
 """
 
 from __future__ import annotations
 
 from typing import Any
+
+from cortex_viz.core.workflow_graph_schema import NodeIdFactory
 
 
 def _short(qn: str) -> str:
@@ -29,16 +33,20 @@ def impact_to_graph(
 ) -> dict[str, list]:
     """Blast-radius ``{nodes, edges}`` for an edited file.
 
-    ``file_path`` is the absolute path the edit action targets (so the center
-    node id ``file:<file_path>`` matches the activity spine's target node and
-    the blast radius attaches to it). ``impact`` is the dict from
-    ``server.trace_impact.impact_for_path`` (``upstream`` = callers,
-    ``downstream`` = dependencies, ``depended_on_by`` = file-level reverse
-    deps). Symbol/file ids here are NOT yet unified with the AST layer's ids
-    (that is P4 node-unification) — for now they render as the live blast
-    radius hanging off the edited file.
+    ``file_path`` is the REAL absolute path the edit action targets (the
+    caller resolves it from the activity row's ``detail.path`` — see
+    ``server.http_standalone_activity._maybe_trigger_impact``). The
+    center node id ``file:<hash(file_path)>`` is minted through the SAME
+    ``NodeIdFactory.file_id`` scheme the activity spine and the galaxy both
+    use (P4 node-unification, ``core.activity_paths``), so it matches the
+    activity spine's target node and the blast radius attaches to it.
+    ``impact`` is the dict from ``server.trace_impact.impact_for_path``
+    (``upstream`` = callers, ``downstream`` = dependencies,
+    ``depended_on_by`` = file-level reverse deps). Symbol ids are NOT unified
+    with the AST layer's ids — that remains future scope; only the FILE node
+    id is unified here.
     """
-    fid = f"file:{file_path}"
+    fid = NodeIdFactory.file_id(file_path)
     nodes: list[dict] = [
         {"id": fid, "kind": "file", "type": "file",
          "label": file_path.rsplit("/", 1)[-1] or file_path},

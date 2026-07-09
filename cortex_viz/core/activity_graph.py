@@ -15,12 +15,25 @@ each maps to a target node and a typed, DIRECTIONAL edge from the action:
 Pure: zero I/O, stdlib only. Mirrors the existing ``trace.v1`` verbs
 (read/edit/write/run) so the live spine and the post-hoc Trace view speak the
 same edge language.
+
+FILE target ids use ``core.activity_paths.file_target_id`` — the SAME
+``file:<hash>`` scheme the galaxy workflow graph mints (P4 node-unification,
+see that module's docstring) — so the live spine's FILE nodes dedup-merge
+with the galaxy's on the client instead of rendering as duplicates.
 """
 
 from __future__ import annotations
 
 import re
 from typing import Any
+
+from cortex_viz.core.activity_paths import (
+    canonical_file_id_for_legacy,
+    canonicalize_path,
+    file_target_id,
+    is_canonical_file_target_id,
+)
+from cortex_viz.core.workflow_graph_schema import NodeIdFactory
 
 # Tool → (action verb, target kind, edge kind). The verbs match the Trace
 # view's file-edge vocabulary (read/edit/write/run) so both renderers agree.
@@ -38,12 +51,21 @@ def _first_path(text: str) -> str | None:
     return m.group(1) if m else None
 
 
-def classify(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any]:
+def classify(
+    tool_name: str, tool_input: dict[str, Any], cwd: str = ""
+) -> dict[str, Any]:
     """Map (tool_name, tool_input) → action semantics.
 
     Returns ``{action, target_id, target_kind, target_label, edge_kind}``.
     Covers the full taxonomy the spec demands: tools, MCP calls, file
     read/edit/write, terminal commands, skills/slash-commands, subagents, web.
+
+    ``cwd`` (the hook event's working directory) resolves ``cwd``-relative or
+    ``~``-prefixed paths to the canonical absolute form before minting a FILE
+    target id (see ``core.activity_paths.canonicalize_path``) — needed for
+    Bash-derived paths, which are frequently relative; Read/Edit/Write
+    ``file_path`` arguments are already absolute per Claude Code's own tool
+    contract, so canonicalization is a no-op there.
     """
     ti = tool_input or {}
     # MCP call: tool_name is ``mcp__<server>__<tool>`` (or plugin-namespaced
@@ -61,20 +83,25 @@ def classify(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any]:
         }
     if tool_name in _FILE_READ:
         path = ti.get("file_path") or ti.get("notebook_path") or ti.get("path")
-        return _file_action("read", path or ti.get("pattern") or "?")
+        return _file_action("read", path or ti.get("pattern") or "?", cwd)
     if tool_name in _FILE_EDIT:
-        return _file_action("edit", ti.get("file_path") or ti.get("notebook_path") or "?")
+        return _file_action(
+            "edit", ti.get("file_path") or ti.get("notebook_path") or "?", cwd
+        )
     if tool_name in _FILE_WRITE:
-        return _file_action("write", ti.get("file_path") or "?")
+        return _file_action("write", ti.get("file_path") or "?", cwd)
     if tool_name == "Bash":
         cmd = str(ti.get("command") or "")
+        raw_cpath = _first_path(cmd)
         return {
             "action": "run",
             "target_id": f"cmd:{cmd[:80]}" if cmd else "cmd:?",
             "target_kind": "command",
             "target_label": cmd[:80] or "?",
             "edge_kind": "run",
-            "command_path": _first_path(cmd),  # a touched file, if any
+            # a touched file, if any — canonicalized so it joins the SAME
+            # file-id space as every other FILE target (see module docstring).
+            "command_path": canonicalize_path(raw_cpath, cwd) if raw_cpath else None,
         }
     if tool_name == "Skill":
         skill = str(ti.get("skill") or ti.get("name") or "?")
@@ -113,13 +140,29 @@ def classify(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _file_action(verb: str, path: str) -> dict[str, Any]:
+def _file_action(verb: str, path: str, cwd: str) -> dict[str, Any]:
+    """``path`` unresolved (e.g. a bare Grep ``pattern`` with no ``path``
+    key, sentinel ``"?"``) can't be canonicalized or hashed — kept as a
+    literal degenerate id so the action still renders, just outside the
+    unified file-id space (no galaxy FILE node exists for it to join
+    anyway)."""
+    if not path or path == "?":
+        return {
+            "action": verb, "target_id": "file:?", "target_kind": "file",
+            "target_label": "?", "edge_kind": verb, "path": None,
+        }
+    abs_path = canonicalize_path(path, cwd)
     return {
         "action": verb,
-        "target_id": f"file:{path}",
+        "target_id": file_target_id(path, cwd),
         "target_kind": "file",
-        "target_label": path.rsplit("/", 1)[-1] or path,
+        "target_label": abs_path.rsplit("/", 1)[-1] or abs_path,
         "edge_kind": verb,
+        # canonical absolute path, threaded through to ``detail`` so
+        # downstream consumers needing a REAL filesystem path (the P3 live
+        # blast-radius trigger, ``core.wiki_page_actions``) don't have to
+        # reverse-engineer it out of the hashed id.
+        "path": abs_path,
     }
 
 
@@ -153,14 +196,21 @@ def normalize_event(event: dict[str, Any]) -> dict[str, Any] | None:
     tool_name = str(event.get("tool_name") or "")
     if not tool_name:
         return None
-    c = classify(tool_name, event.get("tool_input") or {})
+    c = classify(tool_name, event.get("tool_input") or {}, cwd)
+    detail: dict[str, Any] = {}
+    if c.get("command_path"):
+        detail["command_path"] = c["command_path"]
+    if c.get("path"):
+        # canonical absolute path for a FILE target (kept alongside the
+        # hashed target_id — see ``_file_action``'s docstring on why).
+        detail["path"] = c["path"]
     return {
         "session_id": session_id, "ts": ts, "cwd": cwd,
         "event_type": etype or "PostToolUse", "tool": tool_name,
         "action": c["action"], "target_id": c["target_id"],
         "target_kind": c["target_kind"], "target_label": c["target_label"],
         "edge_kind": c["edge_kind"],
-        "detail": {"command_path": c.get("command_path")} if c.get("command_path") else {},
+        "detail": detail,
     }
 
 
@@ -170,6 +220,15 @@ def event_to_graph(row: dict[str, Any]) -> dict[str, list]:
     session ──did──▶ action ──edge_kind──▶ target. ``appendGraphDelta`` on the
     client dedups by id, so the session/target nodes coalesce across events
     while each action is unique (id keyed on session + ts/seq).
+
+    Self-heals LEGACY rows (written before the P4 path-unification fix, whose
+    ``target_id`` still embeds the raw path — ``file:<raw path>``) into the
+    canonical ``file:<hash>`` id on every call, using the row's own ``cwd``
+    column. This is why SSE replay (which re-derives a fragment from the
+    STORED row on every reconnect) merges old and new activity into the same
+    galaxy FILE nodes without a DB migration — see ``core.activity_paths``.
+    A row already in canonical shape (the common case going forward) skips
+    the recompute; ``is_canonical_file_target_id`` gates it.
     """
     sid = row["session_id"]
     seq = row.get("seq") or row.get("id") or row.get("ts") or "0"
@@ -192,17 +251,25 @@ def event_to_graph(row: dict[str, Any]) -> dict[str, list]:
                   "label": row["action"], "tool": row["tool"]})
     edges.append({"id": f"session:{sid}->{aid}", "source": f"session:{sid}",
                   "target": aid, "kind": "did", "type": "did"})
-    if row.get("target_id"):
-        nodes.append({"id": row["target_id"], "kind": row["target_kind"],
+    tid = row.get("target_id") or ""
+    if tid and row.get("target_kind") == "file" and not is_canonical_file_target_id(tid):
+        tid = canonical_file_id_for_legacy(tid, row.get("cwd") or "")
+    if tid:
+        nodes.append({"id": tid, "kind": row["target_kind"],
                       "type": row["target_kind"], "label": row["target_label"]})
-        edges.append({"id": f"{aid}->{row['target_id']}", "source": aid,
-                      "target": row["target_id"], "kind": row["edge_kind"],
+        edges.append({"id": f"{aid}->{tid}", "source": aid,
+                      "target": tid, "kind": row["edge_kind"],
                       "type": row["edge_kind"]})
     # A terminal command that touched a file gets a second directional edge
     # action ──run──▶ file, so shell file-writes are visible too.
-    cpath = (row.get("detail") or {}).get("command_path")
-    if cpath:
-        fid = f"file:{cpath}"
+    # ``canonicalize_path`` is idempotent on an already-clean absolute path
+    # (the post-fix common case), so re-applying it here is a safe no-op for
+    # new rows and the self-heal step for legacy rows (whose stored
+    # ``command_path`` is still the raw, uncanonicalized token).
+    cpath_raw = (row.get("detail") or {}).get("command_path")
+    if cpath_raw:
+        cpath = canonicalize_path(cpath_raw, row.get("cwd") or "")
+        fid = NodeIdFactory.file_id(cpath)
         nodes.append({"id": fid, "kind": "file", "type": "file",
                       "label": cpath.rsplit("/", 1)[-1]})
         edges.append({"id": f"{aid}->{fid}", "source": aid, "target": fid,
