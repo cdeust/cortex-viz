@@ -198,9 +198,12 @@ def serve_full_document_from_ndjson(handler, snap: dict) -> None:
 def serve_graph_full_stream(handler, store) -> None:
     """GET /api/graph/full/stream — see module docstring for the wire shape."""
     from cortex_viz.infrastructure import snapshot_pg_store
+    from cortex_viz.shared.instance_scope import resolve_instance_scope
 
     try:
-        snap = snapshot_pg_store.read_latest_snapshot(store)
+        snap = snapshot_pg_store.read_latest_snapshot(
+            store, scope=resolve_instance_scope()
+        )
     except Exception as e:  # pragma: no cover - defensive
         from cortex_viz.server.http_standalone_response import send_json_error
 
