@@ -28,6 +28,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from cortex_viz.core.activity_paths import canonicalize_path, file_target_id
+
 # ── File-path extraction from tool inputs (pure) ────────────────────────
 # Tools whose ``input`` carries an explicit file path. Mirrors the set the
 # legacy ingest used, lifted here so the trace owns one definition.
@@ -106,14 +108,32 @@ def _action_label(tool: str, inp: dict) -> str:
     return tool
 
 
-def _file_node(path: str) -> dict:
-    base = path.replace("\\", "/").rstrip("/").split("/")[-1] or path
+def _file_node(path: str, cwd: str) -> dict:
+    """FILE node for one referenced path — canonical join id, human label.
+
+    ``id`` is minted via ``core.activity_paths.file_target_id`` — the SAME
+    ``file:<sha256(abs_path)[:10]>`` hash the galaxy workflow graph and the
+    live activity spine (``core.activity_graph``) mint for the identical
+    file (P4 unification, see ``core.activity_paths`` module docstring).
+    This is the join key ``appendGraphDelta`` dedups on when the trace
+    view's file nodes merge into the same client-side graph as the galaxy
+    and the live activity spine — so a file touched in a Trace session now
+    coalesces with its galaxy/impact counterpart instead of minting a
+    disjoint node.
+
+    ``path`` stays the canonical ABSOLUTE path (not the hash) so the L3
+    drill (``/api/trace/file``, ``/api/trace/impact`` — real filesystem/git
+    operations) and the human-readable label keep working unchanged; only
+    the join id changed shape.
+    """
+    abs_path = canonicalize_path(path, cwd)
+    base = abs_path.replace("\\", "/").rstrip("/").split("/")[-1] or abs_path
     return {
-        "id": f"file:{path}",
+        "id": file_target_id(path, cwd),
         "kind": "file",
         "type": "file",
         "label": base,
-        "path": path,
+        "path": abs_path,
         # NOTE: no ``collapsed`` flag. The force-graph renderer hides any
         # node with ``collapsed`` unless its ``_parentId`` is in the
         # expanded set; trace controls visibility by what it FETCHES
@@ -204,12 +224,17 @@ def build_chain(
                     "domain_id": session_node,
                 }
             )
-            # action -> file verb edges (+ file nodes once each)
+            # action -> file verb edges (+ file nodes once each). ``fid`` is
+            # the canonical hashed id (see ``_file_node``) — dedup on IT, not
+            # on the raw path string, so two raw spellings of the same file
+            # (e.g. ``./x.py`` vs the absolute path) still collapse to one
+            # node instead of minting two.
+            cwd = ev.get("cwd") or ""
             for verb, path in extract_file_refs(tool, inp):
-                fid = f"file:{path}"
-                if path not in files_seen:
-                    files_seen.add(path)
-                    nodes.append(_file_node(path))
+                fid = file_target_id(path, cwd)
+                if fid not in files_seen:
+                    files_seen.add(fid)
+                    nodes.append(_file_node(path, cwd))
                 edges.append(
                     {
                         "id": f"{nid}->{fid}",
