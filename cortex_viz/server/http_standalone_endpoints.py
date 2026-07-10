@@ -4,17 +4,16 @@ Owns:
 
 * ``serve_sankey`` — /api/sankey dashboard query
 * ``serve_graph`` / ``serve_discussions`` / ``serve_discussion_detail``
-* ``serve_static`` — sandboxed static-file reader for ``/js/`` + ``/css/``
-* ``serve_file_diff`` — thin delegate to ``http_file_diff``
+
+Static-file endpoints (``serve_static``, ``serve_shared_asset``,
+``serve_file_diff``) live in ``http_standalone_static``; re-exported
+below for backward-compatible imports.
 
 All response shaping flows through ``http_standalone_response`` so the
 HTTP boilerplate lives in one place.
 """
 
 from __future__ import annotations
-
-import re
-from pathlib import Path
 
 from cortex_viz.server.http_standalone_graph import (
     build_discussion_detail,
@@ -24,7 +23,6 @@ from cortex_viz.server.http_standalone_graph import (
 from cortex_viz.server.http_standalone_response import (
     send_json_error,
     send_json_ok,
-    send_plain_error,
 )
 
 # Sankey + HUD-stats endpoints were split into
@@ -35,6 +33,40 @@ from cortex_viz.server.http_standalone_endpoints_sankey import (  # noqa: F401
     serve_sankey,
     serve_stats,
 )
+
+# P0/P3 live session-activity endpoints (serve_activity_ingest,
+# serve_activity_stream, the P3 blast-radius trigger) were split into
+# ``http_standalone_activity`` (500-line limit — P4 node-unification's
+# real-path/detail.path plumbing grew this pair past the threshold).
+# Re-exported so ``from cortex_viz.server.http_standalone_endpoints import
+# serve_activity_ingest`` (routes module) keeps resolving — same precedent
+# as the ``http_standalone_endpoints_sankey`` re-export above.
+from cortex_viz.server.http_standalone_activity import (  # noqa: F401
+    serve_activity_ingest,
+    serve_activity_stream,
+)
+
+# Sandboxed static-file endpoints (serve_static, serve_shared_asset,
+# serve_file_diff) were split into ``http_standalone_static`` (500-line
+# limit, §4.1) — a distinct concern (disk reads under a traversal guard)
+# from the graph/discussion JSON endpoints in this module. Re-exported
+# so ``from cortex_viz.server.http_standalone_endpoints import
+# serve_static`` (routes module) keeps resolving — same precedent as the
+# re-exports above.
+from cortex_viz.server.http_standalone_static import (  # noqa: F401
+    serve_file_diff,
+    serve_shared_asset,
+    serve_static,
+)
+
+# /api/graph/events (SSE) was split into ``http_standalone_sse``
+# (500-line limit, §4.1) — cursor resolution, replay-then-tail write
+# loop, and 7 cohesive helpers all belonging to one concern. Re-exported
+# so ``from cortex_viz.server.http_standalone_endpoints import
+# serve_graph_events`` (routes module) keeps resolving — same precedent
+# as the ``http_standalone_endpoints_sankey`` / ``http_standalone_activity``
+# re-exports above.
+from cortex_viz.server.http_standalone_sse import serve_graph_events  # noqa: F401
 
 
 def serve_graph(handler, store) -> None:
@@ -59,6 +91,36 @@ def serve_dashboard(handler, store) -> None:
         send_json_ok(handler, build_dashboard_data(store))
     except Exception as e:
         send_json_error(handler, e)
+
+
+def _send_no_snapshot_warming(handler) -> None:
+    """503 ``{"reason":"no_snapshot"}`` — no build has finished since install.
+
+    Tells the client to fall back to the progressive ``/api/graph`` path.
+    """
+    body = b'{"status":"warming","reason":"no_snapshot"}'
+    handler.send_response(503)
+    handler.send_header("Content-Type", "application/json")
+    handler.send_header("Content-Length", str(len(body)))
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
+def _send_gzip_snapshot(handler, snap: dict) -> None:
+    """Stream a ``json.v1`` snapshot row verbatim as ``Content-Encoding: gzip``.
+
+    The row is already gzip(JSON); no server-side decode/re-encode.
+    """
+    payload = snap["payload_gzip"]
+    handler.send_response(200)
+    handler.send_header("Content-Type", "application/json")
+    handler.send_header("Content-Encoding", "gzip")
+    handler.send_header("Content-Length", str(len(payload)))
+    handler.send_header("Cache-Control", "max-age=30")
+    handler.send_header("X-Graph-Node-Count", str(snap["node_count"]))
+    handler.send_header("X-Graph-Edge-Count", str(snap["edge_count"]))
+    handler.end_headers()
+    handler.wfile.write(payload)
 
 
 def serve_graph_full(handler, store) -> None:
@@ -97,12 +159,7 @@ def serve_graph_full(handler, store) -> None:
         send_json_error(handler, e)
         return
     if snap is None:
-        body = b'{"status":"warming","reason":"no_snapshot"}'
-        handler.send_response(503)
-        handler.send_header("Content-Type", "application/json")
-        handler.send_header("Content-Length", str(len(body)))
-        handler.end_headers()
-        handler.wfile.write(body)
+        _send_no_snapshot_warming(handler)
         return
     if snap.get("format") == snapshot_pg_store.FORMAT_NDJSON_V1:
         from cortex_viz.server.http_standalone_fullstream import (
@@ -111,29 +168,7 @@ def serve_graph_full(handler, store) -> None:
 
         serve_full_document_from_ndjson(handler, snap)
         return
-    payload = snap["payload_gzip"]
-    handler.send_response(200)
-    handler.send_header("Content-Type", "application/json")
-    handler.send_header("Content-Encoding", "gzip")
-    handler.send_header("Content-Length", str(len(payload)))
-    handler.send_header("Cache-Control", "max-age=30")
-    handler.send_header("X-Graph-Node-Count", str(snap["node_count"]))
-    handler.send_header("X-Graph-Edge-Count", str(snap["edge_count"]))
-    handler.end_headers()
-    handler.wfile.write(payload)
-
-
-# P0/P3 live session-activity endpoints (serve_activity_ingest,
-# serve_activity_stream, the P3 blast-radius trigger) were split into
-# ``http_standalone_activity`` (500-line limit — P4 node-unification's
-# real-path/detail.path plumbing grew this pair past the threshold).
-# Re-exported so ``from cortex_viz.server.http_standalone_endpoints import
-# serve_activity_ingest`` (routes module) keeps resolving — same precedent
-# as the ``http_standalone_endpoints_sankey`` re-export above.
-from cortex_viz.server.http_standalone_activity import (  # noqa: F401
-    serve_activity_ingest,
-    serve_activity_stream,
-)
+    _send_gzip_snapshot(handler, snap)
 
 
 def serve_prd(handler, store=None) -> None:
@@ -160,149 +195,6 @@ def serve_prd(handler, store=None) -> None:
         )
     except Exception as e:
         send_json_error(handler, e)
-
-
-def serve_graph_events(handler, store=None) -> None:
-    """GET /api/graph/events — Server-Sent Events stream of build batches.
-
-    The build worker pushes per-source batches onto an in-memory event
-    queue (see ``graph_event_stream``). This handler streams them to a
-    single browser connection in real time so the user watches the
-    graph grow as the builder produces nodes — first source within a
-    second, full graph fills in behind it. No precomputed snapshot is
-    required for this to work; it's the live-build channel.
-
-    Wire format (text/event-stream):
-        event: batch
-        id: <buffer index>
-        data: {"label":..,"nodes":[...],"edges":[...],"off":..,"n_total":..}
-
-        event: done
-        data: {"total_nodes":N,"total_edges":E}
-
-    The client (``ui/unified/js/graph_event_stream.js``) parses each
-    ``batch`` event and calls ``JUG.appendGraphDelta(nodes, edges)``.
-    appendGraphDelta dedups by id, so reconnect-and-replay is safe.
-
-    Lazy-kicks the build (ensure_build_started) so opening the SSE
-    stream on a cold cache starts the pipeline producing events.
-    """
-    from urllib.parse import parse_qs, urlparse
-
-    from cortex_viz.server.graph_event_stream import (
-        format_done,
-        format_event,
-        format_heartbeat,
-        get_stream,
-    )
-    from cortex_viz.server.http_standalone_graph import (
-        ensure_build_started,
-        get_build_progress,
-    )
-
-    # Honour Last-Event-ID for resume after a flaky connection. Spec
-    # says the value is the ``id:`` of the last event the client saw;
-    # we advance past it on resume.
-    last_id_header = (
-        handler.headers.get("Last-Event-ID")
-        or handler.headers.get("Last-Event-Id")
-        or ""
-    )
-    since = 0
-    try:
-        since = int(last_id_header) + 1 if last_id_header else 0
-    except ValueError:
-        since = 0
-    # Also allow ?since=N as a fallback (curl-friendly).
-    qs = parse_qs(urlparse(handler.path).query)
-    if "since" in qs:
-        try:
-            since = max(since, int(qs["since"][0]))
-        except (ValueError, IndexError):
-            pass
-
-    # A held SSE stream is a live client: without this, Chrome freezing a
-    # background tab stops the 30s stats polls, the idle watchdog sees no
-    # request arrivals, and the server shuts down UNDER the open page
-    # (2026-06-10 "AST and chain fail" — the port was simply dead).
-    from cortex_viz.server.http_standalone_state import (
-        stream_closed,
-        stream_opened,
-    )
-
-    stream_opened()
-    try:
-        ensure_build_started(store)
-
-        handler.send_response(200)
-        handler.send_header("Content-Type", "text/event-stream; charset=utf-8")
-        handler.send_header("Cache-Control", "no-cache")
-        handler.send_header("Connection", "keep-alive")
-        handler.send_header("X-Accel-Buffering", "no")  # disable proxy buffering
-        handler.end_headers()
-
-        stream = get_stream()
-
-        # Replay-then-tail loop. subscribe() returns on close-and-drained
-        # OR on a 15 s idle timeout. On idle timeout we emit an SSE
-        # comment (heartbeat) and re-subscribe from where we left off,
-        # so the connection stays open across long pauses (the source-
-        # loading phase is ~15–20 s of silence before the first batch).
-        # Loop exits cleanly when (a) the stream is closed and drained,
-        # or (b) the client disconnects (BrokenPipe).
-        cursor = since
-        while True:
-            saw_any = False
-            for idx, event in stream.subscribe(since=cursor, timeout=15.0):
-                try:
-                    handler.wfile.write(format_event(idx, event))
-                    handler.wfile.flush()
-                except (BrokenPipeError, ConnectionResetError):
-                    return
-                cursor = idx + 1
-                saw_any = True
-
-            s = stream.stats()
-            if s.get("closed") and cursor >= s.get("count", 0):
-                # Build finished AND we've drained every event.
-                prog = get_build_progress()
-                try:
-                    handler.wfile.write(
-                        format_done(
-                            total_nodes=prog.get("node_count", 0),
-                            total_edges=prog.get("edge_count", 0),
-                        )
-                    )
-                    handler.wfile.flush()
-                except (BrokenPipeError, ConnectionResetError):
-                    pass
-                return
-
-            # Idle timeout — keep the connection alive with a comment.
-            # If the client is gone, the write fails and we exit.
-            try:
-                handler.wfile.write(format_heartbeat())
-                handler.wfile.flush()
-            except (BrokenPipeError, ConnectionResetError):
-                return
-            # If we saw nothing AND the stream is still open, loop
-            # back into subscribe() to wait for more. This is the
-            # source-loading gap (no batches for ~15–20 s while PG
-            # queries run).
-            if not saw_any:
-                continue
-    except Exception as e:
-        # Best-effort error reporting on an already-started chunked
-        # response is fraught; log and close.
-        try:
-            handler.wfile.write(
-                f"event: error\ndata: {type(e).__name__}: {e}\n\n".encode()
-            )
-            handler.wfile.flush()
-        except Exception:
-            pass
-    finally:
-        stream_closed()
 
 
 def serve_graph_slice(handler) -> None:
@@ -353,6 +245,47 @@ def serve_graph_progress(handler, store=None) -> None:
         send_json_error(handler, e)
 
 
+def _apply_phase_param(
+    p: str, name: str, offset: int, limit: int | None
+) -> tuple[str, int, int | None]:
+    """Fold one raw ``key=value`` query fragment into the phase params.
+
+    Silently ignores unparseable ints (original behavior — no error, the
+    default just isn't updated for that fragment).
+    """
+    from urllib.parse import unquote
+
+    if p.startswith("name="):
+        name = unquote(p[5:])
+    elif p.startswith("offset="):
+        try:
+            offset = int(p[7:])
+        except ValueError:
+            pass
+    elif p.startswith("limit="):
+        try:
+            limit = int(p[6:])
+        except ValueError:
+            pass
+    return name, offset, limit
+
+
+def _parse_phase_query_params(handler) -> tuple[str, int, int | None]:
+    """Parse ``?name=&offset=&limit=`` from /api/graph/phase's raw query.
+
+    Manual key-prefix parsing (not ``urllib.parse.parse_qs``) preserves
+    this endpoint's original last-wins semantics for repeated keys.
+    """
+    name = ""
+    offset = 0
+    limit: int | None = None
+    if "?" not in handler.path:
+        return name, offset, limit
+    for p in handler.path.split("?", 1)[1].split("&"):
+        name, offset, limit = _apply_phase_param(p, name, offset, limit)
+    return name, offset, limit
+
+
 def serve_graph_phase(handler) -> None:
     """GET /api/graph/phase?name=<L0|L1|…|L6:proj|L6_CROSS>
 
@@ -366,28 +299,10 @@ def serve_graph_phase(handler) -> None:
     url-encodes that as ``L6%3ACortex``, so we MUST percent-decode
     before lookup or every L6:<proj> fetch returns an empty payload.
     """
-    from urllib.parse import unquote
-
     from cortex_viz.server.http_standalone_graph import get_phase_payload
 
     try:
-        name = ""
-        offset = 0
-        limit: int | None = None
-        if "?" in handler.path:
-            for p in handler.path.split("?", 1)[1].split("&"):
-                if p.startswith("name="):
-                    name = unquote(p[5:])
-                elif p.startswith("offset="):
-                    try:
-                        offset = int(p[7:])
-                    except ValueError:
-                        pass
-                elif p.startswith("limit="):
-                    try:
-                        limit = int(p[6:])
-                    except ValueError:
-                        pass
+        name, offset, limit = _parse_phase_query_params(handler)
         send_json_ok(handler, get_phase_payload(name, offset=offset, limit=limit))
     except Exception as e:
         send_json_error(handler, e)
@@ -440,6 +355,66 @@ def _resolve_lod_cell(store, node_id: str) -> dict:
     }
 
 
+def _parse_node_id_param(handler) -> str:
+    """Extract the ``?id=`` query value from the raw request path."""
+    from urllib.parse import unquote
+
+    node_id = ""
+    if "?" in handler.path:
+        for p in handler.path.split("?", 1)[1].split("&"):
+            if p.startswith("id="):
+                node_id = unquote(p[3:])
+    return node_id
+
+
+def _resolve_node_record(store, kind: str, raw: str, node_id: str) -> dict | None:
+    """Resolve a node's PG record, falling back to the cached build index.
+
+    ``memory:<pg_id>`` and ``entity:<pg_id>`` ids resolve to their PG rows
+    directly. Every other kind (symbol, file, domain, skill, hook,
+    tool_hub, discussion, command, mcp) has no PG row, so it falls back to
+    the full cached node from the build's id index — without this
+    fallback, only memory:/entity: ids ever resolved and the detail panel
+    stayed empty for the rest of the galaxy (observed 2026-06-12).
+    """
+    from cortex_viz.server.http_standalone_graph import get_node_record
+
+    record: dict | None = None
+    if kind == "memory" and raw.isdigit() and hasattr(store, "get_memory"):
+        record = store.get_memory(int(raw))
+    elif kind == "entity" and raw.isdigit() and hasattr(store, "get_entity_by_id"):
+        record = store.get_entity_by_id(int(raw))
+    if record is None:
+        record = get_node_record(node_id)
+    return record
+
+
+def _fetch_node_neighbors(handler, node_id: str) -> dict:
+    """Fetch the paged neighbor set for the node-detail panel.
+
+    Neighborhood is resolved ON DEMAND — the panel's relational sections
+    (symbols defined here, imports, callers) render from THIS response,
+    never from a client-side join over the full edge copy (the
+    monolithic-load report, 2026-06-12). Paged via ?n_offset / ?n_limit;
+    complete across continuation.
+    """
+    from urllib.parse import parse_qs, urlparse
+
+    from cortex_viz.server.http_standalone_graph import get_node_neighbors
+
+    qs = parse_qs(urlparse(handler.path).query)
+
+    def _qint(name: str, default: int) -> int:
+        try:
+            return int(qs[name][0])
+        except (KeyError, IndexError, ValueError):
+            return default
+
+    return get_node_neighbors(
+        node_id, offset=_qint("n_offset", 0), limit=_qint("n_limit", 500)
+    )
+
+
 def serve_graph_node(handler, store) -> None:
     """GET /api/graph/node?id=<node_id> — full record for one node.
 
@@ -451,14 +426,8 @@ def serve_graph_node(handler, store) -> None:
     parsed into {kind, label}. source: design 2026-05-31 — top-25k galaxy
     + on-demand cold-tail drill.
     """
-    from urllib.parse import unquote
-
     try:
-        node_id = ""
-        if "?" in handler.path:
-            for p in handler.path.split("?", 1)[1].split("&"):
-                if p.startswith("id="):
-                    node_id = unquote(p[3:])
+        node_id = _parse_node_id_param(handler)
         if not node_id:
             send_json_ok(handler, {"error": "missing id"})
             return
@@ -472,44 +441,8 @@ def serve_graph_node(handler, store) -> None:
             send_json_ok(handler, _resolve_lod_cell(store, node_id))
             return
 
-        record: dict | None = None
-        if kind == "memory" and raw.isdigit() and hasattr(store, "get_memory"):
-            record = store.get_memory(int(raw))
-        elif kind == "entity" and raw.isdigit() and hasattr(store, "get_entity_by_id"):
-            record = store.get_entity_by_id(int(raw))
-
-        # Fallback for every kind without a PG row (symbol, file,
-        # domain, skill, hook, tool_hub, discussion, command, mcp):
-        # serve the full cached node from the build's id index. Without
-        # this, only memory:/entity: ids ever resolved and the detail
-        # panel stayed empty for the rest of the galaxy — nodes were
-        # not browsable (observed 2026-06-12).
-        from cortex_viz.server.http_standalone_graph import (
-            get_node_neighbors,
-            get_node_record,
-        )
-
-        if record is None:
-            record = get_node_record(node_id)
-
-        # Neighborhood ON DEMAND — the panel's relational sections
-        # (symbols defined here, imports, callers) render from THIS
-        # response, never from a client-side join over the full edge
-        # copy (the monolithic-load report, 2026-06-12). Paged via
-        # ?n_offset / ?n_limit; complete across continuation.
-        from urllib.parse import parse_qs, urlparse
-
-        qs = parse_qs(urlparse(handler.path).query)
-
-        def _qint(name: str, default: int) -> int:
-            try:
-                return int(qs[name][0])
-            except (KeyError, IndexError, ValueError):
-                return default
-
-        nb = get_node_neighbors(
-            node_id, offset=_qint("n_offset", 0), limit=_qint("n_limit", 500)
-        )
+        record = _resolve_node_record(store, kind, raw, node_id)
+        nb = _fetch_node_neighbors(handler, node_id)
 
         send_json_ok(
             handler,
@@ -542,93 +475,6 @@ def serve_discussion_detail(handler, path_no_qs: str) -> None:
         send_json_ok(handler, build_discussion_detail(session_id))
     except Exception as e:
         send_json_error(handler, e)
-
-
-def serve_static(handler, base_dir: Path, filename: str, content_type: str) -> None:
-    """Sandboxed read-only static-file reader for ``/js/`` and ``/css/``.
-
-    Security: strip directory components, reject hidden files / null
-    bytes / non-alphanumeric names, match against a directory-listing
-    whitelist so the user-supplied path never drives the filesystem
-    read.
-    """
-    safe_name = Path(filename).name
-    if (
-        not safe_name
-        or safe_name.startswith(".")
-        or "\x00" in safe_name
-        or not re.match(r"^[\w][\w.\-]*$", safe_name)
-    ):
-        send_plain_error(handler, 403)
-        return
-    resolved_base = base_dir.resolve()
-    actual_files = {f.name: f for f in resolved_base.iterdir() if f.is_file()}
-    if safe_name not in actual_files:
-        send_plain_error(handler, 404)
-        return
-    body = actual_files[safe_name].read_bytes()
-    handler.send_response(200)
-    handler.send_header("Content-Type", content_type + "; charset=utf-8")
-    handler.send_header("Content-Length", str(len(body)))
-    handler.send_header("Cache-Control", "no-cache")
-    handler.end_headers()
-    handler.wfile.write(body)
-
-
-# Content types for the shared design-system foundation (ui/shared/*). Kept
-# small and explicit — the foundation ships only these kinds.
-_SHARED_CONTENT_TYPES = {
-    ".css": "text/css",
-    ".js": "application/javascript",
-    ".mjs": "application/javascript",
-    ".json": "application/json",
-    ".woff2": "font/woff2",
-    ".woff": "font/woff",
-    ".ttf": "font/ttf",
-    ".svg": "image/svg+xml",
-}
-
-
-def serve_shared_asset(handler, shared_dir: Path, rel_path: str) -> None:
-    """Sandboxed reader for the vendored design-system foundation (``/shared/``).
-
-    Unlike ``serve_static`` (single-level, filename-only) this serves the
-    NESTED token/component tree — ``tokens/colors.css``, ``components/core/
-    core.css`` — because ``ds.css`` ``@import``s them by relative subpath. The
-    depth is the reason for a distinct reader; the traversal guard is the price:
-    the resolved path MUST stay inside ``shared_dir`` and be an existing file,
-    so a crafted ``../`` can never escape the foundation directory.
-    """
-    # Reject the obvious attacks before touching the filesystem.
-    if not rel_path or "\x00" in rel_path or any(
-        part in ("", "..") or part.startswith(".") for part in rel_path.split("/")
-    ):
-        send_plain_error(handler, 403)
-        return
-    base = shared_dir.resolve()
-    target = (base / rel_path).resolve()
-    # Containment check — the resolved path must be within the foundation dir.
-    if base != target and base not in target.parents:
-        send_plain_error(handler, 403)
-        return
-    if not target.is_file():
-        send_plain_error(handler, 404)
-        return
-    content_type = _SHARED_CONTENT_TYPES.get(target.suffix.lower(), "text/plain")
-    body = target.read_bytes()
-    handler.send_response(200)
-    handler.send_header("Content-Type", content_type + "; charset=utf-8")
-    handler.send_header("Content-Length", str(len(body)))
-    handler.send_header("Cache-Control", "no-cache")
-    handler.end_headers()
-    handler.wfile.write(body)
-
-
-def serve_file_diff(handler) -> None:
-    """Thin delegate to ``http_file_diff.serve_file_diff``."""
-    from cortex_viz.server.http_file_diff import serve_file_diff as _serve
-
-    _serve(handler)
 
 
 # ``build_methodology_handler`` removed in Gap 10 — it imported a
