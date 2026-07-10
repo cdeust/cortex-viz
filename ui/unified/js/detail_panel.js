@@ -58,6 +58,95 @@
 
   // ── Connections section ──
 
+  // Bug fix (2026-07-10, user-reported): a wiki hub can link to several
+  // distinct FILE/SYMBOL/WIKI nodes that share the exact same display
+  // label (e.g. 6 different `run_benchmark.py` harnesses in 6 different
+  // directories, or two wiki pages with identical titles). Rendered as
+  // identical rows, they read as a duplication bug rather than 6 real
+  // connections. Disambiguate ONLY the colliding rows within a group,
+  // using the shortest directory suffix (from `node.path`) that makes
+  // them unique; nodes without a `path` fall back to a short id suffix.
+  // Non-colliding rows are untouched — no visual noise when there is
+  // nothing to disambiguate.
+  //
+  // precondition: `items` is one edge-type group (array of
+  //   {node, weight, confidence, reason}), all sharing the group's
+  //   edgeType — this is why disambiguation is scoped PER GROUP, not
+  //   across the whole connections list.
+  // postcondition: returns a Map from item.node.id -> distinguishing
+  //   suffix string, containing an entry ONLY for nodes whose label
+  //   collides with at least one sibling in `items`.
+  function shortestDistinguishingSuffix(paths, names) {
+    // paths: array of full path strings (same length/order as callers'
+    // colliding items). names: the rendered label per path — dropped
+    // from the comparison ONLY when it equals the path's last segment
+    // (true for FILE/SYMBOL, whose label IS the basename — repeating it
+    // would be redundant). For WIKI-like nodes the label is a title, not
+    // a path segment (e.g. two "Ingestion pipeline" pages living in the
+    // SAME directory but different files, pipeline.md vs pipeline-v2.md)
+    // — there the basename is exactly the distinguishing signal and
+    // must stay in the comparison, or both would show "wiki/ingestion"
+    // and remain visually identical (the bug this fix exists to kill).
+    // Returns a parallel array of path suffixes (POSIX-joined, no
+    // trailing slash) that are pairwise unique at the smallest possible
+    // depth. Falls back to the full path if even that does not
+    // disambiguate (genuinely identical path — a real duplicate, which
+    // SHOULD render identically).
+    var dirParts = paths.map(function(p, i) {
+      var parts = String(p || '').split('/');
+      if (parts.length && parts[parts.length - 1] === names[i]) parts.pop();
+      return parts;
+    });
+    var maxDepth = dirParts.reduce(function(m, d) { return Math.max(m, d.length); }, 0);
+    for (var depth = 1; depth <= maxDepth; depth++) {
+      var suffixes = dirParts.map(function(d) {
+        return d.slice(Math.max(0, d.length - depth)).join('/');
+      });
+      var seen = {};
+      var unique = true;
+      for (var i = 0; i < suffixes.length; i++) {
+        if (Object.prototype.hasOwnProperty.call(seen, suffixes[i])) { unique = false; break; }
+        seen[suffixes[i]] = true;
+      }
+      if (unique) return suffixes;
+    }
+    return dirParts.map(function(d) { return d.join('/'); });
+  }
+
+  function buildLabelDisambiguation(items, names) {
+    // invariant: names[i] is the already-computed display label for
+    // items[i] (fullLabel of node.label || node.id) — collisions are
+    // judged on that exact rendered string.
+    var byLabel = {};
+    names.forEach(function(name, i) {
+      if (!byLabel[name]) byLabel[name] = [];
+      byLabel[name].push(i);
+    });
+    var subByIndex = {};
+    Object.keys(byLabel).forEach(function(label) {
+      var idxs = byLabel[label];
+      if (idxs.length < 2) return; // no collision — leave untouched
+      var withPath = idxs.filter(function(i) { return !!items[i].node.path; });
+      if (withPath.length === idxs.length) {
+        // Every colliding node carries a `path` — disambiguate by the
+        // shortest unique directory suffix (e.g. "benchmarks/locomo").
+        var paths = idxs.map(function(i) { return items[i].node.path; });
+        var labelsForPaths = idxs.map(function(i) { return names[i]; });
+        var suffixes = shortestDistinguishingSuffix(paths, labelsForPaths);
+        idxs.forEach(function(i, k) { subByIndex[i] = suffixes[k]; });
+      } else {
+        // No usable path data on at least one colliding node (non-file
+        // kinds without a path field) — last-resort disambiguator: a
+        // short id suffix, still better than an indistinguishable row.
+        idxs.forEach(function(i) {
+          var id = String(items[i].node.id || '');
+          subByIndex[i] = id.length > 10 ? '…' + id.slice(-8) : id;
+        });
+      }
+    });
+    return subByIndex;
+  }
+
   function buildConnections(data, edges) {
     if (!edges.length) return '';
     var byType = {};
@@ -104,9 +193,13 @@
       h += '<div class="conn-group">';
       h += '<div class="conn-type" style="color:' + edgeColor + '">' +
         label + ' <span class="conn-count">' + items.length + '</span></div>';
-      items.forEach(function(item) {
+      var names = items.map(function(item) {
+        return JUG._fmt.fullLabel(item.node.label || item.node.id);
+      });
+      var disambiguation = buildLabelDisambiguation(items, names);
+      items.forEach(function(item, idx) {
         var c = JUG.getNodeColor(item.node);
-        var name = JUG._fmt.fullLabel(item.node.label || item.node.id);
+        var name = names[idx];
         // Gap 6: show confidence + reason chips ONLY for heuristic
         // edges (calls / imports / unresolved). Structural defaults
         // ("100% direct-ast" / "100% memory-entities-link") are
@@ -129,9 +222,17 @@
               + JUG._fmt.esc(item.reason) + '</span>';
           }
         }
-        h += '<div class="conn-item" data-node-id="' + item.node.id + '">' +
+        // Homonym fix: `sub` is set only for rows whose label collides
+        // with a sibling in this group (see buildLabelDisambiguation).
+        // The full path/id always goes in `title` regardless, so a
+        // hover reveals the exact target even when no collision fired.
+        var sub = disambiguation[idx];
+        var subHtml = sub ? '<span class="conn-sub">' + JUG._fmt.esc(sub) + '</span>' : '';
+        var fullRef = item.node.path || item.node.id || '';
+        h += '<div class="conn-item" data-node-id="' + item.node.id +
+          '" title="' + JUG._fmt.esc(fullRef) + '">' +
           '<span class="conn-dot" style="background:' + c + '"></span>' +
-          '<span class="conn-label">' + JUG._fmt.esc(name) + '</span>' +
+          '<span class="conn-label">' + JUG._fmt.esc(name) + subHtml + '</span>' +
           meta + '</div>';
       });
       h += '</div>';
