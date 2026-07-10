@@ -219,11 +219,37 @@
       .catch(function () { slot.textContent = 'Transcript unavailable.'; });
   }
 
+  // Server-side diff_type inventory — every terminal status this section
+  // can receive must render an honest message; none may fall through to
+  // a raw enum dump or leave the 'loading diff…' placeholder in place.
+  //   cortex_viz/server/http_standalone_trace.py::_git_history (feeds THIS
+  //   section via /api/trace/file's `git` field): 'working' (l.148),
+  //   'last-commit' (l.157), 'none' (l.159 — no uncommitted/staged/last-
+  //   commit diff found), {available:false} on no-repo-found (l.142, e.g.
+  //   a FILE node that belongs to a different repo than the server's
+  //   working tree) or on subprocess exception (l.175).
+  //   cortex_viz/server/http_file_diff.py::_resolve_diff (feeds
+  //   /api/file-diff — the hover tooltip in tooltip.js and the "See diff"
+  //   modal in detail_diff.js, NOT this section) adds 'untracked' (l.115)
+  //   and a second 'none' reason for a file that is neither tracked nor
+  //   present on disk (l.116-117). Listed here for completeness since both
+  //   endpoints answer the same question ("what changed in this file?")
+  //   and a future merge of the two code paths must preserve every case.
+  // precondition: git is the `git` field of /api/trace/file's response, or
+  // null/undefined before the fetch resolves.
+  // postcondition: always returns a non-empty HTML string; every git shape
+  // above (known or not) is rendered, never left un-rendered.
+  var _DIFF_TYPE_LABEL = {
+    working: 'Working-tree changes',
+    'last-commit': 'Last commit that touched this file',
+  };
   function _diffHtml(git) {
-    if (!git || !git.available) return '<div class="conn-item" style="color:var(--text-dim)">no git data</div>';
+    var NO_DIFF = '<div class="conn-item" style="color:var(--text-dim)">No diff — file outside this checkout</div>';
+    if (!git || !git.available) return NO_DIFF;
     var lines = git.lines || [];
-    if (!lines.length) return '<div class="conn-item" style="color:var(--text-dim)">' + esc(git.diff_type || 'no changes') + '</div>';
-    var h = '<div class="conn-item" style="color:var(--text-dim)">' + esc(git.diff_type || '') + '</div><div class="td-diff">';
+    if (git.diff_type === 'none' || !lines.length) return NO_DIFF;
+    var label = _DIFF_TYPE_LABEL[git.diff_type] || git.diff_type || 'Diff';
+    var h = '<div class="conn-item" style="color:var(--text-dim)">' + esc(label) + '</div><div class="td-diff">';
     lines.slice(0, 300).forEach(function (ln) {
       h += '<div class="td-diff-' + (ln.type || 'ctx') + '">' + esc(ln.text != null ? ln.text : ln) + '</div>';
     });
@@ -273,7 +299,15 @@
     _fetch('/api/trace/file?path=' + encodeURIComponent(path))
       .then(function (d) { _fileCache[path] = d; apply(d); })
       .catch(function () {
-        var g = document.getElementById('td-git'); if (g) g.textContent = 'diff unavailable';
+        // Network/HTTP failure is itself a terminal status for all three
+        // lazy sections — clear every placeholder, not just Git diff, so
+        // none of them is stuck on its initial 'loading…' text forever.
+        var g = document.getElementById('td-git');
+        if (g) g.textContent = 'Diff unavailable — could not reach the server';
+        var ver = document.getElementById('td-versions');
+        if (ver) ver.textContent = 'History unavailable — could not reach the server';
+        var a = document.getElementById('td-ast');
+        if (a) a.textContent = 'AST unavailable — could not reach the server';
       });
   }
 
