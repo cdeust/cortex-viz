@@ -36,6 +36,18 @@ from cortex_viz.server.http_standalone_endpoints_sankey import (  # noqa: F401
     serve_stats,
 )
 
+# P0/P3 live session-activity endpoints (serve_activity_ingest,
+# serve_activity_stream, the P3 blast-radius trigger) were split into
+# ``http_standalone_activity`` (500-line limit — P4 node-unification's
+# real-path/detail.path plumbing grew this pair past the threshold).
+# Re-exported so ``from cortex_viz.server.http_standalone_endpoints import
+# serve_activity_ingest`` (routes module) keeps resolving — same precedent
+# as the ``http_standalone_endpoints_sankey`` re-export above.
+from cortex_viz.server.http_standalone_activity import (  # noqa: F401
+    serve_activity_ingest,
+    serve_activity_stream,
+)
+
 
 def serve_graph(handler, store) -> None:
     """GET /api/graph — cached workflow graph or warming placeholder."""
@@ -121,19 +133,6 @@ def serve_graph_full(handler, store) -> None:
     handler.send_header("X-Graph-Edge-Count", str(snap["edge_count"]))
     handler.end_headers()
     handler.wfile.write(payload)
-
-
-# P0/P3 live session-activity endpoints (serve_activity_ingest,
-# serve_activity_stream, the P3 blast-radius trigger) were split into
-# ``http_standalone_activity`` (500-line limit — P4 node-unification's
-# real-path/detail.path plumbing grew this pair past the threshold).
-# Re-exported so ``from cortex_viz.server.http_standalone_endpoints import
-# serve_activity_ingest`` (routes module) keeps resolving — same precedent
-# as the ``http_standalone_endpoints_sankey`` re-export above.
-from cortex_viz.server.http_standalone_activity import (  # noqa: F401
-    serve_activity_ingest,
-    serve_activity_stream,
-)
 
 
 def serve_prd(handler, store=None) -> None:
