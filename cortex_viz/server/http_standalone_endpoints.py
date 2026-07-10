@@ -161,6 +161,93 @@ def serve_prd(handler, store=None) -> None:
         send_json_error(handler, e)
 
 
+def _resolve_sse_since(handler) -> int:
+    """Resolve the SSE replay cursor for /api/graph/events.
+
+    Honours ``Last-Event-ID`` for resume after a flaky connection (spec:
+    the value is the ``id:`` of the last event the client saw; we advance
+    past it on resume). ``?since=N`` is an additional curl-friendly
+    fallback — whichever cursor is larger wins.
+    """
+    from urllib.parse import parse_qs, urlparse
+
+    last_id_header = (
+        handler.headers.get("Last-Event-ID")
+        or handler.headers.get("Last-Event-Id")
+        or ""
+    )
+    since = 0
+    try:
+        since = int(last_id_header) + 1 if last_id_header else 0
+    except ValueError:
+        since = 0
+    qs = parse_qs(urlparse(handler.path).query)
+    if "since" in qs:
+        try:
+            since = max(since, int(qs["since"][0]))
+        except (ValueError, IndexError):
+            pass
+    return since
+
+
+def _stream_sse_batches(handler, stream, cursor: int) -> None:
+    """Replay-then-tail loop writing SSE batch/done/heartbeat events.
+
+    ``stream.subscribe()`` returns on close-and-drained OR on a 15 s idle
+    timeout. On idle timeout we emit an SSE comment (heartbeat) and
+    re-subscribe from where we left off, so the connection stays open
+    across long pauses (the source-loading phase is ~15-20 s of silence
+    before the first batch). Loop exits cleanly when (a) the stream is
+    closed and drained, or (b) the client disconnects (BrokenPipe).
+    """
+    from cortex_viz.server.graph_event_stream import (
+        format_done,
+        format_event,
+        format_heartbeat,
+    )
+    from cortex_viz.server.http_standalone_graph import get_build_progress
+
+    while True:
+        saw_any = False
+        for idx, event in stream.subscribe(since=cursor, timeout=15.0):
+            try:
+                handler.wfile.write(format_event(idx, event))
+                handler.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                return
+            cursor = idx + 1
+            saw_any = True
+
+        s = stream.stats()
+        if s.get("closed") and cursor >= s.get("count", 0):
+            # Build finished AND we've drained every event.
+            prog = get_build_progress()
+            try:
+                handler.wfile.write(
+                    format_done(
+                        total_nodes=prog.get("node_count", 0),
+                        total_edges=prog.get("edge_count", 0),
+                    )
+                )
+                handler.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            return
+
+        # Idle timeout — keep the connection alive with a comment.
+        # If the client is gone, the write fails and we exit.
+        try:
+            handler.wfile.write(format_heartbeat())
+            handler.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            return
+        # If we saw nothing AND the stream is still open, loop back
+        # into subscribe() to wait for more. This is the source-loading
+        # gap (no batches for ~15-20 s while PG queries run).
+        if not saw_any:
+            continue
+
+
 def serve_graph_events(handler, store=None) -> None:
     """GET /api/graph/events — Server-Sent Events stream of build batches.
 
@@ -186,39 +273,8 @@ def serve_graph_events(handler, store=None) -> None:
     Lazy-kicks the build (ensure_build_started) so opening the SSE
     stream on a cold cache starts the pipeline producing events.
     """
-    from urllib.parse import parse_qs, urlparse
-
-    from cortex_viz.server.graph_event_stream import (
-        format_done,
-        format_event,
-        format_heartbeat,
-        get_stream,
-    )
-    from cortex_viz.server.http_standalone_graph import (
-        ensure_build_started,
-        get_build_progress,
-    )
-
-    # Honour Last-Event-ID for resume after a flaky connection. Spec
-    # says the value is the ``id:`` of the last event the client saw;
-    # we advance past it on resume.
-    last_id_header = (
-        handler.headers.get("Last-Event-ID")
-        or handler.headers.get("Last-Event-Id")
-        or ""
-    )
-    since = 0
-    try:
-        since = int(last_id_header) + 1 if last_id_header else 0
-    except ValueError:
-        since = 0
-    # Also allow ?since=N as a fallback (curl-friendly).
-    qs = parse_qs(urlparse(handler.path).query)
-    if "since" in qs:
-        try:
-            since = max(since, int(qs["since"][0]))
-        except (ValueError, IndexError):
-            pass
+    from cortex_viz.server.graph_event_stream import get_stream
+    from cortex_viz.server.http_standalone_graph import ensure_build_started
 
     # A held SSE stream is a live client: without this, Chrome freezing a
     # background tab stops the 30s stats polls, the idle watchdog sees no
@@ -229,6 +285,7 @@ def serve_graph_events(handler, store=None) -> None:
         stream_opened,
     )
 
+    since = _resolve_sse_since(handler)
     stream_opened()
     try:
         ensure_build_started(store)
@@ -240,56 +297,7 @@ def serve_graph_events(handler, store=None) -> None:
         handler.send_header("X-Accel-Buffering", "no")  # disable proxy buffering
         handler.end_headers()
 
-        stream = get_stream()
-
-        # Replay-then-tail loop. subscribe() returns on close-and-drained
-        # OR on a 15 s idle timeout. On idle timeout we emit an SSE
-        # comment (heartbeat) and re-subscribe from where we left off,
-        # so the connection stays open across long pauses (the source-
-        # loading phase is ~15–20 s of silence before the first batch).
-        # Loop exits cleanly when (a) the stream is closed and drained,
-        # or (b) the client disconnects (BrokenPipe).
-        cursor = since
-        while True:
-            saw_any = False
-            for idx, event in stream.subscribe(since=cursor, timeout=15.0):
-                try:
-                    handler.wfile.write(format_event(idx, event))
-                    handler.wfile.flush()
-                except (BrokenPipeError, ConnectionResetError):
-                    return
-                cursor = idx + 1
-                saw_any = True
-
-            s = stream.stats()
-            if s.get("closed") and cursor >= s.get("count", 0):
-                # Build finished AND we've drained every event.
-                prog = get_build_progress()
-                try:
-                    handler.wfile.write(
-                        format_done(
-                            total_nodes=prog.get("node_count", 0),
-                            total_edges=prog.get("edge_count", 0),
-                        )
-                    )
-                    handler.wfile.flush()
-                except (BrokenPipeError, ConnectionResetError):
-                    pass
-                return
-
-            # Idle timeout — keep the connection alive with a comment.
-            # If the client is gone, the write fails and we exit.
-            try:
-                handler.wfile.write(format_heartbeat())
-                handler.wfile.flush()
-            except (BrokenPipeError, ConnectionResetError):
-                return
-            # If we saw nothing AND the stream is still open, loop
-            # back into subscribe() to wait for more. This is the
-            # source-loading gap (no batches for ~15–20 s while PG
-            # queries run).
-            if not saw_any:
-                continue
+        _stream_sse_batches(handler, get_stream(), since)
     except Exception as e:
         # Best-effort error reporting on an already-started chunked
         # response is fraught; log and close.
