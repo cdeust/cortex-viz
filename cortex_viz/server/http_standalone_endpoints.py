@@ -190,6 +190,42 @@ def _resolve_sse_since(handler) -> int:
     return since
 
 
+def _write_sse_batch_events(handler, stream, cursor: int) -> tuple[int, bool]:
+    """Flush ``stream``'s events since ``cursor``; returns (new_cursor, ok).
+
+    ``ok=False`` means the client disconnected (BrokenPipe /
+    ConnectionReset) and the caller must stop the stream immediately.
+    """
+    from cortex_viz.server.graph_event_stream import format_event
+
+    for idx, event in stream.subscribe(since=cursor, timeout=15.0):
+        try:
+            handler.wfile.write(format_event(idx, event))
+            handler.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            return cursor, False
+        cursor = idx + 1
+    return cursor, True
+
+
+def _write_sse_done(handler) -> None:
+    """Write the terminal ``done`` SSE event once the build has finished."""
+    from cortex_viz.server.graph_event_stream import format_done
+    from cortex_viz.server.http_standalone_graph import get_build_progress
+
+    prog = get_build_progress()
+    try:
+        handler.wfile.write(
+            format_done(
+                total_nodes=prog.get("node_count", 0),
+                total_edges=prog.get("edge_count", 0),
+            )
+        )
+        handler.wfile.flush()
+    except (BrokenPipeError, ConnectionResetError):
+        pass
+
+
 def _stream_sse_batches(handler, stream, cursor: int) -> None:
     """Replay-then-tail loop writing SSE batch/done/heartbeat events.
 
@@ -200,38 +236,17 @@ def _stream_sse_batches(handler, stream, cursor: int) -> None:
     before the first batch). Loop exits cleanly when (a) the stream is
     closed and drained, or (b) the client disconnects (BrokenPipe).
     """
-    from cortex_viz.server.graph_event_stream import (
-        format_done,
-        format_event,
-        format_heartbeat,
-    )
-    from cortex_viz.server.http_standalone_graph import get_build_progress
+    from cortex_viz.server.graph_event_stream import format_heartbeat
 
     while True:
-        saw_any = False
-        for idx, event in stream.subscribe(since=cursor, timeout=15.0):
-            try:
-                handler.wfile.write(format_event(idx, event))
-                handler.wfile.flush()
-            except (BrokenPipeError, ConnectionResetError):
-                return
-            cursor = idx + 1
-            saw_any = True
+        cursor, ok = _write_sse_batch_events(handler, stream, cursor)
+        if not ok:
+            return
 
+        # Build finished AND we've drained every event.
         s = stream.stats()
         if s.get("closed") and cursor >= s.get("count", 0):
-            # Build finished AND we've drained every event.
-            prog = get_build_progress()
-            try:
-                handler.wfile.write(
-                    format_done(
-                        total_nodes=prog.get("node_count", 0),
-                        total_edges=prog.get("edge_count", 0),
-                    )
-                )
-                handler.wfile.flush()
-            except (BrokenPipeError, ConnectionResetError):
-                pass
+            _write_sse_done(handler)
             return
 
         # Idle timeout — keep the connection alive with a comment.
@@ -241,11 +256,31 @@ def _stream_sse_batches(handler, stream, cursor: int) -> None:
             handler.wfile.flush()
         except (BrokenPipeError, ConnectionResetError):
             return
-        # If we saw nothing AND the stream is still open, loop back
-        # into subscribe() to wait for more. This is the source-loading
-        # gap (no batches for ~15-20 s while PG queries run).
-        if not saw_any:
-            continue
+
+
+def _send_sse_headers(handler) -> None:
+    """Write the 200 + SSE header set for /api/graph/events."""
+    handler.send_response(200)
+    handler.send_header("Content-Type", "text/event-stream; charset=utf-8")
+    handler.send_header("Cache-Control", "no-cache")
+    handler.send_header("Connection", "keep-alive")
+    handler.send_header("X-Accel-Buffering", "no")  # disable proxy buffering
+    handler.end_headers()
+
+
+def _write_sse_error(handler, exc: Exception) -> None:
+    """Best-effort SSE error event on an already-started chunked response.
+
+    Writing to a possibly-broken pipe is fraught; log-and-close semantics
+    only — never raises.
+    """
+    try:
+        handler.wfile.write(
+            f"event: error\ndata: {type(exc).__name__}: {exc}\n\n".encode()
+        )
+        handler.wfile.flush()
+    except Exception:
+        pass
 
 
 def serve_graph_events(handler, store=None) -> None:
@@ -289,25 +324,10 @@ def serve_graph_events(handler, store=None) -> None:
     stream_opened()
     try:
         ensure_build_started(store)
-
-        handler.send_response(200)
-        handler.send_header("Content-Type", "text/event-stream; charset=utf-8")
-        handler.send_header("Cache-Control", "no-cache")
-        handler.send_header("Connection", "keep-alive")
-        handler.send_header("X-Accel-Buffering", "no")  # disable proxy buffering
-        handler.end_headers()
-
+        _send_sse_headers(handler)
         _stream_sse_batches(handler, get_stream(), since)
     except Exception as e:
-        # Best-effort error reporting on an already-started chunked
-        # response is fraught; log and close.
-        try:
-            handler.wfile.write(
-                f"event: error\ndata: {type(e).__name__}: {e}\n\n".encode()
-            )
-            handler.wfile.flush()
-        except Exception:
-            pass
+        _write_sse_error(handler, e)
     finally:
         stream_closed()
 
