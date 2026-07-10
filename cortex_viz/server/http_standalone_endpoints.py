@@ -467,6 +467,66 @@ def _resolve_lod_cell(store, node_id: str) -> dict:
     }
 
 
+def _parse_node_id_param(handler) -> str:
+    """Extract the ``?id=`` query value from the raw request path."""
+    from urllib.parse import unquote
+
+    node_id = ""
+    if "?" in handler.path:
+        for p in handler.path.split("?", 1)[1].split("&"):
+            if p.startswith("id="):
+                node_id = unquote(p[3:])
+    return node_id
+
+
+def _resolve_node_record(store, kind: str, raw: str, node_id: str) -> dict | None:
+    """Resolve a node's PG record, falling back to the cached build index.
+
+    ``memory:<pg_id>`` and ``entity:<pg_id>`` ids resolve to their PG rows
+    directly. Every other kind (symbol, file, domain, skill, hook,
+    tool_hub, discussion, command, mcp) has no PG row, so it falls back to
+    the full cached node from the build's id index — without this
+    fallback, only memory:/entity: ids ever resolved and the detail panel
+    stayed empty for the rest of the galaxy (observed 2026-06-12).
+    """
+    from cortex_viz.server.http_standalone_graph import get_node_record
+
+    record: dict | None = None
+    if kind == "memory" and raw.isdigit() and hasattr(store, "get_memory"):
+        record = store.get_memory(int(raw))
+    elif kind == "entity" and raw.isdigit() and hasattr(store, "get_entity_by_id"):
+        record = store.get_entity_by_id(int(raw))
+    if record is None:
+        record = get_node_record(node_id)
+    return record
+
+
+def _fetch_node_neighbors(handler, node_id: str) -> dict:
+    """Fetch the paged neighbor set for the node-detail panel.
+
+    Neighborhood is resolved ON DEMAND — the panel's relational sections
+    (symbols defined here, imports, callers) render from THIS response,
+    never from a client-side join over the full edge copy (the
+    monolithic-load report, 2026-06-12). Paged via ?n_offset / ?n_limit;
+    complete across continuation.
+    """
+    from urllib.parse import parse_qs, urlparse
+
+    from cortex_viz.server.http_standalone_graph import get_node_neighbors
+
+    qs = parse_qs(urlparse(handler.path).query)
+
+    def _qint(name: str, default: int) -> int:
+        try:
+            return int(qs[name][0])
+        except (KeyError, IndexError, ValueError):
+            return default
+
+    return get_node_neighbors(
+        node_id, offset=_qint("n_offset", 0), limit=_qint("n_limit", 500)
+    )
+
+
 def serve_graph_node(handler, store) -> None:
     """GET /api/graph/node?id=<node_id> — full record for one node.
 
@@ -478,14 +538,8 @@ def serve_graph_node(handler, store) -> None:
     parsed into {kind, label}. source: design 2026-05-31 — top-25k galaxy
     + on-demand cold-tail drill.
     """
-    from urllib.parse import unquote
-
     try:
-        node_id = ""
-        if "?" in handler.path:
-            for p in handler.path.split("?", 1)[1].split("&"):
-                if p.startswith("id="):
-                    node_id = unquote(p[3:])
+        node_id = _parse_node_id_param(handler)
         if not node_id:
             send_json_ok(handler, {"error": "missing id"})
             return
@@ -499,44 +553,8 @@ def serve_graph_node(handler, store) -> None:
             send_json_ok(handler, _resolve_lod_cell(store, node_id))
             return
 
-        record: dict | None = None
-        if kind == "memory" and raw.isdigit() and hasattr(store, "get_memory"):
-            record = store.get_memory(int(raw))
-        elif kind == "entity" and raw.isdigit() and hasattr(store, "get_entity_by_id"):
-            record = store.get_entity_by_id(int(raw))
-
-        # Fallback for every kind without a PG row (symbol, file,
-        # domain, skill, hook, tool_hub, discussion, command, mcp):
-        # serve the full cached node from the build's id index. Without
-        # this, only memory:/entity: ids ever resolved and the detail
-        # panel stayed empty for the rest of the galaxy — nodes were
-        # not browsable (observed 2026-06-12).
-        from cortex_viz.server.http_standalone_graph import (
-            get_node_neighbors,
-            get_node_record,
-        )
-
-        if record is None:
-            record = get_node_record(node_id)
-
-        # Neighborhood ON DEMAND — the panel's relational sections
-        # (symbols defined here, imports, callers) render from THIS
-        # response, never from a client-side join over the full edge
-        # copy (the monolithic-load report, 2026-06-12). Paged via
-        # ?n_offset / ?n_limit; complete across continuation.
-        from urllib.parse import parse_qs, urlparse
-
-        qs = parse_qs(urlparse(handler.path).query)
-
-        def _qint(name: str, default: int) -> int:
-            try:
-                return int(qs[name][0])
-            except (KeyError, IndexError, ValueError):
-                return default
-
-        nb = get_node_neighbors(
-            node_id, offset=_qint("n_offset", 0), limit=_qint("n_limit", 500)
-        )
+        record = _resolve_node_record(store, kind, raw, node_id)
+        nb = _fetch_node_neighbors(handler, node_id)
 
         send_json_ok(
             handler,
