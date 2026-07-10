@@ -4,17 +4,16 @@ Owns:
 
 * ``serve_sankey`` — /api/sankey dashboard query
 * ``serve_graph`` / ``serve_discussions`` / ``serve_discussion_detail``
-* ``serve_static`` — sandboxed static-file reader for ``/js/`` + ``/css/``
-* ``serve_file_diff`` — thin delegate to ``http_file_diff``
+
+Static-file endpoints (``serve_static``, ``serve_shared_asset``,
+``serve_file_diff``) live in ``http_standalone_static``; re-exported
+below for backward-compatible imports.
 
 All response shaping flows through ``http_standalone_response`` so the
 HTTP boilerplate lives in one place.
 """
 
 from __future__ import annotations
-
-import re
-from pathlib import Path
 
 from cortex_viz.server.http_standalone_graph import (
     build_discussion_detail,
@@ -24,7 +23,6 @@ from cortex_viz.server.http_standalone_graph import (
 from cortex_viz.server.http_standalone_response import (
     send_json_error,
     send_json_ok,
-    send_plain_error,
 )
 
 # Sankey + HUD-stats endpoints were split into
@@ -46,6 +44,19 @@ from cortex_viz.server.http_standalone_endpoints_sankey import (  # noqa: F401
 from cortex_viz.server.http_standalone_activity import (  # noqa: F401
     serve_activity_ingest,
     serve_activity_stream,
+)
+
+# Sandboxed static-file endpoints (serve_static, serve_shared_asset,
+# serve_file_diff) were split into ``http_standalone_static`` (500-line
+# limit, §4.1) — a distinct concern (disk reads under a traversal guard)
+# from the graph/discussion JSON endpoints in this module. Re-exported
+# so ``from cortex_viz.server.http_standalone_endpoints import
+# serve_static`` (routes module) keeps resolving — same precedent as the
+# re-exports above.
+from cortex_viz.server.http_standalone_static import (  # noqa: F401
+    serve_file_diff,
+    serve_shared_asset,
+    serve_static,
 )
 
 # /api/graph/events (SSE) was split into ``http_standalone_sse``
@@ -441,93 +452,6 @@ def serve_discussion_detail(handler, path_no_qs: str) -> None:
         send_json_ok(handler, build_discussion_detail(session_id))
     except Exception as e:
         send_json_error(handler, e)
-
-
-def serve_static(handler, base_dir: Path, filename: str, content_type: str) -> None:
-    """Sandboxed read-only static-file reader for ``/js/`` and ``/css/``.
-
-    Security: strip directory components, reject hidden files / null
-    bytes / non-alphanumeric names, match against a directory-listing
-    whitelist so the user-supplied path never drives the filesystem
-    read.
-    """
-    safe_name = Path(filename).name
-    if (
-        not safe_name
-        or safe_name.startswith(".")
-        or "\x00" in safe_name
-        or not re.match(r"^[\w][\w.\-]*$", safe_name)
-    ):
-        send_plain_error(handler, 403)
-        return
-    resolved_base = base_dir.resolve()
-    actual_files = {f.name: f for f in resolved_base.iterdir() if f.is_file()}
-    if safe_name not in actual_files:
-        send_plain_error(handler, 404)
-        return
-    body = actual_files[safe_name].read_bytes()
-    handler.send_response(200)
-    handler.send_header("Content-Type", content_type + "; charset=utf-8")
-    handler.send_header("Content-Length", str(len(body)))
-    handler.send_header("Cache-Control", "no-cache")
-    handler.end_headers()
-    handler.wfile.write(body)
-
-
-# Content types for the shared design-system foundation (ui/shared/*). Kept
-# small and explicit — the foundation ships only these kinds.
-_SHARED_CONTENT_TYPES = {
-    ".css": "text/css",
-    ".js": "application/javascript",
-    ".mjs": "application/javascript",
-    ".json": "application/json",
-    ".woff2": "font/woff2",
-    ".woff": "font/woff",
-    ".ttf": "font/ttf",
-    ".svg": "image/svg+xml",
-}
-
-
-def serve_shared_asset(handler, shared_dir: Path, rel_path: str) -> None:
-    """Sandboxed reader for the vendored design-system foundation (``/shared/``).
-
-    Unlike ``serve_static`` (single-level, filename-only) this serves the
-    NESTED token/component tree — ``tokens/colors.css``, ``components/core/
-    core.css`` — because ``ds.css`` ``@import``s them by relative subpath. The
-    depth is the reason for a distinct reader; the traversal guard is the price:
-    the resolved path MUST stay inside ``shared_dir`` and be an existing file,
-    so a crafted ``../`` can never escape the foundation directory.
-    """
-    # Reject the obvious attacks before touching the filesystem.
-    if not rel_path or "\x00" in rel_path or any(
-        part in ("", "..") or part.startswith(".") for part in rel_path.split("/")
-    ):
-        send_plain_error(handler, 403)
-        return
-    base = shared_dir.resolve()
-    target = (base / rel_path).resolve()
-    # Containment check — the resolved path must be within the foundation dir.
-    if base != target and base not in target.parents:
-        send_plain_error(handler, 403)
-        return
-    if not target.is_file():
-        send_plain_error(handler, 404)
-        return
-    content_type = _SHARED_CONTENT_TYPES.get(target.suffix.lower(), "text/plain")
-    body = target.read_bytes()
-    handler.send_response(200)
-    handler.send_header("Content-Type", content_type + "; charset=utf-8")
-    handler.send_header("Content-Length", str(len(body)))
-    handler.send_header("Cache-Control", "no-cache")
-    handler.end_headers()
-    handler.wfile.write(body)
-
-
-def serve_file_diff(handler) -> None:
-    """Thin delegate to ``http_file_diff.serve_file_diff``."""
-    from cortex_viz.server.http_file_diff import serve_file_diff as _serve
-
-    _serve(handler)
 
 
 # ``build_methodology_handler`` removed in Gap 10 — it imported a
