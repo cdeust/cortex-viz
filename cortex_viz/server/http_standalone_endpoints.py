@@ -245,6 +245,47 @@ def serve_graph_progress(handler, store=None) -> None:
         send_json_error(handler, e)
 
 
+def _apply_phase_param(
+    p: str, name: str, offset: int, limit: int | None
+) -> tuple[str, int, int | None]:
+    """Fold one raw ``key=value`` query fragment into the phase params.
+
+    Silently ignores unparseable ints (original behavior — no error, the
+    default just isn't updated for that fragment).
+    """
+    from urllib.parse import unquote
+
+    if p.startswith("name="):
+        name = unquote(p[5:])
+    elif p.startswith("offset="):
+        try:
+            offset = int(p[7:])
+        except ValueError:
+            pass
+    elif p.startswith("limit="):
+        try:
+            limit = int(p[6:])
+        except ValueError:
+            pass
+    return name, offset, limit
+
+
+def _parse_phase_query_params(handler) -> tuple[str, int, int | None]:
+    """Parse ``?name=&offset=&limit=`` from /api/graph/phase's raw query.
+
+    Manual key-prefix parsing (not ``urllib.parse.parse_qs``) preserves
+    this endpoint's original last-wins semantics for repeated keys.
+    """
+    name = ""
+    offset = 0
+    limit: int | None = None
+    if "?" not in handler.path:
+        return name, offset, limit
+    for p in handler.path.split("?", 1)[1].split("&"):
+        name, offset, limit = _apply_phase_param(p, name, offset, limit)
+    return name, offset, limit
+
+
 def serve_graph_phase(handler) -> None:
     """GET /api/graph/phase?name=<L0|L1|…|L6:proj|L6_CROSS>
 
@@ -258,28 +299,10 @@ def serve_graph_phase(handler) -> None:
     url-encodes that as ``L6%3ACortex``, so we MUST percent-decode
     before lookup or every L6:<proj> fetch returns an empty payload.
     """
-    from urllib.parse import unquote
-
     from cortex_viz.server.http_standalone_graph import get_phase_payload
 
     try:
-        name = ""
-        offset = 0
-        limit: int | None = None
-        if "?" in handler.path:
-            for p in handler.path.split("?", 1)[1].split("&"):
-                if p.startswith("name="):
-                    name = unquote(p[5:])
-                elif p.startswith("offset="):
-                    try:
-                        offset = int(p[7:])
-                    except ValueError:
-                        pass
-                elif p.startswith("limit="):
-                    try:
-                        limit = int(p[6:])
-                    except ValueError:
-                        pass
+        name, offset, limit = _parse_phase_query_params(handler)
         send_json_ok(handler, get_phase_payload(name, offset=offset, limit=limit))
     except Exception as e:
         send_json_error(handler, e)
