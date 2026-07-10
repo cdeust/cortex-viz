@@ -368,6 +368,12 @@ def iter_session_events(session_id: str) -> list[dict[str, Any]]:
                                     "input": b.get("input") or {},
                                     "ts": ts,
                                     "line": line_no,
+                                    # ``cwd`` — needed to canonicalize the file
+                                    # refs this action touches into the SAME
+                                    # id space the galaxy/activity spine mint
+                                    # (``core.activity_paths.file_target_id``,
+                                    # see ``core.session_trace._file_node``).
+                                    "cwd": rec.get("cwd") or "",
                                 }
                             )
         except OSError:
