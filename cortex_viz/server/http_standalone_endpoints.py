@@ -73,6 +73,36 @@ def serve_dashboard(handler, store) -> None:
         send_json_error(handler, e)
 
 
+def _send_no_snapshot_warming(handler) -> None:
+    """503 ``{"reason":"no_snapshot"}`` — no build has finished since install.
+
+    Tells the client to fall back to the progressive ``/api/graph`` path.
+    """
+    body = b'{"status":"warming","reason":"no_snapshot"}'
+    handler.send_response(503)
+    handler.send_header("Content-Type", "application/json")
+    handler.send_header("Content-Length", str(len(body)))
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
+def _send_gzip_snapshot(handler, snap: dict) -> None:
+    """Stream a ``json.v1`` snapshot row verbatim as ``Content-Encoding: gzip``.
+
+    The row is already gzip(JSON); no server-side decode/re-encode.
+    """
+    payload = snap["payload_gzip"]
+    handler.send_response(200)
+    handler.send_header("Content-Type", "application/json")
+    handler.send_header("Content-Encoding", "gzip")
+    handler.send_header("Content-Length", str(len(payload)))
+    handler.send_header("Cache-Control", "max-age=30")
+    handler.send_header("X-Graph-Node-Count", str(snap["node_count"]))
+    handler.send_header("X-Graph-Edge-Count", str(snap["edge_count"]))
+    handler.end_headers()
+    handler.wfile.write(payload)
+
+
 def serve_graph_full(handler, store) -> None:
     """GET /api/graph/full — the COMPLETE graph from the durable PG snapshot.
 
@@ -109,12 +139,7 @@ def serve_graph_full(handler, store) -> None:
         send_json_error(handler, e)
         return
     if snap is None:
-        body = b'{"status":"warming","reason":"no_snapshot"}'
-        handler.send_response(503)
-        handler.send_header("Content-Type", "application/json")
-        handler.send_header("Content-Length", str(len(body)))
-        handler.end_headers()
-        handler.wfile.write(body)
+        _send_no_snapshot_warming(handler)
         return
     if snap.get("format") == snapshot_pg_store.FORMAT_NDJSON_V1:
         from cortex_viz.server.http_standalone_fullstream import (
@@ -123,16 +148,7 @@ def serve_graph_full(handler, store) -> None:
 
         serve_full_document_from_ndjson(handler, snap)
         return
-    payload = snap["payload_gzip"]
-    handler.send_response(200)
-    handler.send_header("Content-Type", "application/json")
-    handler.send_header("Content-Encoding", "gzip")
-    handler.send_header("Content-Length", str(len(payload)))
-    handler.send_header("Cache-Control", "max-age=30")
-    handler.send_header("X-Graph-Node-Count", str(snap["node_count"]))
-    handler.send_header("X-Graph-Edge-Count", str(snap["edge_count"]))
-    handler.end_headers()
-    handler.wfile.write(payload)
+    _send_gzip_snapshot(handler, snap)
 
 
 def serve_prd(handler, store=None) -> None:
