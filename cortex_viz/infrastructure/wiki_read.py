@@ -47,6 +47,23 @@ def _parse_list(value: Any) -> list[str]:
     return [tok.strip().strip("'\"") for tok in s.split(",") if tok.strip()]
 
 
+# Frontmatter keys whose value is a list, not a scalar string. The parser
+# (yaml_parser.parse_yaml_frontmatter) has a flat-KV contract — every value
+# comes back as a string — so these keys need explicit normalisation via
+# _parse_list before reaching the client. Measured against the live wiki
+# corpus (2026-07): tags 2086 pages, audience 32, required_sections 5,
+# optional_sections 5, source_memory_ids 1. curation_gaps is included
+# because ui/unified/js/wiki.js reads it with Array.isArray(meta.curation_gaps).
+_LIST_KEYS = (
+    "tags",
+    "curation_gaps",
+    "audience",
+    "required_sections",
+    "optional_sections",
+    "source_memory_ids",
+)
+
+
 def _title_from(meta: dict, path: Path) -> str:
     return (
         meta.get("title")
@@ -105,6 +122,14 @@ def read_page(rel_path: str) -> dict[str, Any]:
         )
     except OSError as e:
         return {"error": str(e)}
+    # meta values are always strings per the parser's flat-KV contract (see
+    # _LIST_KEYS docstring) — normalise the keys the client expects as
+    # arrays, same as _page_item does for the list endpoint. Only keys
+    # actually present are touched: injecting an absent key would flip a
+    # client-side falsy check (e.g. `meta.curation_gaps &&`) to truthy.
+    for key in _LIST_KEYS:
+        if key in meta:
+            meta[key] = _parse_list(meta[key])
     return {"path": rel_path, "meta": meta, "body": body}
 
 
