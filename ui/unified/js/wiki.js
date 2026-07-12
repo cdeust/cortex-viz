@@ -741,7 +741,13 @@
       var data = results[0];
       var pmeta = results[1];
       if (data.error) throw new Error(data.error);
-      renderPage(main, data, pmeta);
+      try {
+        renderPage(main, data, pmeta);
+      } catch (err) {
+        console.error('[cortex] Wiki render error:', err);
+        main.innerHTML = '';
+        main.appendChild(buildErrorState('Render error', err && err.message ? err.message : String(err)));
+      }
     }).catch(function(err) {
       console.warn('[cortex] Wiki page fetch error:', err.message);
       main.innerHTML = '';
@@ -827,7 +833,7 @@
       metaBar.appendChild(buildMetaItem('Updated', meta.updated));
     }
 
-    var tags = meta.tags || [];
+    var tags = Array.isArray(meta.tags) ? meta.tags : [];
     if (tags.length > 0) {
       var tagWrap = el('div', 'wiki-tag-wrap');
       tags.forEach(function(t) {
