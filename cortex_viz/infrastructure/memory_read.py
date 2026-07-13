@@ -312,16 +312,40 @@ class MemoryReader:
         return self._normalize_memory_row(row) if row is not None else None
 
     def count_memories(self) -> dict[str, int]:
+        """Population counters for the "Memories" HUD label.
+
+        ``total``/``episodic``/``semantic``/``active``/``archived``/
+        ``protected`` are all scoped ``NOT is_stale`` — the same navigable
+        population ``get_domain_counts`` (memory_read.py, WHERE NOT
+        is_stale) and ``memory_facets`` (memory_browse.py) already report,
+        so every "Memories" label across the UI now reads the same number
+        for the same store (2026-07-13 unification decision). ``stale`` is
+        the raw count of soft-deleted rows (store-health signal, not part
+        of the navigable population). ``raw_total`` is the whole-table
+        count with no filter at all — the distinct "store size" figure,
+        never labelled "Memories".
+        """
         row = self._execute(
             """
             SELECT
-                COUNT(*) AS total,
-                COUNT(*) FILTER (WHERE store_type = 'episodic') AS episodic,
-                COUNT(*) FILTER (WHERE store_type = 'semantic') AS semantic,
-                COUNT(*) FILTER (WHERE effective_heat(m, NOW()) >= 0.05) AS active,
-                COUNT(*) FILTER (WHERE effective_heat(m, NOW()) < 0.05) AS archived,
+                COUNT(*) FILTER (WHERE NOT is_stale) AS total,
+                COUNT(*) FILTER (
+                    WHERE NOT is_stale AND store_type = 'episodic'
+                ) AS episodic,
+                COUNT(*) FILTER (
+                    WHERE NOT is_stale AND store_type = 'semantic'
+                ) AS semantic,
+                COUNT(*) FILTER (
+                    WHERE NOT is_stale AND effective_heat(m, NOW()) >= 0.05
+                ) AS active,
+                COUNT(*) FILTER (
+                    WHERE NOT is_stale AND effective_heat(m, NOW()) < 0.05
+                ) AS archived,
                 COUNT(*) FILTER (WHERE is_stale) AS stale,
-                COUNT(*) FILTER (WHERE is_protected) AS protected
+                COUNT(*) FILTER (
+                    WHERE NOT is_stale AND is_protected
+                ) AS protected,
+                COUNT(*) AS raw_total
             FROM memories m
             """
         ).fetchone()
@@ -337,10 +361,18 @@ class MemoryReader:
         """Consolidation-stage histogram, SQL-side. Feeds the dashboard's
         stage panel and the system-vitals pipeline rows — replaces the
         full-corpus scan (every row through ``effective_heat`` took ~50 s
-        at 108k memories; this GROUP BY is ~140 ms, measured 2026-07-02)."""
+        at 108k memories; this GROUP BY is ~140 ms, measured 2026-07-02).
+
+        Scoped ``NOT is_stale`` so the "Stable" (``consolidated``) row
+        matches the same navigable population every other "Stable"/
+        "Memories" label reads (``get_domain_counts``, ``memory_facets``,
+        ``count_memories`` — 2026-07-13 unification decision). The raw,
+        unfiltered store total is available separately via
+        ``count_memories()["raw_total"]`` under its own distinct label —
+        never folded into this per-stage breakdown."""
         rows = self._execute(
             "SELECT consolidation_stage AS stage, COUNT(*) AS c "
-            "FROM memories GROUP BY consolidation_stage"
+            "FROM memories WHERE NOT is_stale GROUP BY consolidation_stage"
         ).fetchall()
         return {r["stage"]: int(r["c"]) for r in rows if r["stage"]}
 

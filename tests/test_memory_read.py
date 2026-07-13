@@ -107,8 +107,18 @@ def test_count_memories_shape(reader) -> None:
     counts = reader.count_memories()
     assert isinstance(counts, dict)
     for key in ("total", "episodic", "semantic", "active",
-                "archived", "stale", "protected"):
+                "archived", "stale", "protected", "raw_total"):
         assert key in counts
+
+
+def test_count_memories_total_excludes_stale(reader) -> None:
+    """2026-07-13 unification: `total` is the navigable (NOT is_stale)
+    population; `raw_total` is the whole-table count. `total` must never
+    exceed `raw_total`, and the gap must equal `stale` (every stale row is
+    counted in raw_total and excluded from total, by construction)."""
+    counts = reader.count_memories()
+    assert counts["total"] <= counts["raw_total"]
+    assert counts["raw_total"] - counts["total"] == counts["stale"]
 
 
 def test_avg_heat_is_float(reader) -> None:

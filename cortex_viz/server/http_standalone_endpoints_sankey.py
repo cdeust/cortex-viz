@@ -121,12 +121,19 @@ def _build_stats_payload(store) -> dict:
 
     counts = store.count_memories()
     domains = store.get_domain_counts() or {}
+    # "Memories" everywhere in the UI is the navigable (NOT is_stale)
+    # population — same number Knowledge/Board already show via
+    # memory_facets (2026-07-13 unification decision).
     mem = int(counts.get("total", 0) or 0)
     ent = int(store.count_entities() or 0)
     rel = int(store.count_relationships() or 0)
     return {
         "domain_count": len(domains),
         "memory_count": mem,
+        # Store-health figure, deliberately NOT labelled "Memories": the
+        # whole `memories` table with no is_stale filter at all. Source:
+        # count_memories()["raw_total"], memory_read.py.
+        "memory_count_raw": int(counts.get("raw_total", 0) or 0),
         "entity_count": ent,
         # HUD "Synapses" reads edge_count; here that is the knowledge-
         # graph relationship total (the real synapse population).
