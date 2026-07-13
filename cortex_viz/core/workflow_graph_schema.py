@@ -80,6 +80,10 @@ class WorkflowNode(BaseModel):
     signature: str | None = None
     language: str | None = None
     line: int | None = None
+    # Full identifier (absolute path / qualified name / raw title) when
+    # ``label`` is a derived short form — surfaced by the detail panel
+    # and search, never rendered on the graph itself.
+    full_name: str | None = None
 
 
 class WorkflowEdge(BaseModel):

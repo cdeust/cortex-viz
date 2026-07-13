@@ -342,7 +342,7 @@ window.BRAIN = window.BRAIN || {};
       return {
         id: n.id,
         label: n.label || n.id,
-        path: n.path || null,
+        path: n.path || n.full_name || null,
         kind: n.kind || n.type || 'node',
       };
     });

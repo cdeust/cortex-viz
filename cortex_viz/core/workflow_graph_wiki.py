@@ -46,6 +46,7 @@ Pure core logic — no I/O. Every helper here only reads ``b._nodes``
 
 from __future__ import annotations
 
+from cortex_viz.core.display_label import derive_display_label
 from cortex_viz.core.graph_builder_nodes import WIKI_COLOR
 from cortex_viz.core.workflow_graph_schema import (
     EdgeKind,
@@ -83,10 +84,12 @@ def ingest_wiki_page(b, page: dict) -> None:
     dom = b._assign_domain(page.get("domain"))
     b._ensure_domain(dom)
     heat = float(page.get("heat") or 0.0)
+    title = page.get("title") or f"wiki page {pg_id}"
+    disp = derive_display_label(title)
     b._add_child(
         NodeIdFactory.wiki_id(pg_id),
         NodeKind.WIKI,
-        page.get("title") or f"wiki page {pg_id}",
+        disp,
         WIKI_COLOR,
         dom,
         1.0 + min(3.0, heat * 3.0),
@@ -94,6 +97,7 @@ def ingest_wiki_page(b, page: dict) -> None:
         status=page.get("status"),
         heat=heat,
         path=page.get("rel_path"),
+        full_name=title if title != disp else None,
     )
 
 

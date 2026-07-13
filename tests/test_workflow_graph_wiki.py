@@ -76,6 +76,25 @@ def test_ingest_wiki_page_creates_node_with_in_domain_edge():
     assert in_domain_edges[0].kind == EdgeKind.IN_DOMAIN.value
 
 
+def test_ingest_wiki_page_process_title_gets_short_label_and_full_name():
+    b = _FakeBuilder()
+    ingest_wiki_page(
+        b,
+        {
+            "id": 8,
+            "title": "Process — process::tests_py/hooks/test_x.py::test_x",
+            "kind": "process",
+            "domain": None,
+            "status": "active",
+            "heat": 0.1,
+            "rel_path": None,
+        },
+    )
+    node = b._nodes[NodeIdFactory.wiki_id(8)]
+    assert node.label == "test_x"
+    assert node.full_name == "Process — process::tests_py/hooks/test_x.py::test_x"
+
+
 def test_ingest_wiki_page_missing_id_raises():
     b = _FakeBuilder()
     try:

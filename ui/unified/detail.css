@@ -1,5 +1,11 @@
 /* Cortex Neural Graph — Detail Panel Styles */
 
+/* Full identifier (absolute path / qualified name / raw title) shown
+   under the h2 title when the label is a derived short form — see
+   core.display_label / WorkflowNode.full_name. Sub-body micro-cap,
+   mono for scanability, break-all for unbroken paths/qualified names. */
+.node-fullname { font-family: var(--mono); font-size: 10px; color: var(--text-dim); word-break: break-all; margin-bottom: 6px; }
+
 /* Quality ring */
 .quality-summary { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
 .quality-ring { width: 56px; height: 56px; border-radius: 50%; background: conic-gradient(var(--q-color) var(--q-pct), color-mix(in oklab, var(--text) 4%, transparent) 0); display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0; position: relative; }

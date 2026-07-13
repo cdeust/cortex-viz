@@ -10,8 +10,6 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
-
 
 def _tool_names(mcp) -> set[str]:
     """Return registered tool names (FastMCP ``list_tools``)."""
@@ -51,9 +49,7 @@ def test_safe_handler_catches_errors() -> None:
     async def boom(args):
         raise ValueError("nope")
 
-    out = asyncio.run(
-        safe_handler(boom, {}, tool_name="t")
-    )
+    out = asyncio.run(safe_handler(boom, {}, tool_name="t"))
     assert out["error"] == "ValueError"
     assert out["message"] == "nope"
     assert out["tool"] == "t"
@@ -65,7 +61,5 @@ def test_safe_handler_returns_dict_verbatim() -> None:
     async def ok(args):
         return {"ok": True, "echo": args.get("x")}
 
-    out = asyncio.run(
-        safe_handler(ok, {"x": 7}, tool_name="t")
-    )
+    out = asyncio.run(safe_handler(ok, {"x": 7}, tool_name="t"))
     assert out == {"ok": True, "echo": 7}
