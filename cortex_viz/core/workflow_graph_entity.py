@@ -20,6 +20,7 @@ only — no I/O.
 
 from __future__ import annotations
 
+from cortex_viz.core.display_label import derive_display_label
 from cortex_viz.core.graph_builder_nodes import ENTITY_COLORS
 from cortex_viz.core.workflow_graph_schema import (
     EdgeKind,
@@ -55,10 +56,12 @@ def ingest_entity(b, ent: dict) -> None:
     b._ensure_domain(dom)
     ent_type = ent.get("type") or "concept"
     heat = float(ent.get("heat") or 0.0)
+    name = ent.get("name") or f"entity {pg_id}"
+    disp = derive_display_label(name, ent_type)
     b._add_child(
         NodeIdFactory.entity_id(pg_id),
         NodeKind.ENTITY,
-        ent.get("name") or f"entity {pg_id}",
+        disp,
         # G7: deep fallback for an entityType absent from ENTITY_COLORS —
         # oklch(50% 0.10 217), same hue as the old #50B0C8 (L71%, too pale).
         ENTITY_COLORS.get(ent_type, "#007088"),
@@ -66,6 +69,7 @@ def ingest_entity(b, ent: dict) -> None:
         1.0 + min(3.0, heat * 3.0),
         entityType=ent_type,
         heat=heat,
+        full_name=name if name != disp else None,
     )
 
 

@@ -47,6 +47,10 @@
       col + ';display:inline-block;box-shadow:0 0 6px ' + col +
       '"></span> ' + esc(typeLabel) + '</div>';
     h += '<h2>' + esc(bestTitle(data)) + '</h2>';
+    var full = data.full_name || data.fullName;
+    if (full && full !== bestTitle(data)) {
+      h += '<div class="node-fullname">' + esc(full) + '</div>';
+    }
     if (data.domain) h += '<div class="domain-label">' + esc(data.domain) + '</div>';
     return h;
   }
@@ -93,24 +97,24 @@
 
   // ── Gauges ──
 
-  function gauge(label, value, max, color, unit) {
-    var pct = Math.min(100, Math.round((value / max) * 100));
+  function gauge(spec) {
+    var pct = Math.min(100, Math.round((spec.value / spec.max) * 100));
     var desc = pct >= 70 ? 'High' : pct >= 40 ? 'Medium' : 'Low';
     return '<div class="gauge-row"><div class="gauge-header"><span class="gauge-label">' +
-      label + '</span><span class="gauge-val" style="color:' + color + '">' +
-      (unit === '%' ? pct + '%' : value) + '</span></div>' +
+      spec.label + '</span><span class="gauge-val" style="color:' + spec.color + '">' +
+      (spec.unit === '%' ? pct + '%' : spec.value) + '</span></div>' +
       '<div class="gauge-track"><div class="gauge-fill" style="width:' + pct +
-      '%;background:' + color + '"></div></div><div class="gauge-desc">' + desc + '</div></div>';
+      '%;background:' + spec.color + '"></div></div><div class="gauge-desc">' + desc + '</div></div>';
   }
 
   function buildGauges(data) {
     var g = [];
-    if (data.heat !== undefined) g.push(gauge('Activity', data.heat, 1, colorForPct(Math.round(data.heat * 100)), '%'));
-    if (data.importance !== undefined) g.push(gauge('Importance', data.importance, 1, colorForPct(Math.round(data.importance * 100)), '%'));
-    if (data.confidence !== undefined) g.push(gauge('Confidence', data.confidence, 1, colorForPct(Math.round(data.confidence * 100)), '%'));
-    if (data.frequency !== undefined) g.push(gauge('Frequency', data.frequency, Math.max(data.frequency, 10), '#50D0E8', 'x'));
-    if (data.ratio !== undefined) g.push(gauge('Usage', data.ratio, 1, '#E0A840', '%'));
-    if (data.sessionCount !== undefined) g.push(gauge('Sessions', data.sessionCount, Math.max(data.sessionCount, 20), '#50D0E8', 'n'));
+    if (data.heat !== undefined) g.push(gauge({ label: 'Activity', value: data.heat, max: 1, color: colorForPct(Math.round(data.heat * 100)), unit: '%' }));
+    if (data.importance !== undefined) g.push(gauge({ label: 'Importance', value: data.importance, max: 1, color: colorForPct(Math.round(data.importance * 100)), unit: '%' }));
+    if (data.confidence !== undefined) g.push(gauge({ label: 'Confidence', value: data.confidence, max: 1, color: colorForPct(Math.round(data.confidence * 100)), unit: '%' }));
+    if (data.frequency !== undefined) g.push(gauge({ label: 'Frequency', value: data.frequency, max: Math.max(data.frequency, 10), color: '#50D0E8', unit: 'x' }));
+    if (data.ratio !== undefined) g.push(gauge({ label: 'Usage', value: data.ratio, max: 1, color: '#E0A840', unit: '%' }));
+    if (data.sessionCount !== undefined) g.push(gauge({ label: 'Sessions', value: data.sessionCount, max: Math.max(data.sessionCount, 20), color: '#50D0E8', unit: 'n' }));
     if (!g.length) return '';
     return '<div class="section-title">Metrics</div><div class="gauge-grid">' + g.join('') + '</div>';
   }
@@ -217,7 +221,7 @@
     ];
     fields.forEach(function(f) {
       var val = data[f[0]];
-      if (val !== undefined && val !== null) h += gauge(f[0], val, 1, f[2], '%');
+      if (val !== undefined && val !== null) h += gauge({ label: f[1], value: val, max: 1, color: f[2], unit: '%' });
     });
     h += '</div>';
     return h;

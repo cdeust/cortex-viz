@@ -77,6 +77,38 @@ class TestEntityNodeIngestion:
         # And the graph as a whole passes validation.
         validate_graph(nodes, edges)
 
+    def test_qualified_name_gets_short_label_and_full_name(self):
+        nodes, _edges = _build(
+            entities=[
+                {
+                    "id": 9,
+                    "name": "video/generate.py::Particle::alive",
+                    "type": "concept",
+                    "domain": "cortex",
+                    "heat": 0.2,
+                }
+            ]
+        )
+        node = [n for n in nodes if n.kind == NodeKind.ENTITY.value][0]
+        assert node.label == "alive"
+        assert node.full_name == "video/generate.py::Particle::alive"
+
+    def test_short_name_has_no_full_name(self):
+        nodes, _edges = _build(
+            entities=[
+                {
+                    "id": 10,
+                    "name": "pgvector",
+                    "type": "technology",
+                    "domain": "cortex",
+                    "heat": 0.2,
+                }
+            ]
+        )
+        node = [n for n in nodes if n.kind == NodeKind.ENTITY.value][0]
+        assert node.label == "pgvector"
+        assert node.full_name is None
+
     def test_heat_scales_entity_size(self):
         nodes, _ = _build(
             entities=[
