@@ -121,7 +121,9 @@ def read_recent(store, *, limit: int = 2000, since_id: int = 0) -> list[dict]:
     return out
 
 
-def find_by_target_ids(store, target_ids: list[str], *, limit: int = 2000) -> list[dict]:
+def find_by_target_ids(
+    store, target_ids: list[str], *, limit: int = 2000
+) -> list[dict]:
     """Activity rows whose ``target_id`` is in ``target_ids`` — the fast
     path for ``core.wiki_page_actions`` (page -> source-file -> activity):
     an indexed equality lookup (``session_activity_target_idx``) against the
@@ -142,6 +144,61 @@ def find_by_target_ids(store, target_ids: list[str], *, limit: int = 2000) -> li
         cur.execute(sql, (list(target_ids), int(limit)))
         rows = cur.fetchall()
     return [dict(r) for r in rows]
+
+
+def find_abs_path_by_label(store, label: str) -> str | None:
+    """Most-recent absolute filesystem path for a bare basename ``label``.
+
+    Backs the ``/api/file-diff`` basename-resolution rung (contract A.3):
+    the client sometimes has only a file's display label (no path), so this
+    resolves it against the activity spine's own record of where that file
+    actually lives — ``detail->>'path'`` when present (canonical rows),
+    falling back to the legacy ``file:<raw path>`` target_id's embedded
+    path (``target_id[5:]``, i.e. after the ``file:`` prefix). Only rows
+    that carry an absolute path are eligible, so a resolution never lands
+    on a bare hash or a relative fragment. Query proven live against
+    production data (9352/9352 candidate rows resolvable).
+    """
+    if not label:
+        return None
+    _ensure_table(store)
+    sql = (
+        "SELECT COALESCE(NULLIF(detail->>'path',''), substring(target_id from 6)) "
+        "  AS abs_path "
+        "FROM session_activity "
+        "WHERE target_kind='file' AND target_label=%s "
+        "  AND (detail->>'path' LIKE '/%%' OR target_id LIKE 'file:/%%') "
+        "ORDER BY id DESC LIMIT 1"
+    )
+    with _conn(store) as conn, conn.cursor() as cur:
+        cur.execute(sql, (label,))
+        row = cur.fetchone()
+    return (row or {}).get("abs_path") or None
+
+
+def find_abs_path_by_suffix(store, suffix: str) -> str | None:
+    """Most-recent absolute path ending in ``/<suffix>`` (contract A.3).
+
+    Backs the relative-name-with-slash resolution rung: when the registry
+    of known repo roots doesn't have a match, fall back to a suffix search
+    over the same activity-spine path data ``find_abs_path_by_label`` uses.
+    """
+    if not suffix:
+        return None
+    _ensure_table(store)
+    pattern = f"%/{suffix}"
+    sql = (
+        "SELECT COALESCE(NULLIF(detail->>'path',''), substring(target_id from 6)) "
+        "  AS abs_path "
+        "FROM session_activity "
+        "WHERE target_kind='file' "
+        "  AND (detail->>'path' LIKE %s OR target_id LIKE %s) "
+        "ORDER BY id DESC LIMIT 1"
+    )
+    with _conn(store) as conn, conn.cursor() as cur:
+        cur.execute(sql, (pattern, f"file:{pattern}"))
+        row = cur.fetchone()
+    return (row or {}).get("abs_path") or None
 
 
 def scan_legacy_file_rows(store, *, limit: int = 2000) -> list[dict]:

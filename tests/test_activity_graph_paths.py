@@ -54,10 +54,16 @@ def test_event_to_graph_self_heals_legacy_raw_path_target_id():
     # A row written BEFORE the P4 fix shipped: target_id embeds the raw path
     # literally instead of the hash.
     legacy_row = {
-        "session_id": "s1", "seq": 1, "action": "edit", "tool": "Edit",
-        "target_id": "file:/Users/dev/repo/foo.py", "target_kind": "file",
-        "target_label": "foo.py", "edge_kind": "edit",
-        "cwd": "/Users/dev/repo", "detail": {},
+        "session_id": "s1",
+        "seq": 1,
+        "action": "edit",
+        "tool": "Edit",
+        "target_id": "file:/Users/dev/repo/foo.py",
+        "target_kind": "file",
+        "target_label": "foo.py",
+        "edge_kind": "edit",
+        "cwd": "/Users/dev/repo",
+        "detail": {},
     }
     frag = event_to_graph(legacy_row)
     file_nodes = [n for n in frag["nodes"] if n["kind"] == "file"]
@@ -68,10 +74,16 @@ def test_event_to_graph_self_heals_legacy_raw_path_target_id():
 def test_event_to_graph_leaves_fresh_canonical_target_id_untouched():
     canonical_id = NodeIdFactory.file_id("/Users/dev/repo/foo.py")
     fresh_row = {
-        "session_id": "s1", "seq": 1, "action": "edit", "tool": "Edit",
-        "target_id": canonical_id, "target_kind": "file",
-        "target_label": "foo.py", "edge_kind": "edit",
-        "cwd": "/Users/dev/repo", "detail": {"path": "/Users/dev/repo/foo.py"},
+        "session_id": "s1",
+        "seq": 1,
+        "action": "edit",
+        "tool": "Edit",
+        "target_id": canonical_id,
+        "target_kind": "file",
+        "target_label": "foo.py",
+        "edge_kind": "edit",
+        "cwd": "/Users/dev/repo",
+        "detail": {"path": "/Users/dev/repo/foo.py"},
     }
     frag = event_to_graph(fresh_row)
     file_nodes = [n for n in frag["nodes"] if n["kind"] == "file"]
@@ -80,28 +92,89 @@ def test_event_to_graph_leaves_fresh_canonical_target_id_untouched():
 
 def test_event_to_graph_legacy_and_fresh_row_for_same_file_produce_same_id():
     legacy_row = {
-        "session_id": "s1", "seq": 1, "action": "read", "tool": "Read",
-        "target_id": "file:/Users/dev/repo/foo.py", "target_kind": "file",
-        "target_label": "foo.py", "edge_kind": "read",
-        "cwd": "/Users/dev/repo", "detail": {},
+        "session_id": "s1",
+        "seq": 1,
+        "action": "read",
+        "tool": "Read",
+        "target_id": "file:/Users/dev/repo/foo.py",
+        "target_kind": "file",
+        "target_label": "foo.py",
+        "edge_kind": "read",
+        "cwd": "/Users/dev/repo",
+        "detail": {},
     }
     fresh_row = {
-        "session_id": "s1", "seq": 2, "action": "edit", "tool": "Edit",
+        "session_id": "s1",
+        "seq": 2,
+        "action": "edit",
+        "tool": "Edit",
         "target_id": NodeIdFactory.file_id("/Users/dev/repo/foo.py"),
-        "target_kind": "file", "target_label": "foo.py", "edge_kind": "edit",
-        "cwd": "/Users/dev/repo", "detail": {"path": "/Users/dev/repo/foo.py"},
+        "target_kind": "file",
+        "target_label": "foo.py",
+        "edge_kind": "edit",
+        "cwd": "/Users/dev/repo",
+        "detail": {"path": "/Users/dev/repo/foo.py"},
     }
-    legacy_fid = [n["id"] for n in event_to_graph(legacy_row)["nodes"] if n["kind"] == "file"][0]
-    fresh_fid = [n["id"] for n in event_to_graph(fresh_row)["nodes"] if n["kind"] == "file"][0]
+    legacy_fid = [
+        n["id"] for n in event_to_graph(legacy_row)["nodes"] if n["kind"] == "file"
+    ][0]
+    fresh_fid = [
+        n["id"] for n in event_to_graph(fresh_row)["nodes"] if n["kind"] == "file"
+    ][0]
     assert legacy_fid == fresh_fid
+
+
+def test_event_to_graph_fresh_row_carries_path_on_file_node():
+    # Contract A.6: live spine FILE nodes must carry the absolute path, same
+    # shape as the snapshot builder's FILE nodes — otherwise the client's
+    # first-arrival dedup can permanently mask the path-bearing node.
+    row = {
+        "session_id": "s1",
+        "seq": 1,
+        "action": "edit",
+        "tool": "Edit",
+        "target_id": NodeIdFactory.file_id("/Users/dev/repo/foo.py"),
+        "target_kind": "file",
+        "target_label": "foo.py",
+        "edge_kind": "edit",
+        "cwd": "/Users/dev/repo",
+        "detail": {"path": "/Users/dev/repo/foo.py"},
+    }
+    frag = event_to_graph(row)
+    file_nodes = [n for n in frag["nodes"] if n["kind"] == "file"]
+    assert file_nodes[0]["path"] == "/Users/dev/repo/foo.py"
+
+
+def test_event_to_graph_command_path_node_carries_path():
+    row = {
+        "session_id": "s1",
+        "seq": 1,
+        "action": "run",
+        "tool": "Bash",
+        "target_id": "cmd:cat foo.py",
+        "target_kind": "command",
+        "target_label": "cat foo.py",
+        "edge_kind": "run",
+        "cwd": "/Users/dev/repo",
+        "detail": {"command_path": "/Users/dev/repo/foo.py"},
+    }
+    frag = event_to_graph(row)
+    file_nodes = [n for n in frag["nodes"] if n["kind"] == "file"]
+    assert file_nodes[0]["path"] == "/Users/dev/repo/foo.py"
 
 
 def test_event_to_graph_command_path_edge_matches_galaxy_hash():
     row = {
-        "session_id": "s1", "seq": 1, "action": "run", "tool": "Bash",
-        "target_id": "cmd:cat foo.py", "target_kind": "command",
-        "target_label": "cat foo.py", "edge_kind": "run",
-        "cwd": "/Users/dev/repo", "detail": {"command_path": "/Users/dev/repo/foo.py"},
+        "session_id": "s1",
+        "seq": 1,
+        "action": "run",
+        "tool": "Bash",
+        "target_id": "cmd:cat foo.py",
+        "target_kind": "command",
+        "target_label": "cat foo.py",
+        "edge_kind": "run",
+        "cwd": "/Users/dev/repo",
+        "detail": {"command_path": "/Users/dev/repo/foo.py"},
     }
     frag = event_to_graph(row)
     file_nodes = [n for n in frag["nodes"] if n["kind"] == "file"]

@@ -5,7 +5,8 @@ Live, no-snapshot serving of the four navigation levels:
     GET /api/trace/domains            -> L0 domain hubs
     GET /api/trace/sessions?domain=   -> L1 sessions + has_session edges
     GET /api/trace/chain?session=     -> L2 ordered prompt/action/file chain
-    GET /api/trace/file?path=         -> L3 file drill (AST + impact + git)
+    GET /api/trace/file?path=         -> L3 file drill (git + versions;
+                                          add ?include=ast for AST + impact)
 
 Each reads live from JSONL / AP graph / git per request — nothing cached
 to disk.
@@ -15,6 +16,7 @@ from __future__ import annotations
 
 from urllib.parse import parse_qs, unquote, urlparse
 
+from cortex_viz.server.git_diff_engine import diff_for_path
 from cortex_viz.server.http_standalone_response import (
     send_json_error,
     send_json_ok,
@@ -102,77 +104,34 @@ def serve_trace_chain(handler) -> None:
 
 
 def _file_git_root_rel(path: str) -> tuple[str | None, str]:
-    """``(git_root, repo_relative_path)`` for a file — self-contained.
-
-    The ``git_diff`` / ``http_file_diff`` helpers were never ported in the
-    extraction, which broke the file panel's git sections. This resolves the
-    repo from the FILE's own directory (graph nodes carry absolute paths; the
-    server CWD is never the repo). Returns ``(None, cleaned_path)`` outside a
-    repo so callers report "no git data" rather than erroring.
+    """``(git_root, repo_relative_path)`` for a file — delegates entirely to
+    the shared engine's ``repo_root_and_relpath`` (contract A.1/A.5:
+    expanduser + symlink-canonicalize, walk to the nearest existing
+    ancestor when the file's own directory is gone). Delegating instead of
+    recomputing the relpath locally is load-bearing: an earlier version of
+    this function reimplemented the relpath computation without
+    canonicalizing symlinks, which silently disagreed with
+    ``resolve_repo_root``'s own (canonicalizing) internals whenever an
+    ancestor directory was a symlink — e.g. macOS's ``/tmp`` ->
+    ``/private/tmp``. Returns ``(None, cleaned_path)`` outside a repo so
+    callers report "no git data" rather than erroring.
     """
     import os
-    import subprocess
-    from pathlib import Path
 
-    p = (path or "").replace("\\", "/")
-    if not p.startswith("/"):
-        return None, p.lstrip("./")
-    try:
-        real = os.path.realpath(p)
-        res = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True, text=True,
-            cwd=str(Path(real).parent), timeout=5,
-        )
-        root = res.stdout.strip() if res.returncode == 0 else ""
-        if root:
-            return root, str(Path(real).relative_to(root))
-    except Exception:
-        pass
-    return None, p.lstrip("/")
+    from cortex_viz.server.git_diff_engine import repo_root_and_relpath
+
+    root, rel, _reason = repo_root_and_relpath(path)
+    if root is None:
+        cleaned = os.path.expanduser(path or "").replace("\\", "/")
+        return None, cleaned.lstrip("./").lstrip("/")
+    return root, rel
 
 
 def _git_history(path: str) -> dict:
-    """Working-tree (or last-commit) diff for one file — self-contained git."""
-    try:
-        import subprocess
-
-        root, rel = _file_git_root_rel(path)
-        if root is None:
-            return {"available": False}
-        out = subprocess.run(
-            ["git", "-C", root, "diff", "--unified=3", "--", rel],
-            capture_output=True, text=True, timeout=8,
-        )
-        diff = out.stdout
-        diff_type = "working"
-        if not diff.strip():
-            # No unstaged change — show how the last commit touched the file.
-            out = subprocess.run(
-                ["git", "-C", root, "show", "--format=", "--unified=3", "HEAD",
-                 "--", rel],
-                capture_output=True, text=True, timeout=8,
-            )
-            diff = out.stdout
-            diff_type = "last-commit"
-        if not diff.strip():
-            return {"available": True, "diff_type": "none", "lines": []}
-        lines = []
-        for ln in diff.splitlines():
-            t = "ctx"
-            if ln.startswith("+") and not ln.startswith("+++"):
-                t = "add"
-            elif ln.startswith("-") and not ln.startswith("---"):
-                t = "del"
-            lines.append({"type": t, "text": ln})
-        return {
-            "available": True,
-            "diff_type": diff_type,
-            "lines": lines[:400],
-            "truncated": len(lines) > 400,
-        }
-    except Exception as exc:  # pragma: no cover - defensive
-        return {"available": False, "error": str(exc)}
+    """Git diff for one file (contract A.2/A.5) — delegates to the shared
+    engine so ``/api/trace/file`` and ``/api/file-diff`` never diverge.
+    """
+    return diff_for_path(path)
 
 
 def _git_versions(path: str, limit: int = 25) -> dict:
@@ -234,25 +193,30 @@ def _git_versions(path: str, limit: int = 25) -> dict:
 
 
 def serve_trace_file(handler) -> None:
-    """GET /api/trace/file?path=<p> — L3 file drill: AST + impact + git."""
+    """GET /api/trace/file?path=<p> — L3 file drill: git + versions, AST opt-in.
+
+    Contract A.5: without ``?include=ast`` this responds in milliseconds
+    with ``{git, versions}`` only — the AST/impact bridge
+    (``_ast_and_impact``, up to 20 MCP ``get_context`` calls, measured
+    65-155s on first click) is added under the ``ast`` key only when the
+    caller explicitly asks for it via ``include=ast``.
+    """
     try:
         path = _param(handler, "path")
         if not path:
             send_json_ok(handler, {"error": "missing path"})
             return
-        send_json_ok(
-            handler,
-            {
-                "path": path,
-                "git": _git_history(path),
-                "versions": _git_versions(path),
-                "ast": _ast_and_impact(path),
-                "meta": {"schema": "trace.v1", "level": 3},
-            },
-        )
+        payload = {
+            "path": path,
+            "git": _git_history(path),
+            "versions": _git_versions(path),
+            "meta": {"schema": "trace.v1", "level": 3},
+        }
+        if _param(handler, "include") == "ast":
+            payload["ast"] = _ast_and_impact(path)
+        send_json_ok(handler, payload)
     except Exception as e:
         send_json_error(handler, e)
-
 
 
 def serve_trace_impact(handler) -> None:

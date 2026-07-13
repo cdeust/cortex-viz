@@ -148,8 +148,12 @@ def _file_action(verb: str, path: str, cwd: str) -> dict[str, Any]:
     anyway)."""
     if not path or path == "?":
         return {
-            "action": verb, "target_id": "file:?", "target_kind": "file",
-            "target_label": "?", "edge_kind": verb, "path": None,
+            "action": verb,
+            "target_id": "file:?",
+            "target_kind": "file",
+            "target_label": "?",
+            "edge_kind": verb,
+            "path": None,
         }
     abs_path = canonicalize_path(path, cwd)
     return {
@@ -187,10 +191,17 @@ def normalize_event(event: dict[str, Any]) -> dict[str, Any] | None:
         if not text:
             return None
         return {
-            "session_id": session_id, "ts": ts, "cwd": cwd,
-            "event_type": "prompt", "tool": "", "action": "prompt",
-            "target_id": "", "target_kind": "prompt",
-            "target_label": text, "edge_kind": "", "detail": {},
+            "session_id": session_id,
+            "ts": ts,
+            "cwd": cwd,
+            "event_type": "prompt",
+            "tool": "",
+            "action": "prompt",
+            "target_id": "",
+            "target_kind": "prompt",
+            "target_label": text,
+            "edge_kind": "",
+            "detail": {},
         }
 
     tool_name = str(event.get("tool_name") or "")
@@ -205,10 +216,15 @@ def normalize_event(event: dict[str, Any]) -> dict[str, Any] | None:
         # hashed target_id — see ``_file_action``'s docstring on why).
         detail["path"] = c["path"]
     return {
-        "session_id": session_id, "ts": ts, "cwd": cwd,
-        "event_type": etype or "PostToolUse", "tool": tool_name,
-        "action": c["action"], "target_id": c["target_id"],
-        "target_kind": c["target_kind"], "target_label": c["target_label"],
+        "session_id": session_id,
+        "ts": ts,
+        "cwd": cwd,
+        "event_type": etype or "PostToolUse",
+        "tool": tool_name,
+        "action": c["action"],
+        "target_id": c["target_id"],
+        "target_kind": c["target_kind"],
+        "target_label": c["target_label"],
         "edge_kind": c["edge_kind"],
         "detail": detail,
     }
@@ -233,33 +249,89 @@ def event_to_graph(row: dict[str, Any]) -> dict[str, list]:
     sid = row["session_id"]
     seq = row.get("seq") or row.get("id") or row.get("ts") or "0"
     nodes: list[dict] = [
-        {"id": f"session:{sid}", "kind": "session", "label": sid[:12],
-         "type": "session"},
+        {
+            "id": f"session:{sid}",
+            "kind": "session",
+            "label": sid[:12],
+            "type": "session",
+        },
     ]
     edges: list[dict] = []
 
     if row["action"] == "prompt":
         pid = f"act:{sid}:{seq}"
-        nodes.append({"id": pid, "kind": "prompt", "type": "prompt",
-                      "label": row["target_label"], "tool": ""})
-        edges.append({"id": f"session:{sid}->{pid}", "source": f"session:{sid}",
-                      "target": pid, "kind": "did", "type": "did"})
+        nodes.append(
+            {
+                "id": pid,
+                "kind": "prompt",
+                "type": "prompt",
+                "label": row["target_label"],
+                "tool": "",
+            }
+        )
+        edges.append(
+            {
+                "id": f"session:{sid}->{pid}",
+                "source": f"session:{sid}",
+                "target": pid,
+                "kind": "did",
+                "type": "did",
+            }
+        )
         return {"nodes": nodes, "edges": edges}
 
     aid = f"act:{sid}:{seq}"
-    nodes.append({"id": aid, "kind": "action", "type": "action",
-                  "label": row["action"], "tool": row["tool"]})
-    edges.append({"id": f"session:{sid}->{aid}", "source": f"session:{sid}",
-                  "target": aid, "kind": "did", "type": "did"})
+    nodes.append(
+        {
+            "id": aid,
+            "kind": "action",
+            "type": "action",
+            "label": row["action"],
+            "tool": row["tool"],
+        }
+    )
+    edges.append(
+        {
+            "id": f"session:{sid}->{aid}",
+            "source": f"session:{sid}",
+            "target": aid,
+            "kind": "did",
+            "type": "did",
+        }
+    )
     tid = row.get("target_id") or ""
-    if tid and row.get("target_kind") == "file" and not is_canonical_file_target_id(tid):
+    if (
+        tid
+        and row.get("target_kind") == "file"
+        and not is_canonical_file_target_id(tid)
+    ):
         tid = canonical_file_id_for_legacy(tid, row.get("cwd") or "")
     if tid:
-        nodes.append({"id": tid, "kind": row["target_kind"],
-                      "type": row["target_kind"], "label": row["target_label"]})
-        edges.append({"id": f"{aid}->{tid}", "source": aid,
-                      "target": tid, "kind": row["edge_kind"],
-                      "type": row["edge_kind"]})
+        target_node = {
+            "id": tid,
+            "kind": row["target_kind"],
+            "type": row["target_kind"],
+            "label": row["target_label"],
+        }
+        if row.get("target_kind") == "file":
+            # Absolute path, same shape as the snapshot builder's FILE nodes
+            # (workflow_graph_builder_ingest.py:_finalize_files) — without
+            # it a live spine FILE node can't drive git-diff lookups, and a
+            # first-arrival dedup on the client permanently masks the
+            # snapshot node that DOES carry a path (contract A.6).
+            path = (row.get("detail") or {}).get("path")
+            if path:
+                target_node["path"] = path
+        nodes.append(target_node)
+        edges.append(
+            {
+                "id": f"{aid}->{tid}",
+                "source": aid,
+                "target": tid,
+                "kind": row["edge_kind"],
+                "type": row["edge_kind"],
+            }
+        )
     # A terminal command that touched a file gets a second directional edge
     # action ──run──▶ file, so shell file-writes are visible too.
     # ``canonicalize_path`` is idempotent on an already-clean absolute path
@@ -270,8 +342,22 @@ def event_to_graph(row: dict[str, Any]) -> dict[str, list]:
     if cpath_raw:
         cpath = canonicalize_path(cpath_raw, row.get("cwd") or "")
         fid = NodeIdFactory.file_id(cpath)
-        nodes.append({"id": fid, "kind": "file", "type": "file",
-                      "label": cpath.rsplit("/", 1)[-1]})
-        edges.append({"id": f"{aid}->{fid}", "source": aid, "target": fid,
-                      "kind": "run", "type": "run"})
+        nodes.append(
+            {
+                "id": fid,
+                "kind": "file",
+                "type": "file",
+                "label": cpath.rsplit("/", 1)[-1],
+                "path": cpath,
+            }
+        )
+        edges.append(
+            {
+                "id": f"{aid}->{fid}",
+                "source": aid,
+                "target": fid,
+                "kind": "run",
+                "type": "run",
+            }
+        )
     return {"nodes": nodes, "edges": edges}

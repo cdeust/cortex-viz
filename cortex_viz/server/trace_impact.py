@@ -117,7 +117,6 @@ def _ast_and_impact(path: str) -> dict:
         return {"available": False, "error": str(exc)}
 
 
-
 def _basename(p: str) -> str:
     return (p or "").replace("\\", "/").rstrip("/").split("/")[-1]
 
@@ -464,13 +463,14 @@ def _to_repo_relative(path: str) -> str:
     match in ``_impact_for_graph`` lands. A relative path is just cleaned;
     if no git root resolves, fall back to stripping the leading slash.
     """
-    p = (path or "").replace("\\", "/")
+    import os
+
+    p = os.path.expanduser(path or "").replace("\\", "/")
     if not p.startswith("/"):
         # Relative input — reject ``..`` traversal, return cleaned.
         if ".." in p.split("/"):
             return ""
         return p.lstrip("./")
-    import os
     import subprocess
     import tempfile
     from pathlib import Path
@@ -497,8 +497,11 @@ def _to_repo_relative(path: str) -> str:
     try:
         res = subprocess.run(
             ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True, text=True,
-            cwd=str(Path(real).parent), timeout=5, shell=False,
+            capture_output=True,
+            text=True,
+            cwd=str(Path(real).parent),
+            timeout=5,
+            shell=False,
         )
         root = res.stdout.strip() if res.returncode == 0 else ""
         if root:
@@ -514,8 +517,14 @@ def _to_repo_relative(path: str) -> str:
 # Edge-bearing keys whose totals rank a per-graph impact result; the richest
 # (most edges) wins when several code-graphs contain the same file.
 _IMPACT_EDGE_KEYS = (
-    "downstream", "upstream", "members", "processes",
-    "references", "referenced_by", "depends_on", "depended_on_by",
+    "downstream",
+    "upstream",
+    "members",
+    "processes",
+    "references",
+    "referenced_by",
+    "depends_on",
+    "depended_on_by",
 )
 
 

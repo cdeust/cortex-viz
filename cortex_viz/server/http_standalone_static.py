@@ -76,8 +76,12 @@ def serve_shared_asset(handler, shared_dir: Path, rel_path: str) -> None:
     so a crafted ``../`` can never escape the foundation directory.
     """
     # Reject the obvious attacks before touching the filesystem.
-    if not rel_path or "\x00" in rel_path or any(
-        part in ("", "..") or part.startswith(".") for part in rel_path.split("/")
+    if (
+        not rel_path
+        or "\x00" in rel_path
+        or any(
+            part in ("", "..") or part.startswith(".") for part in rel_path.split("/")
+        )
     ):
         send_plain_error(handler, 403)
         return
@@ -100,8 +104,12 @@ def serve_shared_asset(handler, shared_dir: Path, rel_path: str) -> None:
     handler.wfile.write(body)
 
 
-def serve_file_diff(handler) -> None:
-    """Thin delegate to ``http_file_diff.serve_file_diff``."""
+def serve_file_diff(handler, store=None) -> None:
+    """Thin delegate to ``http_file_diff.serve_file_diff``.
+
+    ``store`` is threaded through for the basename/relative-name resolution
+    ladder (contract A.3), which needs the activity spine in PG.
+    """
     from cortex_viz.server.http_file_diff import serve_file_diff as _serve
 
-    _serve(handler)
+    _serve(handler, store)
