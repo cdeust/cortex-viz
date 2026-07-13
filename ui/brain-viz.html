@@ -245,15 +245,25 @@
     <div class="stat" title="Knowledge-graph relationships in the store — the real synapse population."><span>Synapses</span><span class="v" id="s-edges">--</span></div>
     <div class="stat"><span>Domains</span><span class="v" id="s-dom">--</span></div>
     <div class="stat"><span>Memories</span><span class="v" id="s-mem">--</span></div>
+    <!-- Store-health figure, deliberately a DIFFERENT label from "Memories":
+         the whole `memories` table, no is_stale filter — includes
+         soft-deleted rows. "Memories" above is the navigable population
+         (table memories, filter NOT is_stale) shared with Knowledge/Board.
+         source: count_memories()["raw_total"], memory_read.py. -->
+    <div class="stat" title="Whole memories table, no filter (includes soft-deleted / is_stale rows). Store-health figure, not the navigable population shown as Memories above."><span>Store size</span><span class="v" id="s-mem-raw">--</span></div>
     <div class="stat"><span>Entities</span><span class="v" id="s-ent">--</span></div>
-    <!-- Rendered graph — what THIS view actually draws from the snapshot
-         (more than the galaxy: it defers AST symbols; the brain shows them).
-         Filled by boot.js once the stream lands. -->
+    <!-- Rendered graph — what THIS view actually draws from the snapshot.
+         Both the galaxy and the brain load the same durable full snapshot
+         one-shot (entities + AST symbols together, unified-viz.html
+         _loadFullGraph / brain boot.js) — the progressive L0-L5 phase build
+         is a fallback ONLY for a first install with no snapshot yet (a 503
+         on the one-shot fetch), not a standing per-view difference. Filled
+         by boot.js once the stream lands. -->
     <div id="brain-rendered" style="margin-top:8px; border-top:1px solid var(--divider); padding-top:6px;">
       <div class="sub" style="margin-bottom:4px;">Rendered graph</div>
-      <div class="stat" title="Nodes drawn in this view — every snapshot node, including the AST symbols the galaxy defers."><span>In view</span><span class="v" id="r-nodes">--</span></div>
+      <div class="stat" title="Nodes drawn in this view — the full snapshot the brain and the galaxy both load one-shot (entities + AST symbols together)."><span>In view</span><span class="v" id="r-nodes">--</span></div>
       <div class="stat" title="Graph edges routed as synapses along the white-matter tracts."><span>Edges</span><span class="v" id="r-edges">--</span></div>
-      <div class="stat" title="AST symbols rendered (galaxy loads these only on demand)."><span>Symbols</span><span class="v" id="s-sym">--</span></div>
+      <div class="stat" title="AST symbols rendered — part of the same one-shot snapshot as the galaxy, not brain-exclusive."><span>Symbols</span><span class="v" id="s-sym">--</span></div>
     </div>
     <!-- Memory-science vitals — rendered DYNAMICALLY by ui/brain/js/vitals.js
          from /api/stats system_vitals + BRAIN.VITALS_SPEC. Rows are built from

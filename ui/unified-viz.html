@@ -51,6 +51,12 @@
   </div>
   <div class="stat-row"><span>Domains</span><span class="val" id="s-dom">--</span></div>
   <div class="stat-row"><span>Memories</span><span class="val" id="s-mem">--</span></div>
+  <!-- Store-health figure, deliberately a DIFFERENT label from "Memories":
+       the whole `memories` table, no is_stale filter — includes
+       soft-deleted rows. "Memories" above is the navigable population
+       (table memories, filter NOT is_stale) shared with Knowledge/Board.
+       source: count_memories()["raw_total"], memory_read.py. -->
+  <div class="stat-row" title="Whole memories table, no filter (includes soft-deleted / is_stale rows). Store-health figure, not the navigable population shown as Memories above."><span>Store size</span><span class="val" id="s-mem-raw" style="color:var(--text-faint)">--</span></div>
   <div class="stat-row"><span>Entities</span><span class="val" id="s-ent">--</span></div>
   <div class="stat-row"><span>Nodes</span><span class="val" id="s-nodes">--</span></div>
   <div class="stat-row"><span>Synapses</span><span class="val" id="s-edge">--</span></div>
@@ -196,7 +202,11 @@
 
 <div id="monitor-panel">
   <div class="mon-header">
-    <div class="mon-title">Monitoring Log</div>
+    <!-- Client-side sample, not a store count: node counters here are
+         capped at maxEntries (2000, unified/js/monitor.js) — an honest
+         "streamed so far" tally, not the true store population shown by
+         the sidebar's Memories/Stable figures. -->
+    <div class="mon-title" title="Sample of nodes streamed into this log, capped at 2000 — not a store-wide count.">Monitoring Log</div>
     <button class="close-btn" id="monitor-close">&#x2715;</button>
   </div>
   <div class="mon-tabs">
