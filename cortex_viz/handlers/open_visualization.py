@@ -15,9 +15,16 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 from cortex_viz.server.http_launcher import launch_server, open_in_browser
 from cortex_viz.handlers._tool_meta import READ_ONLY_EXTERNAL
+from cortex_viz.infrastructure.memory_read import MemoryReader
+from cortex_viz.infrastructure.schema_migrate import (
+    MigrationResult,
+    run_schema_migration,
+)
+from cortex_viz.infrastructure.schema_preflight import check_schema
 
 schema = {
     "title": "Open visualization",
@@ -251,7 +258,114 @@ def _url_from_bootstrap(status: str) -> str | None:
     return None
 
 
+# Clip length for migration subprocess stderr surfaced in the support
+# message. Not a measured value — a readability bound chosen well under
+# MAX_RESPONSE_CHARS (cortex_viz/infrastructure/memory_config.py:158,
+# the MCP response budget), so it never risks tripping that ceiling on
+# its own; a truncated stderr tail is still actionable for support.
+_STDERR_CLIP_CHARS = 2000
+
+_SUPPORT_INSTRUCTION = "Contactez le support pour faire la migration de vos données."
+
+
+def _build_memory_reader() -> MemoryReader:
+    """Composition-root factory for the preflight's read connection.
+
+    Isolated to one line so tests can monkeypatch
+    ``cortex_viz.handlers.open_visualization._build_memory_reader``
+    instead of constructing a real Postgres pool.
+    """
+    return MemoryReader()
+
+
+def _migration_failure_detail(migration: MigrationResult) -> str | None:
+    """Human-readable (French) reason the migration attempt failed.
+
+    Precondition: ``migration`` is the result of one
+    ``run_schema_migration`` call. Postcondition: returns ``None`` iff
+    the migration reported success (``exit_code == 0``); otherwise a
+    non-empty string safe to embed in the support message, with any
+    subprocess stderr clipped to ``_STDERR_CLIP_CHARS``.
+    """
+    if migration.exit_code == 0:
+        return None
+    if not migration.plugin_found:
+        return "aucune installation du plugin Cortex trouvée sur cette machine"
+    if migration.timed_out:
+        return migration.stderr
+    stderr = migration.stderr.strip()
+    clipped = stderr[:_STDERR_CLIP_CHARS]
+    if len(stderr) > _STDERR_CLIP_CHARS:
+        clipped += "…"
+    exit_desc = (
+        f"code de sortie {migration.exit_code}"
+        if migration.exit_code is not None
+        else "aucun code de sortie"
+    )
+    return f"{exit_desc} — {clipped}" if clipped else exit_desc
+
+
+def _schema_error_result(
+    missing: tuple[str, ...], failure_detail: str
+) -> dict[str, Any]:
+    """MCP result payload for an unrecoverable schema-preflight failure.
+
+    Postcondition: the returned dict's ``message`` names the missing
+    objects, states the automatic-migration attempt failed with
+    ``failure_detail``, and ends with the literal support instruction —
+    this is what the user reads, so no server is launched and no
+    browser opened by the caller once this is returned.
+    """
+    message = (
+        "Le schéma de la base Cortex est antérieur aux prérequis de "
+        "cortex-viz. Objets manquants : "
+        + "; ".join(missing)
+        + ". Migration automatique tentée et échouée : "
+        + failure_detail
+        + ". "
+        + _SUPPORT_INSTRUCTION
+    )
+    return {
+        "error": "schema_preflight_failed",
+        "missing": list(missing),
+        "migration_failure": failure_detail,
+        "message": message,
+    }
+
+
+def _ensure_schema_ready() -> dict[str, Any] | None:
+    """Verify the DB schema; attempt one migration if it's behind.
+
+    Precondition: none. Postcondition: returns ``None`` when the schema
+    already satisfies every ``schema_preflight`` requirement, or was
+    brought up to date by a single successful migration attempt — the
+    caller should proceed with server launch. Returns an MCP error
+    result (see ``_schema_error_result``) when the schema remains
+    unusable after that one attempt; the caller MUST NOT launch a
+    server or open a browser in that case.
+    """
+    reader = _build_memory_reader()
+    try:
+        result = check_schema(reader)
+        if result.ok:
+            return None
+        migration = run_schema_migration(reader.url)
+        failure_detail = _migration_failure_detail(migration)
+        if failure_detail is None:
+            result = check_schema(reader)
+            if result.ok:
+                return None
+            failure_detail = "le schéma reste incomplet après la migration"
+        return _schema_error_result(result.missing, failure_detail)
+    finally:
+        reader.close()
+
+
 async def handler(args: dict | None = None) -> dict:
+    schema_error = _ensure_schema_ready()
+    if schema_error is not None:
+        return schema_error
+
     # Python caches every imported module in ``sys.modules``; the
     # long-lived MCP plugin process therefore ignores on-disk edits
     # to handlers/http_launcher. To bypass that, we spawn a short
