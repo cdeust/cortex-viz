@@ -167,6 +167,17 @@ class MemoryReader:
         self._interactive_pool: ConnectionPool | None = None
         self._batch_pool: ConnectionPool | None = None
 
+    @property
+    def url(self) -> str:
+        """The resolved DATABASE_URL this reader is bound to.
+
+        Public so callers that need to hand the SAME connection string
+        to an out-of-process tool (e.g. ``schema_migrate.
+        run_schema_migration``) don't have to re-derive it via the
+        module-private ``_resolve_database_url``.
+        """
+        return self._url
+
     # ── Pools ─────────────────────────────────────────────────────────
     # Sizes from cortex_viz.infrastructure.memory_config (Cortex's proven
     # values: interactive 2–8, batch 1–2). Override via CORTEX_MEMORY_POOL_*.
