@@ -208,8 +208,27 @@
     JUG._existingIdSet = {};
     JUG._existingEdgeSet = {};
     var d = JUG.state.lastData || {};
-    (d.nodes || []).forEach(function(n){ JUG._existingIdSet[n.id] = true; });
+    // Stores the node REFERENCE (not a boolean) so a later id collision in
+    // appendGraphDelta can fill-missing-merge into the already-rendered
+    // node object instead of just being skipped.
+    (d.nodes || []).forEach(function(n){ JUG._existingIdSet[n.id] = n; });
     (d.edges || []).forEach(function(e){ JUG._existingEdgeSet[_edgeKey(e)] = true; });
+  }
+
+  // Copies every field `incoming` has that `existing` lacks (undefined or
+  // null) onto `existing`, in place. Never overwrites a value `existing`
+  // already carries — e.g. a live spine node arriving without `path` must
+  // not blank out the `path` a snapshot node already resolved.
+  // precondition: existing and incoming are both non-null node objects.
+  // postcondition: for every key k in incoming, existing[k] is non-null if
+  // either existing[k] or incoming[k] was non-null before the call.
+  function _fillMissingFields(existing, incoming) {
+    for (var key in incoming) {
+      if (!Object.prototype.hasOwnProperty.call(incoming, key)) continue;
+      var v = incoming[key];
+      if (v === undefined || v === null) continue;
+      if (existing[key] === undefined || existing[key] === null) existing[key] = v;
+    }
   }
 
   function _scheduleRebuild() {
@@ -255,8 +274,10 @@
     var c = JUG._statCounts;
     for (var i = 0; i < nodes.length; i++) {
       var n = nodes[i];
-      if (!n || !n.id || JUG._existingIdSet[n.id]) continue;
-      JUG._existingIdSet[n.id] = true;
+      if (!n || !n.id) continue;
+      var existing = JUG._existingIdSet[n.id];
+      if (existing) { _fillMissingFields(existing, n); continue; }
+      JUG._existingIdSet[n.id] = n;
       JUG.state.lastData.nodes.push(n);
       addedNodes.push(n);
       var kind = n.kind || n.type || '';

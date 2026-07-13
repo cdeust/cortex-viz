@@ -10,150 +10,131 @@ Response contract (consumed verbatim by ui/unified/js/detail_diff.js
 ``renderFromGit`` / ``renderModal``)::
 
     {
-      "diff_type": "uncommitted" | "staged" | "last_commit"
-                   | "untracked" | "none",
+      "available": bool,
+      "diff_type": "uncommitted" | "last_commit" | "untracked" | "none",
       "lines": [ {"type": "hunk"|"add"|"del"|"context", "text": "..."} ],
       "truncated": bool,
-      "reason": "<optional human note>"
+      "reason": "<optional human note>",
+      "commit": {"sha": "...", "subject": "..."}  # only for last_commit
     }
 
-Resolution order mirrors what a developer would look at first: unstaged
-working-tree changes, then staged, then the last commit that touched the
-file, then (for a brand-new file git doesn't track yet) its full content as
-additions. Read-only: only ``git diff`` / ``git log`` / ``git ls-files``,
-never anything that mutates the tree.
+The diff ladder itself lives in ``git_diff_engine`` (shared with
+``/api/trace/file``) — this module's job is purely resolving ``name`` (which
+may be an absolute path, a bare basename, or a repo-relative fragment) to an
+absolute filesystem path before handing off to the engine (contract A.3).
 """
 
 from __future__ import annotations
 
 import os
-import subprocess
 from urllib.parse import parse_qs, urlparse
 
+from cortex_viz.server.git_diff_engine import diff_for_path
 from cortex_viz.server.http_standalone_response import send_json_error, send_json_ok
 
-# Cap the rendered diff so a huge file (or a full-content new file) can't ship
-# a multi-MB payload the modal would choke on. source: mirrors the galaxy's
-# ~2k-line diff budget; larger diffs set truncated=True.
-_MAX_LINES = 2000
-_GIT_TIMEOUT_S = 6
+# Re-exported for tests/test_file_diff.py and any historical import path.
+from cortex_viz.server.git_diff_engine import (  # noqa: F401
+    _MAX_LINES,
+    _full_content_as_adds,
+    _parse_unified,
+    _resolve_diff,
+)
 
 
-def _git(root: str, args: list[str]) -> str | None:
-    """Run ``git -C root <args>`` read-only; return stdout or None on failure."""
-    try:
-        return subprocess.check_output(
-            ["git", "-C", root, *args],
-            stderr=subprocess.DEVNULL,
-            timeout=_GIT_TIMEOUT_S,
-        ).decode("utf-8", "replace")
-    except Exception:
-        return None
+def _resolve_by_basename(store, name: str) -> tuple[str | None, str | None]:
+    """Bare basename (no ``/``) → absolute path via the activity spine.
 
-
-def _repo_root(path: str) -> str | None:
-    """Git toplevel for ``path``'s directory, or None if not in a repo."""
-    directory = os.path.dirname(path) or "."
-    out = _git(directory, ["rev-parse", "--show-toplevel"])
-    return out.strip() if out else None
-
-
-def _is_untracked(root: str, rel: str) -> bool:
-    """True when the file exists but git does not yet track it."""
-    tracked = _git(root, ["ls-files", "--error-unmatch", "--", rel])
-    return tracked is None or tracked.strip() == ""
-
-
-def _parse_unified(diff_text: str) -> tuple[list[dict], bool]:
-    """Parse ``git diff`` unified output into typed {type,text} lines.
-
-    Skips the diff header noise (``diff --git``, ``index``, ``---``, ``+++``,
-    ``new file mode`` …) and keeps only hunks and their content lines, which
-    is exactly what the modal renders. Returns (lines, truncated).
+    Returns ``(abs_path, reason)``; ``reason`` set only on failure.
     """
-    lines: list[dict] = []
-    truncated = False
-    for raw in diff_text.splitlines():
-        if len(lines) >= _MAX_LINES:
-            truncated = True
-            break
-        if raw.startswith("@@"):
-            lines.append({"type": "hunk", "text": raw})
-        elif raw.startswith("+++") or raw.startswith("---"):
-            continue  # file-header markers, not content
-        elif raw.startswith("+"):
-            lines.append({"type": "add", "text": raw[1:]})
-        elif raw.startswith("-"):
-            lines.append({"type": "del", "text": raw[1:]})
-        elif raw.startswith(" "):
-            lines.append({"type": "context", "text": raw[1:]})
-        # diff --git / index / mode lines fall through (ignored)
-    return lines, truncated
+    if store is None:
+        return None, "unresolved basename: activity store unavailable"
+    from cortex_viz.infrastructure.activity_store import find_abs_path_by_label
 
-
-def _full_content_as_adds(root: str, rel: str) -> tuple[list[dict], bool]:
-    """Render an untracked file's whole content as additions."""
-    abs_path = os.path.join(root, rel)
     try:
-        with open(abs_path, "r", encoding="utf-8", errors="replace") as fh:
-            body = fh.read().splitlines()
-    except OSError:
-        return [], False
-    truncated = len(body) > _MAX_LINES
-    body = body[:_MAX_LINES]
-    lines: list[dict] = [{"type": "hunk", "text": f"@@ -0,0 +1,{len(body)} @@"}]
-    lines += [{"type": "add", "text": ln} for ln in body]
-    return lines, truncated
+        found = find_abs_path_by_label(store, name)
+    except Exception:
+        return None, "unresolved basename: activity store lookup failed"
+    if found:
+        return found, None
+    return None, "unresolved basename: not found in activity index"
 
 
-def _resolve_diff(root: str, rel: str) -> dict:
-    """Pick the most relevant diff for ``rel`` and return the response dict."""
-    # 1. Untracked new file — no history to diff against; show full content.
-    if _is_untracked(root, rel):
-        if os.path.isfile(os.path.join(root, rel)):
-            lines, trunc = _full_content_as_adds(root, rel)
-            return {"diff_type": "untracked", "lines": lines, "truncated": trunc}
-        return {"diff_type": "none", "lines": [], "truncated": False,
-                "reason": "not tracked and not found on disk"}
+def _resolve_by_relative_fragment(store, name: str) -> tuple[str | None, str | None]:
+    """Repo-relative fragment (contains ``/``) → absolute path.
 
-    # 2. Unstaged working-tree changes.
-    wt = _git(root, ["diff", "--unified=3", "--", rel])
-    if wt and wt.strip():
-        lines, trunc = _parse_unified(wt)
-        return {"diff_type": "uncommitted", "lines": lines, "truncated": trunc}
+    First tries every known repo root from the domain registry
+    (``<repo.fs_path>/<name>`` exists on disk); falls back to a suffix
+    search over the activity spine. Returns ``(abs_path, reason)``.
+    """
+    from cortex_viz.shared.domain_mapping import _build_registry
 
-    # 3. Staged (index) changes.
-    staged = _git(root, ["diff", "--cached", "--unified=3", "--", rel])
-    if staged and staged.strip():
-        lines, trunc = _parse_unified(staged)
-        return {"diff_type": "staged", "lines": lines, "truncated": trunc}
+    if ".." in name.split("/"):
+        return None, "unresolved relative name: path traversal rejected"
 
-    # 4. Last commit that touched the file.
-    last = _git(root, ["log", "-1", "-p", "--unified=3", "--", rel])
-    if last and last.strip():
-        lines, trunc = _parse_unified(last)
-        if lines:
-            return {"diff_type": "last_commit", "lines": lines, "truncated": trunc}
+    for repo in _build_registry().repos:
+        candidate = os.path.join(repo.fs_path, name)
+        if os.path.exists(candidate):
+            return candidate, None
 
-    return {"diff_type": "none", "lines": [], "truncated": False,
-            "reason": "no working, staged, or committed changes"}
+    if store is None:
+        return None, "unresolved relative name: not found in known repos"
+    from cortex_viz.infrastructure.activity_store import find_abs_path_by_suffix
+
+    try:
+        found = find_abs_path_by_suffix(store, name)
+    except Exception:
+        return None, "unresolved relative name: activity store lookup failed"
+    if found:
+        return found, None
+    return None, "unresolved relative name: not found in activity index or known repos"
 
 
-def serve_file_diff(handler) -> None:
-    """GET /api/file-diff?name=<absolute-or-repo-path>. See module docstring."""
+def _resolve_name(store, name: str) -> tuple[str | None, str | None]:
+    """``name`` → absolute path (contract A.3). Never falls back to server CWD."""
+    expanded = os.path.expanduser(name)
+    if expanded.startswith("/"):
+        return expanded, None
+    if "/" in expanded:
+        return _resolve_by_relative_fragment(store, expanded)
+    return _resolve_by_basename(store, expanded)
+
+
+def serve_file_diff(handler, store=None) -> None:
+    """GET /api/file-diff?name=<absolute-path|basename|repo-relative>.
+
+    See module docstring for the response contract. ``store`` is optional —
+    when absent (or unreachable), basename/suffix resolution against the
+    activity spine degrades cleanly to a "not found" reason instead of
+    crashing.
+    """
     try:
         params = parse_qs(urlparse(handler.path).query)
         name = (params.get("name") or [""])[0]
         if not name:
-            send_json_ok(handler, {"diff_type": "none", "lines": [],
-                                   "truncated": False, "reason": "no file given"})
+            send_json_ok(
+                handler,
+                {
+                    "available": False,
+                    "diff_type": "none",
+                    "lines": [],
+                    "truncated": False,
+                    "reason": "no file given",
+                },
+            )
             return
-        root = _repo_root(name)
-        if root is None:
-            send_json_ok(handler, {"diff_type": "none", "lines": [],
-                                   "truncated": False, "reason": "not in a git repo"})
+        abs_path, reason = _resolve_name(store, name)
+        if abs_path is None:
+            send_json_ok(
+                handler,
+                {
+                    "available": False,
+                    "diff_type": "none",
+                    "lines": [],
+                    "truncated": False,
+                    "reason": reason,
+                },
+            )
             return
-        rel = os.path.relpath(name, root)
-        send_json_ok(handler, _resolve_diff(root, rel))
+        send_json_ok(handler, diff_for_path(abs_path))
     except Exception as e:  # pragma: no cover - defensive
         send_json_error(handler, e)

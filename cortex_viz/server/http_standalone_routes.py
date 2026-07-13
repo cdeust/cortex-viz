@@ -21,6 +21,7 @@ from cortex_viz.server.http_standalone_endpoints import (
     serve_stats,
 )
 
+
 def _feature_moved(handler, feature: str, use_instead: str) -> None:
     """Reply 410 Gone for a tab whose data lives in the Cortex memory MCP.
 
@@ -185,7 +186,7 @@ def _route_unified_get(
     elif path == "/api/sankey" or path.startswith("/api/sankey?"):
         serve_sankey(handler, store)
     elif path.startswith("/api/file-diff?"):
-        serve_file_diff(handler)
+        serve_file_diff(handler, store)
     elif path_no_qs == "/api/recompute_layout":
         # GET-triggered for v1 simplicity (no body to receive). Runs
         # synchronously; the response carries timing + the new

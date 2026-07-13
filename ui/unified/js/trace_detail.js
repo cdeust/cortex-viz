@@ -122,14 +122,20 @@
       return h;
     }
     if (k === 'file') {
-      var path = node.path || String(node.id).replace(/^file:/, '');
-      h += '<div class="conn-item" style="color:var(--text-dim)">' + esc(path) + '</div>';
-      h += section('Git diff', 'td-git', 'loading diff…', { open: true, lazy: 'file', path: path });
-      h += section('Versions (git history)', 'td-versions', 'loading history…', { lazy: 'file', path: path });
-      h += section('AST symbols', 'td-ast', '', { lazy: 'file', path: path });
+      // precondition: node.path is the ONLY trusted source for the value
+      // sent to /api/trace/file; the id-stripped hash (String(id).replace)
+      // is never a valid path and must never be sent to the API. When
+      // node.path is absent, wire() resolves it via /api/graph/node?id=
+      // before any lazy section fetches — see _resolveFilePath.
+      var known = node.path || '';
+      h += '<div class="conn-item" style="color:var(--text-dim)" id="td-file-path">'
+        + esc(known || 'Resolving path…') + '</div>';
+      h += section('Git diff', 'td-git', 'loading diff…', { open: true, lazy: 'file', path: known });
+      h += section('Versions (git history)', 'td-versions', 'loading history…', { lazy: 'file', path: known });
+      h += section('AST symbols', 'td-ast', '', { lazy: 'ast', path: known });
       h += section('Impact / dependencies', 'td-impact',
         '<div class="conn-item" style="color:var(--text-dim)">Open the impact diagram →</div>',
-        { path: path });
+        { path: known });
       return h;
     }
     if (k === 'discussion') {
@@ -166,29 +172,95 @@
 
   // ── wire(content, node) → lazy fetch on expand + impact button ──
   function wire(content, node) {
+    var kind = node.kind || node.type;
+    if (kind === 'file') {
+      _wireFile(content, node);
+    } else {
+      _wireConvoSections(content);
+    }
+    _wireConvoModal(content);
+  }
+
+  // Session nodes: lazy-fetch the transcript on first expand of the
+  // 'Conversation' section. Independent of file-path resolution.
+  function _wireConvoSections(content) {
     var lazyDone = {};
-    content.querySelectorAll('details[data-lazy]').forEach(function (det) {
+    content.querySelectorAll('details[data-lazy="convo"]').forEach(function (det) {
       var run = function () {
         var key = det.querySelector('.td-sec-body').id;
         if (lazyDone[key]) return; lazyDone[key] = true;
-        var kind = det.getAttribute('data-lazy');
-        if (kind === 'convo') _loadConvo(det.getAttribute('data-sid'));
-        else if (kind === 'file') _loadFile(det.getAttribute('data-path'), content);
+        _loadConvo(det.getAttribute('data-sid'));
       };
       if (det.open) run();
       det.addEventListener('toggle', function () { if (det.open) run(); });
     });
-    // Impact section: open the dependency diagram in the flow panel.
+  }
+
+  // File nodes: node.path is the only trusted value. If absent, resolve it
+  // once via /api/graph/node?id=<id> before wiring any lazy section — never
+  // send the id-stripped hash to /api/trace/file.
+  // precondition: node.id is set (build() already required it for the DOM).
+  // postcondition: either every file section is wired to fetch with a real
+  // path, or every section shows "Path unknown for this node" and issues
+  // zero /api/trace/file calls.
+  function _resolveFilePath(node) {
+    if (node.path) return Promise.resolve(node.path);
+    if (!node.id) return Promise.resolve(null);
+    return _fetch('/api/graph/node?id=' + encodeURIComponent(node.id))
+      .then(function (rec) { return (rec && rec.record && rec.record.path) || null; })
+      .catch(function () { return null; });
+  }
+
+  function _wireFile(content, node) {
+    _resolveFilePath(node).then(function (path) {
+      var pathSlot = content.querySelector('#td-file-path');
+      if (pathSlot) pathSlot.textContent = path || 'Path unknown for this node';
+      if (!path) { _markFileSectionsUnknown(content); return; }
+      _wireFileLazySections(content, path);
+      _wireImpactButton(content, path);
+    });
+  }
+
+  // Git/versions ('file') and AST ('ast') are decoupled fetches with
+  // separate caches — AST only fetches on its own first expand, never
+  // bundled into the fast git+versions request.
+  function _wireFileLazySections(content, path) {
+    var lazyDone = {};
+    content.querySelectorAll('details[data-lazy]').forEach(function (det) {
+      var kind = det.getAttribute('data-lazy');
+      if (kind !== 'file' && kind !== 'ast') return;
+      var run = function () {
+        var key = det.querySelector('.td-sec-body').id;
+        if (lazyDone[key]) return; lazyDone[key] = true;
+        if (kind === 'ast') _loadAst(path); else _loadFile(path);
+      };
+      if (det.open) run();
+      det.addEventListener('toggle', function () { if (det.open) run(); });
+    });
+  }
+
+  function _markFileSectionsUnknown(content) {
+    var msg = 'Path unknown for this node';
+    ['td-git', 'td-versions', 'td-ast'].forEach(function (id) {
+      var slot = document.getElementById(id);
+      if (slot) slot.textContent = msg;
+    });
     var impact = content.querySelector('#td-impact');
-    if (impact) {
-      var path = node.path || String(node.id || '').replace(/^file:/, '');
-      impact.addEventListener('click', function () {
-        if (window.TraceView && TraceView.showImpact) TraceView.showImpact(path);
-      });
-      impact.style.cursor = 'pointer';
-    }
-    // Discussion / memory: "View Full Conversation" opens the transcript modal
-    // (shared with the galaxy discussion card via JUG._disc).
+    if (impact) impact.innerHTML = '<div class="conn-item" style="color:var(--text-dim)">' + msg + '</div>';
+  }
+
+  function _wireImpactButton(content, path) {
+    var impact = content.querySelector('#td-impact');
+    if (!impact) return;
+    impact.addEventListener('click', function () {
+      if (window.TraceView && TraceView.showImpact) TraceView.showImpact(path);
+    });
+    impact.style.cursor = 'pointer';
+  }
+
+  // Discussion / memory: "View Full Conversation" opens the transcript modal
+  // (shared with the galaxy discussion card via JUG._disc).
+  function _wireConvoModal(content) {
     var convoBtn = content.querySelector('.disc-view-btn');
     if (convoBtn && window.JUG && JUG._disc && JUG._disc.openConversationModal) {
       convoBtn.addEventListener('click', function () {
@@ -219,37 +291,47 @@
       .catch(function () { slot.textContent = 'Transcript unavailable.'; });
   }
 
-  // Server-side diff_type inventory — every terminal status this section
-  // can receive must render an honest message; none may fall through to
-  // a raw enum dump or leave the 'loading diff…' placeholder in place.
-  //   cortex_viz/server/http_standalone_trace.py::_git_history (feeds THIS
-  //   section via /api/trace/file's `git` field): 'working' (l.148),
-  //   'last-commit' (l.157), 'none' (l.159 — no uncommitted/staged/last-
-  //   commit diff found), {available:false} on no-repo-found (l.142, e.g.
-  //   a FILE node that belongs to a different repo than the server's
-  //   working tree) or on subprocess exception (l.175).
-  //   cortex_viz/server/http_file_diff.py::_resolve_diff (feeds
-  //   /api/file-diff — the hover tooltip in tooltip.js and the "See diff"
-  //   modal in detail_diff.js, NOT this section) adds 'untracked' (l.115)
-  //   and a second 'none' reason for a file that is neither tracked nor
-  //   present on disk (l.116-117). Listed here for completeness since both
-  //   endpoints answer the same question ("what changed in this file?")
-  //   and a future merge of the two code paths must preserve every case.
-  // precondition: git is the `git` field of /api/trace/file's response, or
-  // null/undefined before the fetch resolves.
-  // postcondition: always returns a non-empty HTML string; every git shape
-  // above (known or not) is rendered, never left un-rendered.
+  // Server-side diff_type inventory (shared git_diff_engine, contract A.2 /
+  // A.5) — every terminal status this section can receive must render an
+  // honest message; none may fall through to a raw enum dump or leave the
+  // 'loading diff…' placeholder in place.
+  //   `git` is the `git` field of /api/trace/file's response, or
+  //   null/undefined before the fetch resolves:
+  //     available:false        → server-supplied `reason` (e.g. "no git
+  //                               repository found for this path").
+  //     diff_type:'none'       → tracked, clean, no commit touched it —
+  //                               an honest state, never "outside checkout".
+  //     diff_type:'uncommitted'→ worktree/staged diff (covers deletions).
+  //     diff_type:'last_commit'→ last commit that touched the file; render
+  //                               `commit.sha` + `commit.subject` above
+  //                               the diff lines.
+  //     diff_type:'untracked'  → full file content as `add` lines.
+  // precondition: git is the `git` field described above.
+  // postcondition: always returns a non-empty HTML string; every diff_type
+  // above is rendered with a distinct, honest message — never left
+  // un-rendered and never conflated with another diff_type's message.
   var _DIFF_TYPE_LABEL = {
-    working: 'Working-tree changes',
-    'last-commit': 'Last commit that touched this file',
+    uncommitted: 'Uncommitted changes',
+    untracked: 'Untracked file (full contents)',
   };
   function _diffHtml(git) {
-    var NO_DIFF = '<div class="conn-item" style="color:var(--text-dim)">No diff — file outside this checkout</div>';
-    if (!git || !git.available) return NO_DIFF;
+    if (!git || !git.available) {
+      return '<div class="conn-item" style="color:var(--text-dim)">'
+        + esc(git && git.reason ? git.reason : 'Diff unavailable') + '</div>';
+    }
     var lines = git.lines || [];
-    if (git.diff_type === 'none' || !lines.length) return NO_DIFF;
-    var label = _DIFF_TYPE_LABEL[git.diff_type] || git.diff_type || 'Diff';
-    var h = '<div class="conn-item" style="color:var(--text-dim)">' + esc(label) + '</div><div class="td-diff">';
+    if (git.diff_type === 'none' || !lines.length) {
+      return '<div class="conn-item" style="color:var(--text-dim)">No changes — file clean since last commit</div>';
+    }
+    var header;
+    if (git.diff_type === 'last_commit' && git.commit) {
+      header = '<div class="conn-item"><span class="td-sha">' + esc(git.commit.sha || '') + '</span> '
+        + esc(shortStr(git.commit.subject || '', 80)) + '</div>';
+    } else {
+      var label = _DIFF_TYPE_LABEL[git.diff_type] || git.diff_type || 'Diff';
+      header = '<div class="conn-item" style="color:var(--text-dim)">' + esc(label) + '</div>';
+    }
+    var h = header + '<div class="td-diff">';
     lines.slice(0, 300).forEach(function (ln) {
       h += '<div class="td-diff-' + (ln.type || 'ctx') + '">' + esc(ln.text != null ? ln.text : ln) + '</div>';
     });
@@ -269,43 +351,57 @@
     }).join('');
   }
 
+  // Git + versions: fast path, no AST/impact bridge — fetched without
+  // `include=ast` so this section responds in ms per contract A.5.
   var _fileCache = {};
-  function _loadFile(path, content) {
+  function _loadFile(path) {
     if (!path) return;
     var apply = function (d) {
       var g = document.getElementById('td-git');
       if (g) g.innerHTML = _diffHtml(d && d.git);
       var ver = document.getElementById('td-versions');
       if (ver) ver.innerHTML = _versionsHtml(d && d.versions);
-      var a = document.getElementById('td-ast');
-      if (a) {
-        var ast = (d && d.ast) || {};
-        var syms = ast.available ? ast.symbols : null;
-        var rows = Array.isArray(syms) ? syms
-          : (syms && Array.isArray(syms.rows) ? syms.rows
-          : (syms && Array.isArray(syms.nodes) ? syms.nodes : []));
-        if (ast.available && rows.length) {
-          a.innerHTML = rows.slice(0, 50).map(function (s) {
-            var nm = s.qualified_name || s.name || s.id || (s.properties && s.properties.name) || '?';
-            return '<div class="conn-item"><span class="conn-label">' + esc(nm) + '</span></div>';
-          }).join('') + (rows.length > 50 ? '<div class="conn-item">… ' + (rows.length - 50) + ' more</div>' : '');
-        } else {
-          a.innerHTML = '<div class="conn-item" style="color:var(--text-dim)">no AST · '
-            + esc((ast.reason || ast.error) || 'not indexed') + '</div>';
-        }
-      }
     };
     if (_fileCache[path]) { apply(_fileCache[path]); return; }
     _fetch('/api/trace/file?path=' + encodeURIComponent(path))
       .then(function (d) { _fileCache[path] = d; apply(d); })
       .catch(function () {
-        // Network/HTTP failure is itself a terminal status for all three
-        // lazy sections — clear every placeholder, not just Git diff, so
-        // none of them is stuck on its initial 'loading…' text forever.
         var g = document.getElementById('td-git');
         if (g) g.textContent = 'Diff unavailable — could not reach the server';
         var ver = document.getElementById('td-versions');
         if (ver) ver.textContent = 'History unavailable — could not reach the server';
+      });
+  }
+
+  // AST symbols: decoupled from git+versions, its own cache — only fetched
+  // with `?include=ast` on the AST section's own first expand (contract
+  // A.5: the bridge call can take 65-155s and must never block the fast
+  // git+versions response).
+  var _astCache = {};
+  function _loadAst(path) {
+    if (!path) return;
+    var apply = function (d) {
+      var a = document.getElementById('td-ast');
+      if (!a) return;
+      var ast = (d && d.ast) || {};
+      var syms = ast.available ? ast.symbols : null;
+      var rows = Array.isArray(syms) ? syms
+        : (syms && Array.isArray(syms.rows) ? syms.rows
+        : (syms && Array.isArray(syms.nodes) ? syms.nodes : []));
+      if (ast.available && rows.length) {
+        a.innerHTML = rows.slice(0, 50).map(function (s) {
+          var nm = s.qualified_name || s.name || s.id || (s.properties && s.properties.name) || '?';
+          return '<div class="conn-item"><span class="conn-label">' + esc(nm) + '</span></div>';
+        }).join('') + (rows.length > 50 ? '<div class="conn-item">… ' + (rows.length - 50) + ' more</div>' : '');
+      } else {
+        a.innerHTML = '<div class="conn-item" style="color:var(--text-dim)">no AST · '
+          + esc((ast.reason || ast.error) || 'not indexed') + '</div>';
+      }
+    };
+    if (_astCache[path]) { apply(_astCache[path]); return; }
+    _fetch('/api/trace/file?path=' + encodeURIComponent(path) + '&include=ast')
+      .then(function (d) { _astCache[path] = d; apply(d); })
+      .catch(function () {
         var a = document.getElementById('td-ast');
         if (a) a.textContent = 'AST unavailable — could not reach the server';
       });

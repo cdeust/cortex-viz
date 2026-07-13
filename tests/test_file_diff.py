@@ -15,6 +15,7 @@ from cortex_viz.server.http_file_diff import (
     _MAX_LINES,
     _full_content_as_adds,
     _parse_unified,
+    _resolve_by_relative_fragment,
     _resolve_diff,
 )
 
@@ -89,3 +90,11 @@ def test_resolve_diff_type_selection(tmp_path: Path):
     _git(tmp_path, "commit", "-m", "add three")
     r = _resolve_diff(str(tmp_path), "a.txt")
     assert r["diff_type"] == "last_commit" and r["lines"]
+
+
+def test_resolve_by_relative_fragment_rejects_path_traversal():
+    # A '..' segment must never be joined onto a repo root — otherwise a
+    # crafted ``name`` query param could escape the repo (CWE-22).
+    abs_path, reason = _resolve_by_relative_fragment(None, "../../etc/passwd")
+    assert abs_path is None
+    assert reason == "unresolved relative name: path traversal rejected"

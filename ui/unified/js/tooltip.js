@@ -160,11 +160,11 @@
   // ── File diff ──
 
   function isFileEntity(node) {
-    return node.type === 'entity' && node.entityType === 'file';
+    return (node.type === 'entity' && node.entityType === 'file') || node.type === 'file';
   }
 
   function fetchDiff(node) {
-    var name = node.label || node.content || '';
+    var name = node.path || node.label || node.content || '';
     if (!name) return;
     var cacheKey = name;
     if (diffCache[cacheKey]) {
