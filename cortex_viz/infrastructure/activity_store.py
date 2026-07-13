@@ -186,13 +186,16 @@ def find_abs_path_by_suffix(store, suffix: str) -> str | None:
     if not suffix:
         return None
     _ensure_table(store)
-    pattern = f"%/{suffix}"
+    # Escape LIKE metacharacters in the user-supplied suffix so a raw '%'
+    # or '_' can't widen the match beyond the intended literal suffix.
+    escaped = suffix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    pattern = f"%/{escaped}"
     sql = (
         "SELECT COALESCE(NULLIF(detail->>'path',''), substring(target_id from 6)) "
         "  AS abs_path "
         "FROM session_activity "
         "WHERE target_kind='file' "
-        "  AND (detail->>'path' LIKE %s OR target_id LIKE %s) "
+        "  AND (detail->>'path' LIKE %s ESCAPE '\\' OR target_id LIKE %s ESCAPE '\\') "
         "ORDER BY id DESC LIMIT 1"
     )
     with _conn(store) as conn, conn.cursor() as cur:

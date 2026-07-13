@@ -68,6 +68,9 @@ def _resolve_by_relative_fragment(store, name: str) -> tuple[str | None, str | N
     """
     from cortex_viz.shared.domain_mapping import _build_registry
 
+    if ".." in name.split("/"):
+        return None, "unresolved relative name: path traversal rejected"
+
     for repo in _build_registry().repos:
         candidate = os.path.join(repo.fs_path, name)
         if os.path.exists(candidate):
