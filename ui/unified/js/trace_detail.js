@@ -314,7 +314,7 @@
     uncommitted: 'Uncommitted changes',
     untracked: 'Untracked file (full contents)',
   };
-  function _diffHtml(git) {
+  function _diffHtml(git, path) {
     if (!git || !git.available) {
       return '<div class="conn-item" style="color:var(--text-dim)">'
         + esc(git && git.reason ? git.reason : 'Diff unavailable') + '</div>';
@@ -336,7 +336,15 @@
       h += '<div class="td-diff-' + (ln.type || 'ctx') + '">' + esc(ln.text != null ? ln.text : ln) + '</div>';
     });
     if (git.truncated || lines.length > 300) h += '<div class="td-diff-ctx">… truncated</div>';
-    return h + '</div>';
+    h += '</div>';
+    // "See full diff" — opens the full GitHub-style diff modal (detail_diff.js
+    // delegates clicks on .tool-diff-btn document-wide, so no wiring needed
+    // for this lazily-inserted button). Parity with the discussion node's
+    // "View Full Conversation" button, which surfaces the full transcript.
+    if (path) {
+      h += '<button class="tool-diff-btn" data-file="' + esc(path) + '">See full diff</button>';
+    }
+    return h;
   }
 
   function _versionsHtml(v) {
@@ -358,7 +366,7 @@
     if (!path) return;
     var apply = function (d) {
       var g = document.getElementById('td-git');
-      if (g) g.innerHTML = _diffHtml(d && d.git);
+      if (g) g.innerHTML = _diffHtml(d && d.git, path);
       var ver = document.getElementById('td-versions');
       if (ver) ver.innerHTML = _versionsHtml(d && d.versions);
     };
