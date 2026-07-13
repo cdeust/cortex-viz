@@ -121,6 +121,21 @@ def test_count_memories_total_excludes_stale(reader) -> None:
     assert counts["raw_total"] - counts["total"] == counts["stale"]
 
 
+def test_stage_counts_population_matches_total(reader) -> None:
+    """2026-07-13 unification: `get_stage_counts()` applies the same
+    ``WHERE NOT is_stale`` filter as `count_memories()['total']` — the
+    per-stage breakdown (fed to the 'Stable' HUD panel) must sum to the
+    same navigable population `count_memories()` reports as 'total', not
+    to the whole-table `raw_total`. Pins the other half of the unification
+    decision: a future regression that reverts the WHERE clause on
+    ``get_stage_counts`` alone (leaving ``count_memories`` filtered) would
+    silently reintroduce a Stable/Memories population mismatch and must
+    fail here."""
+    stage_counts = reader.get_stage_counts()
+    total = reader.count_memories()["total"]
+    assert sum(stage_counts.values()) == total
+
+
 def test_avg_heat_is_float(reader) -> None:
     assert isinstance(reader.get_avg_heat(), float)
 
