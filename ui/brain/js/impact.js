@@ -167,6 +167,11 @@ window.TraceView = window.TraceView || {};
     var close = document.getElementById('flow-close');
     if (close) close.addEventListener('click', closeFlow);
     window.addEventListener('keydown', function (e) {
+      // Guard form controls (matches detail_panel.js:492) — otherwise Escape
+      // typed inside the brain-view search box bubbles here and closes the
+      // impact flow panel (losing the fetched diagram) instead of just
+      // closing the search dropdown.
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
       if (e.key === 'Escape') closeFlow();
     });
   });

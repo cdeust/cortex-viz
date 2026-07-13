@@ -328,6 +328,10 @@ window.BRAIN = window.BRAIN || {};
     if (BRAIN.repaintEdgeFilter) BRAIN.repaintEdgeFilter();
     updateLegendActiveState();
   }
+  // Exposed so search.js can clear a blocking legend filter before flying to
+  // a result the filter would otherwise render invisible — same mechanism
+  // the legend's own click/keyboard handlers use, not a re-derived copy.
+  BRAIN.toggleFilterKind = toggleFilterKind;
 
   function updateLegendActiveState() {
     var rows = document.querySelectorAll('#legend [data-kind]');
@@ -375,6 +379,10 @@ window.BRAIN = window.BRAIN || {};
         var soup = results[1];
         if (!data.nodes.length) throw new Error('graph returned 0 nodes');
         lastNodes = data.nodes;
+        // Feed the search worker once the full node set is final (id/label/
+        // path/kind only — search.js builds its own trigram index off this).
+        // Guarded: the page must still boot if search.js failed to load.
+        if (BRAIN.searchInit) BRAIN.searchInit(data.nodes);
         // indexOfId (id -> row in `positions`/`data.nodes`) is normally built
         // by installDetailBridge, which runs after buildPoints. Community
         // detection AND colouring both need it earlier — build the same

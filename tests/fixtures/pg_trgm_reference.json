@@ -1,0 +1,155 @@
+{
+ "_source": "Generated 2026-07-13 from PostgreSQL 17.9 pg_trgm via: SELECT similarity(a,b) on DB cortex (extension pg_trgm). Regenerate with the SQL in tests/test_trigram_conformance.py.",
+ "pairs": [
+  {
+   "a": "http",
+   "b": "http",
+   "similarity": 1
+  },
+  {
+   "a": "interact",
+   "b": "interakt",
+   "similarity": 0.5
+  },
+  {
+   "a": "route",
+   "b": "routes",
+   "similarity": 0.625
+  },
+  {
+   "a": "standalone",
+   "b": "standalon",
+   "similarity": 0.75
+  },
+  {
+   "a": "graph",
+   "b": "grpah",
+   "similarity": 0.2
+  },
+  {
+   "a": "memory",
+   "b": "memoire",
+   "similarity": 0.36363637
+  },
+  {
+   "a": "a",
+   "b": "a",
+   "similarity": 1
+  },
+  {
+   "a": "a",
+   "b": "b",
+   "similarity": 0
+  },
+  {
+   "a": "ab",
+   "b": "ab",
+   "similarity": 1
+  },
+  {
+   "a": "",
+   "b": "x",
+   "similarity": 0
+  },
+  {
+   "a": "BRAIN",
+   "b": "brain",
+   "similarity": 1
+  },
+  {
+   "a": "focusnode",
+   "b": "focus",
+   "similarity": 0.45454547
+  },
+  {
+   "a": "node",
+   "b": "nodes",
+   "similarity": 0.5714286
+  },
+  {
+   "a": "viz",
+   "b": "visualization",
+   "similarity": 0.125
+  },
+  {
+   "a": "123",
+   "b": "x123",
+   "similarity": 0.2857143
+  },
+  {
+   "a": "http",
+   "b": "http_standalone_routes",
+   "similarity": 0.2173913
+  },
+  {
+   "a": "selection",
+   "b": "selektion",
+   "similarity": 0.53846157
+  },
+  {
+   "a": "cortex",
+   "b": "vortex",
+   "similarity": 0.4
+  },
+  {
+   "a": "brain",
+   "b": "brian",
+   "similarity": 0.2
+  },
+  {
+   "a": "search",
+   "b": "serach",
+   "similarity": 0.27272728
+  },
+  {
+   "a": "layout",
+   "b": "layot",
+   "similarity": 0.44444445
+  },
+  {
+   "a": "detail",
+   "b": "detial",
+   "similarity": 0.27272728
+  },
+  {
+   "a": "workflow",
+   "b": "work",
+   "similarity": 0.4
+  },
+  {
+   "a": "py",
+   "b": "python",
+   "similarity": 0.25
+  },
+  {
+   "a": "trgm",
+   "b": "trigram",
+   "similarity": 0.18181819
+  },
+  {
+   "a": "scene",
+   "b": "scenes",
+   "similarity": 0.625
+  },
+  {
+   "a": "edge",
+   "b": "edges",
+   "similarity": 0.5714286
+  },
+  {
+   "a": "impact",
+   "b": "impakt",
+   "similarity": 0.4
+  },
+  {
+   "a": "anatomy",
+   "b": "anatomie",
+   "similarity": 0.54545456
+  },
+  {
+   "a": "x",
+   "b": "xylophone",
+   "similarity": 0.09090909
+  }
+ ]
+}

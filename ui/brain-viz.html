@@ -165,6 +165,13 @@
      legend and the detail panel that slides in from the right edge. */
   #chrome-top-right { position:fixed; top:16px; right:16px; z-index:30;
     display:flex; gap:8px; }
+  /* Raised only while the search dropdown is open (search.js toggles this
+     class in renderResults()/closeDropdown()) — the cluster's own row never
+     overlaps #detail-panel (top:70px) or #flow-panel, only the transient
+     dropdown does. Above #detail-panel (200) and #flow-panel (199), below
+     #monitor-panel (250) and #brain-tip (300). Kept off by default so the
+     cluster never floats over the #loading splash (z-index:50) at startup. */
+  #chrome-top-right.search-open { z-index:220; }
   #reset-btn, #surface-toggle-btn { background:var(--surface-card); color:var(--text);
     border:1px solid var(--border); border-radius:var(--radius-sm); padding:7px 12px;
     font-family:var(--font-mono); font-weight:var(--weight-medium);
@@ -172,6 +179,42 @@
     cursor:pointer; }
   #reset-btn:hover, #surface-toggle-btn:hover { border-color:var(--border-strong); color:var(--accent-ink); }
   #surface-toggle-btn:focus-visible, #reset-btn:focus-visible { outline:none; box-shadow:var(--shadow-focus); }
+
+  /* Node search (ui/brain/js/search.js) — first item in the chrome cluster,
+     built entirely against DS aliases (.aia-inputwrap/.aia-input__icon/
+     .aia-field come from /shared/components/core/core.css, already loaded
+     via ds.css). Sized to sit comfortably next to the toggle + reset pair. */
+  #brain-search-wrap { width:200px; }
+  #brain-search-wrap .aia-field { width:100%; font-size:11.5px; }
+  #brain-search-wrap .aia-field:disabled { opacity:.55; cursor:wait; }
+  /* Dropdown hangs under the input, right-aligned with the search input
+     itself (explicit width, not min-width — with width:auto the box would
+     shrink-to-fit the max-content of the nowrap .bsr-label rows and could
+     grow arbitrarily wide). z-index inherits the #chrome-top-right stacking
+     context, which #chrome-top-right.search-open raises to 220 while the
+     dropdown is open — it must clear #detail-panel (z-index:200) and
+     #flow-panel (z-index:199), which slide in over the same screen region
+     when a search result is selected; the base z-index:30 alone (only above
+     .hud panels at 20) is not enough. */
+  .brain-search-dropdown { position:absolute; top:calc(100% + 6px); left:auto; right:0;
+    width:260px; background:var(--surface-card); border:1px solid var(--border);
+    border-radius:var(--radius-md); box-shadow:var(--shadow-md);
+    padding:4px; max-height:340px; overflow-y:auto; scrollbar-width:thin; }
+  .bsr-item { display:flex; align-items:baseline; gap:8px; padding:6px 8px;
+    border-radius:var(--radius-sm); cursor:pointer; }
+  .bsr-item:hover, .bsr-item--active { background:var(--selection); border:1px solid var(--accent-ink); }
+  .bsr-item:not(.bsr-item--active) { border:1px solid transparent; }
+  .bsr-label { font-family:var(--mono); font-size:11.5px; color:var(--text);
+    flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* Micro-caps chip — 9px floor + the DS caps tracking (>=12%, G12/G13). */
+  .bsr-kind { font-family:var(--mono); font-size:9px; text-transform:uppercase;
+    letter-spacing:var(--tracking-caps); color:var(--text-muted); flex:0 0 auto; }
+  .bsr-path { font-family:var(--mono); font-size:11px; color:var(--text-dim);
+    flex:0 0 auto; max-width:90px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .bsr-empty { padding:8px; font-size:11px; color:var(--text-muted); font-style:italic; }
+  .bsr-count { padding:6px 8px 2px; font-size:11px; color:var(--text-faint);
+    border-top:1px solid var(--divider); margin-top:2px;
+    font-variant-numeric:tabular-nums; }
   /* Micro-label text driven by CortexSurface.bindButton's data-surface-state
      (set to the CURRENT posture — "paper" or "ink"), no emoji. */
   #surface-toggle-btn::after { content: attr(data-surface-state); }
@@ -345,6 +388,12 @@
   <script src="/brain/js/edges.js"></script>
   <script src="/brain/js/detail_bridge.js"></script>
   <script src="/brain/js/interact.js"></script>
+  <!-- Node search box — depends on JUG.selectNodeById (installed by
+       detail_bridge.js, above) and BRAIN.filterKind/toggleFilterKind
+       (installed by boot.js at load, before searchInit is ever called).
+       Builds its own DOM/worker lazily inside BRAIN.searchInit(), invoked by
+       boot.js once the graph stream resolves — safe to load before boot.js. -->
+  <script src="/brain/js/search.js"></script>
   <!-- Impact-diagram shim: provides TraceView.showImpact so the detail
        panel's "Open the impact diagram" link works without the trace view. -->
   <script src="/brain/js/impact.js"></script>

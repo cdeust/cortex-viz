@@ -171,6 +171,10 @@
   });
 
   window.addEventListener('keydown', function(e) {
+    // Guard form controls (matches detail_panel.js:492) — the brain view's
+    // search box shares this page's Escape key; without the guard, Escape
+    // typed there also closes the conversation modal underneath it.
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
     if (e.key === 'Escape') closeConversationModal();
   });
 
