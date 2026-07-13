@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 import os
 import signal
+import subprocess
 import tempfile
 import time
 import urllib.request
@@ -87,9 +88,58 @@ def read_instance() -> dict | None:
     return data
 
 
+def _pid_alive_windows(pid: int) -> bool:
+    """Windows liveness check via OpenProcess + WaitForSingleObject.
+
+    ``os.kill(pid, 0)`` on Windows routes signal 0 to
+    ``GenerateConsoleCtrlEvent(CTRL_C_EVENT, pid)``, which requires the
+    target to share the caller's console process group. For any
+    unrelated/detached pid — including a live one, e.g. this server's
+    own detached child — it raises ``OSError [WinError 87]`` instead of
+    reporting liveness (see cortex-viz#13, reproduced on Windows 11 /
+    Python 3.13.13). ``OpenProcess`` + ``WaitForSingleObject`` is the
+    Win32-native "is this pid alive" idiom and works for any pid the
+    caller has permission to open, detached or not.
+    """
+    import ctypes
+    import ctypes.wintypes as wintypes
+
+    # source: Microsoft Learn, "Process Security and Access Rights"
+    # https://learn.microsoft.com/windows/win32/procthread/process-security-and-access-rights
+    synchronize = 0x00100000
+    # source: Microsoft Learn, "WaitForSingleObject function" (return value)
+    # https://learn.microsoft.com/windows/win32/api/synchapi/nf-synchapi-waitforsingleobject
+    wait_object_0 = 0x00000000
+    # source: Microsoft Learn, "System Error Codes (0-499)"
+    # https://learn.microsoft.com/windows/win32/debug/system-error-codes--0-499-
+    error_access_denied = 5
+
+    kernel32 = ctypes.windll.kernel32
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel32.WaitForSingleObject.restype = wintypes.DWORD
+    kernel32.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+
+    handle = kernel32.OpenProcess(synchronize, False, pid)
+    if not handle:
+        # Access denied implies the pid exists but we can't touch it --
+        # mirrors the POSIX PermissionError -> alive branch below.
+        return kernel32.GetLastError() == error_access_denied
+    try:
+        # Non-blocking poll (timeout=0): signaled means the process
+        # object fired at exit. GetExitCodeProcess is deliberately not
+        # used instead — STILL_ACTIVE == 259 is also a legitimate exit
+        # code, making that check ambiguous.
+        return kernel32.WaitForSingleObject(handle, 0) != wait_object_0
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 def _pid_alive(pid: int) -> bool:
     if pid <= 0:
         return False
+    if os.name == "nt":
+        return _pid_alive_windows(pid)
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -200,3 +250,71 @@ def kill_and_wait(pid: int, timeout: float = 5.0) -> bool:
             return True
         time.sleep(0.1)
     return False
+
+
+def _pids_on_port_posix(port: int) -> list[int]:
+    """Pids with an open socket on ``port``, via ``lsof``. Best-effort:
+    an empty list means either nothing is listening or ``lsof`` is
+    unavailable — callers cannot distinguish the two, which is fine
+    since both mean "nothing more to kill"."""
+    try:
+        out = (
+            subprocess.check_output(
+                ["lsof", "-t", "-i", f":{port}"],
+                stderr=subprocess.DEVNULL,
+            )
+            .decode()
+            .strip()
+        )
+    except Exception:
+        return []
+    pids = []
+    for pid_s in out.splitlines():
+        try:
+            pids.append(int(pid_s.strip()))
+        except ValueError:
+            continue
+    return pids
+
+
+def _pids_on_port_windows(port: int) -> list[int]:
+    """Pids LISTENING on ``port``, via ``netstat -ano -p tcp``.
+
+    There is no ``lsof`` on Windows and ``psutil`` is not a runtime
+    dependency of this project, so parsing ``netstat`` text output is
+    the same "shell out, parse columns" idiom already used for the
+    POSIX ``lsof`` case above. netstat's row format (Windows 10/11):
+    ``  TCP    127.0.0.1:3458    0.0.0.0:0    LISTENING    1234`` —
+    columns are whitespace-separated: proto, local addr, foreign addr,
+    state, pid. source: Microsoft Learn, "netstat" command reference
+    https://learn.microsoft.com/windows-server/administration/windows-commands/netstat
+    """
+    try:
+        out = subprocess.check_output(
+            ["netstat", "-ano", "-p", "tcp"],
+            stderr=subprocess.DEVNULL,
+        ).decode(errors="ignore")
+    except Exception:
+        return []
+    pids: list[int] = []
+    needle = f":{port}"
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) < 5 or parts[0].upper() != "TCP":
+            continue
+        local_addr, state, pid_s = parts[1], parts[3], parts[-1]
+        if state.upper() != "LISTENING" or not local_addr.endswith(needle):
+            continue
+        try:
+            pids.append(int(pid_s))
+        except ValueError:
+            continue
+    return pids
+
+
+def pids_on_port(port: int) -> list[int]:
+    """Pids listening on ``port``, cross-platform. Best-effort: an
+    empty list on failure or platform-tool absence, never raises."""
+    if os.name == "nt":
+        return _pids_on_port_windows(port)
+    return _pids_on_port_posix(port)

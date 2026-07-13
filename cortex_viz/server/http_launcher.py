@@ -27,26 +27,12 @@ PORTS = {
 
 def _kill_port(port: int) -> None:
     """Kill any process listening on ``port`` and WAIT for it to exit.
-    Best-effort — if ``lsof`` is unavailable or fails, silently return
-    so we still attempt a spawn. Waiting matters: spawning while the
-    old listener still holds the socket forces the new server onto an
-    OS-assigned ephemeral port (the 2026-06-12 instance-leak bug)."""
-    try:
-        out = (
-            subprocess.check_output(
-                ["lsof", "-t", "-i", f":{port}"],
-                stderr=subprocess.DEVNULL,
-            )
-            .decode()
-            .strip()
-        )
-    except Exception:
-        return
-    for pid_s in out.splitlines():
-        try:
-            pid = int(pid_s.strip())
-        except ValueError:
-            continue
+    Best-effort — if the platform's port-listing tool (``lsof`` on
+    POSIX, ``netstat`` on Windows) is unavailable or fails, silently
+    return so we still attempt a spawn. Waiting matters: spawning while
+    the old listener still holds the socket forces the new server onto
+    an OS-assigned ephemeral port (the 2026-06-12 instance-leak bug)."""
+    for pid in viz_instance.pids_on_port(port):
         viz_instance.kill_and_wait(pid)
 
 
@@ -378,6 +364,17 @@ def open_in_browser(url: str) -> None:
     # Strict allowlist: only localhost HTTP URLs on numeric ports
     if not re.match(r"^https?://127\.0\.0\.1:\d{1,5}(/.*)?$", url):
         return  # Silently reject non-localhost URLs
+
+    if os.name == "nt":
+        # Windows has neither "open" nor "xdg-open"; both branches
+        # below raise FileNotFoundError and get silently swallowed,
+        # so no tab ever opens (cortex-viz#13). os.startfile is the
+        # stdlib ShellExecute wrapper and the platform-native opener.
+        try:
+            os.startfile(url)  # noqa: S606 — localhost URL validated above
+        except OSError:
+            pass
+        return
 
     try:
         subprocess.Popen(
