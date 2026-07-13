@@ -39,13 +39,15 @@ def test_parse_unified_classifies_lines():
     assert types == ["hunk", "context", "del", "add", "context"]
     by = {ln["type"]: ln["text"] for ln in lines}
     assert by["hunk"].startswith("@@ -1,3 +1,3 @@")
-    assert by["del"] == "old line"   # leading '-' stripped
-    assert by["add"] == "new line"   # leading '+' stripped
-    assert by["context"] == "tail"   # leading ' ' stripped
+    assert by["del"] == "old line"  # leading '-' stripped
+    assert by["add"] == "new line"  # leading '+' stripped
+    assert by["context"] == "tail"  # leading ' ' stripped
 
 
 def test_parse_unified_truncates():
-    big = "@@ -1,1 +1,9999 @@\n" + "\n".join("+l%d" % i for i in range(_MAX_LINES + 500))
+    big = "@@ -1,1 +1,9999 @@\n" + "\n".join(
+        "+l%d" % i for i in range(_MAX_LINES + 500)
+    )
     lines, truncated = _parse_unified(big)
     assert truncated
     assert len(lines) <= _MAX_LINES
@@ -62,8 +64,12 @@ def test_full_content_as_adds(tmp_path: Path):
 
 
 def _git(root: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(root), *args], check=True,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(
+        ["git", "-C", str(root), *args],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
 
 def test_resolve_diff_type_selection(tmp_path: Path):
@@ -75,7 +81,9 @@ def test_resolve_diff_type_selection(tmp_path: Path):
     # Untracked new file → full content as additions.
     f.write_text("one\ntwo\n")
     r = _resolve_diff(str(tmp_path), "a.txt")
-    assert r["diff_type"] == "untracked" and any(l["type"] == "add" for l in r["lines"])
+    assert r["diff_type"] == "untracked" and any(
+        line["type"] == "add" for line in r["lines"]
+    )
 
     # Committed, then modified in the working tree → uncommitted.
     _git(tmp_path, "add", "a.txt")
@@ -83,7 +91,7 @@ def test_resolve_diff_type_selection(tmp_path: Path):
     f.write_text("one\ntwo\nthree\n")
     r = _resolve_diff(str(tmp_path), "a.txt")
     assert r["diff_type"] == "uncommitted"
-    assert any(l["type"] == "add" and l["text"] == "three" for l in r["lines"])
+    assert any(line["type"] == "add" and line["text"] == "three" for line in r["lines"])
 
     # Clean working tree → falls back to the last commit.
     _git(tmp_path, "add", "a.txt")
