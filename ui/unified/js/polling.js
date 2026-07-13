@@ -84,6 +84,11 @@
     var rc = (window.JUG && JUG.__wfgRendered) || null;
     var _view = (window.JUG && JUG.state && JUG.state.activeView) || '';
     var d = (window.JUG && JUG.state && JUG.state.lastData) || null;
+    // Store size: the whole-table raw count, independent of what's rendered
+    // in any view. Only present once /api/stats has answered.
+    if (meta && meta.memory_count_raw != null) {
+      setText('s-mem-raw', meta.memory_count_raw);
+    }
     if (rc && (_view === 'graph' || _view === 'trace')) {
       setText('s-dom', rc.domain);
       setText('s-mem', rc.memory);

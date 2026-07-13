@@ -39,6 +39,9 @@ window.BRAIN = window.BRAIN || {};
     setText('s-edges', fmt(s.edge_count));
     setText('s-dom', fmt(s.domain_count));
     setText('s-mem', fmt(s.memory_count));
+    // Store-health figure — whole memories table, no is_stale filter.
+    // Distinct label from "Memories" (the navigable NOT-is_stale count).
+    if (s.memory_count_raw != null) setText('s-mem-raw', fmt(s.memory_count_raw));
     setText('s-ent', fmt(s.entity_count));
   }
 
