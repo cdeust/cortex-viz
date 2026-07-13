@@ -49,7 +49,21 @@ from "current schema" for every version this preflight has seen.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
+
+
+class PgStore(Protocol):
+    """The read primitive ``check_schema`` needs from its store.
+
+    Matches ``MemoryReader.query`` (see ``memory_read.py``) exactly —
+    no wider surface, per ISP: this module only ever issues one SELECT
+    and never writes, so it declares nothing beyond that one method.
+    """
+
+    def query(
+        self, sql: str, params: Any = None, *, batch: bool = False
+    ) -> list[dict[str, Any]]: ...
+
 
 # One row, one round trip: every check is a pure catalog lookup
 # (to_regclass / pg_proc / information_schema.columns) — none of these
@@ -127,7 +141,7 @@ class SchemaPreflightResult:
     missing: tuple[str, ...] = ()
 
 
-def check_schema(pg_store: Any) -> SchemaPreflightResult:
+def check_schema(pg_store: PgStore) -> SchemaPreflightResult:
     """Run the read-only catalog preflight against ``pg_store``.
 
     Precondition: ``pg_store`` exposes ``.query(sql, params, *,
@@ -160,4 +174,4 @@ def check_schema(pg_store: Any) -> SchemaPreflightResult:
     return SchemaPreflightResult(ok=not missing, missing=missing)
 
 
-__all__ = ["SchemaPreflightResult", "check_schema"]
+__all__ = ["PgStore", "SchemaPreflightResult", "check_schema"]

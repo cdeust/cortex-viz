@@ -3,20 +3,24 @@
 When ``schema_preflight.check_schema`` reports missing objects,
 ``open_visualization`` calls ``run_schema_migration`` here to invoke the
 migration entry point Cortex ships in its own plugin package
-(``mcp_server.migrate``, developed in parallel on Cortex branch
-``feat/migrate-entrypoint``). This module owns discovery of the
-installed plugin and the subprocess contract only — it never touches
-the database directly and never assumes the migrate module exists (an
-older installed Cortex plugin will not have it; that surfaces as a
-non-zero exit, not an import inside this process).
+(``mcp_server.migrate``, frozen contract as of Cortex commit
+5c931b9b). This module owns discovery of the installed plugin and the
+subprocess contract only — it never touches the database directly and
+never assumes the migrate module exists (an older installed Cortex
+plugin will not have it; that surfaces as a non-zero exit, not an
+import inside this process).
 
-Discovery mirrors how Claude Code itself launches the plugin's MCP
-server (``.claude-plugin/plugin.json`` -> ``mcpServers.cortex`` ->
-``python3 scripts/launcher.py mcp_server``, see
-``scripts/launcher.py`` in the installed plugin): the launcher resolves
-``CLAUDE_PLUGIN_ROOT``/``sys.path``/``cwd`` itself, so invoking
-``scripts/launcher.py mcp_server.migrate`` the same way reuses that
-exact bootstrap instead of re-deriving it here.
+Invocation is a direct call against the frozen contract:
+``DATABASE_URL=<url> python3 -m mcp_server.migrate`` run with
+``cwd=<plugin_root>`` so ``mcp_server`` resolves as a package. It does
+NOT go through ``scripts/launcher.py``: that script additionally routes
+through ``launcher_deps.ensure_deps`` (a bootstrap that can pip-install
+over the network) and commits this call to launcher.py's internal
+argv/env protocol, which Cortex has never frozen. cortex-viz's own venv
+already satisfies every import ``mcp_server.migrate`` needs (psycopg,
+psycopg-pool, pgvector, numpy — verified against the installed plugin's
+dependency set), so ``-m`` with ``cwd=plugin_root`` resolves the module
+cleanly without the extra hop.
 """
 
 from __future__ import annotations
@@ -32,7 +36,13 @@ from pathlib import Path
 _PLUGIN_CACHE_ROOT = (
     Path.home() / ".claude" / "plugins" / "cache" / "cortex-plugins" / "cortex"
 )
-_LAUNCHER_RELATIVE = Path("scripts") / "launcher.py"
+# Installation marker: a version directory qualifies as an installed
+# Cortex plugin when it carries the `mcp_server` package (what `-m
+# mcp_server.migrate` needs to resolve) OR the plugin manifest — either
+# is sufficient evidence of a real install, no scripts/launcher.py
+# dependency (see module docstring on why launcher.py is not invoked).
+_MCP_SERVER_PACKAGE_RELATIVE = Path("mcp_server")
+_PLUGIN_MANIFEST_RELATIVE = Path(".claude-plugin") / "plugin.json"
 _MIGRATE_MODULE = "mcp_server.migrate"
 
 # Operational default, not a measured value: no prior migration-runtime
@@ -58,20 +68,30 @@ def _parse_version(name: str) -> tuple[int, ...]:
     return tuple(parts)
 
 
+def _is_installed_plugin_version(version_dir: Path) -> bool:
+    """A version directory is an installed Cortex plugin when it carries
+    the ``mcp_server`` package or the plugin manifest — see the
+    ``_MCP_SERVER_PACKAGE_RELATIVE`` / ``_PLUGIN_MANIFEST_RELATIVE``
+    module comment for why (not ``scripts/launcher.py``)."""
+    return (version_dir / _MCP_SERVER_PACKAGE_RELATIVE).is_dir() or (
+        version_dir / _PLUGIN_MANIFEST_RELATIVE
+    ).is_file()
+
+
 def find_cortex_plugin_root(cache_root: Path | None = None) -> Path | None:
     """Return the highest-version installed Cortex plugin root, if any.
 
     Precondition: none. Postcondition: returns the directory of the
     highest-version subdirectory under ``cache_root`` (defaults to the
-    conventional Claude Code plugin cache path) that contains
-    ``scripts/launcher.py``, or ``None`` when the cache root doesn't
-    exist or no version directory qualifies.
+    conventional Claude Code plugin cache path) that qualifies per
+    ``_is_installed_plugin_version``, or ``None`` when the cache root
+    doesn't exist or no version directory qualifies.
     """
     root = cache_root or _PLUGIN_CACHE_ROOT
     if not root.is_dir():
         return None
     candidates = [
-        d for d in root.iterdir() if d.is_dir() and (d / _LAUNCHER_RELATIVE).is_file()
+        d for d in root.iterdir() if d.is_dir() and _is_installed_plugin_version(d)
     ]
     if not candidates:
         return None
@@ -116,11 +136,10 @@ def run_schema_migration(
         return MigrationResult(
             plugin_found=False, exit_code=None, stderr="", timed_out=False
         )
-    launcher = root / _LAUNCHER_RELATIVE
-    env = {**os.environ, "DATABASE_URL": database_url, "CLAUDE_PLUGIN_ROOT": str(root)}
+    env = {**os.environ, "DATABASE_URL": database_url}
     try:
         proc = subprocess.run(  # noqa: S603
-            [sys.executable, str(launcher), _MIGRATE_MODULE],
+            [sys.executable, "-m", _MIGRATE_MODULE],
             cwd=str(root),
             env=env,
             capture_output=True,

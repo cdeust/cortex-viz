@@ -3,11 +3,15 @@
 ``find_cortex_plugin_root`` is exercised against a tmp_path fixture tree
 (no real ``~/.claude`` dependency); ``run_schema_migration`` is
 exercised with ``subprocess.run`` monkeypatched — no real subprocess or
-plugin install is spawned.
+plugin install is spawned. The frozen contract under test (Cortex
+commit 5c931b9b): ``DATABASE_URL=<url> python3 -m mcp_server.migrate``,
+run with ``cwd=<plugin_root>`` — no ``scripts/launcher.py`` hop, no
+``CLAUDE_PLUGIN_ROOT`` env var.
 """
 
 from __future__ import annotations
 
+import sys
 import subprocess
 
 from cortex_viz.infrastructure.schema_migrate import (
@@ -17,10 +21,24 @@ from cortex_viz.infrastructure.schema_migrate import (
 )
 
 
-def _make_plugin_version(cache_root, version: str) -> None:
-    scripts = cache_root / version / "scripts"
-    scripts.mkdir(parents=True)
-    (scripts / "launcher.py").write_text("# fake launcher\n")
+def _make_plugin_version(
+    cache_root, version: str, *, marker: str = "mcp_server"
+) -> None:
+    """Create a version directory qualifying as an installed plugin.
+
+    ``marker="mcp_server"`` creates the ``mcp_server/`` package dir;
+    ``marker="manifest"`` creates ``.claude-plugin/plugin.json`` instead
+    — either alone must be sufficient (see _is_installed_plugin_version).
+    """
+    version_dir = cache_root / version
+    if marker == "mcp_server":
+        (version_dir / "mcp_server").mkdir(parents=True)
+    elif marker == "manifest":
+        manifest_dir = version_dir / ".claude-plugin"
+        manifest_dir.mkdir(parents=True)
+        (manifest_dir / "plugin.json").write_text("{}")
+    else:  # pragma: no cover - test-authoring guard
+        raise ValueError(marker)
 
 
 class TestFindCortexPluginRoot:
@@ -32,14 +50,30 @@ class TestFindCortexPluginRoot:
         cache_root.mkdir()
         assert find_cortex_plugin_root(cache_root) is None
 
-    def test_version_dir_without_launcher_is_ignored(self, tmp_path):
+    def test_version_dir_without_marker_is_ignored(self, tmp_path):
         cache_root = tmp_path / "cortex"
         (cache_root / "1.0.0").mkdir(parents=True)
         assert find_cortex_plugin_root(cache_root) is None
 
-    def test_single_version_is_returned(self, tmp_path):
+    def test_version_dir_with_only_scripts_launcher_is_ignored(self, tmp_path):
+        """scripts/launcher.py is no longer a qualifying marker — the
+        frozen contract never invokes it (see schema_migrate module
+        docstring)."""
         cache_root = tmp_path / "cortex"
-        _make_plugin_version(cache_root, "4.13.3")
+        scripts = cache_root / "1.0.0" / "scripts"
+        scripts.mkdir(parents=True)
+        (scripts / "launcher.py").write_text("# not a marker anymore\n")
+        assert find_cortex_plugin_root(cache_root) is None
+
+    def test_mcp_server_package_qualifies(self, tmp_path):
+        cache_root = tmp_path / "cortex"
+        _make_plugin_version(cache_root, "4.13.3", marker="mcp_server")
+        found = find_cortex_plugin_root(cache_root)
+        assert found == cache_root / "4.13.3"
+
+    def test_plugin_manifest_alone_qualifies(self, tmp_path):
+        cache_root = tmp_path / "cortex"
+        _make_plugin_version(cache_root, "4.13.3", marker="manifest")
         found = find_cortex_plugin_root(cache_root)
         assert found == cache_root / "4.13.3"
 
@@ -52,7 +86,7 @@ class TestFindCortexPluginRoot:
 
 
 class TestRunSchemaMigration:
-    def test_plugin_not_found_short_circuits_no_subprocess(self, tmp_path, monkeypatch):
+    def test_plugin_not_found_short_circuits_no_subprocess(self, monkeypatch):
         called = {"run": False}
 
         def _fail_if_called(*a, **kw):
@@ -60,8 +94,6 @@ class TestRunSchemaMigration:
             raise AssertionError("subprocess.run should not be called")
 
         monkeypatch.setattr(subprocess, "run", _fail_if_called)
-        empty_cache_root = tmp_path / "empty-cortex-cache"
-        assert find_cortex_plugin_root(empty_cache_root) is None
 
         from cortex_viz.infrastructure import schema_migrate
 
@@ -72,21 +104,31 @@ class TestRunSchemaMigration:
             plugin_found=False, exit_code=None, stderr="", timed_out=False
         )
 
-    def test_success_exit_zero(self, tmp_path, monkeypatch):
+    def test_success_exit_zero_uses_frozen_argv_and_env(self, tmp_path, monkeypatch):
         cache_root = tmp_path / "cortex"
         _make_plugin_version(cache_root, "4.13.3")
         plugin_root = cache_root / "4.13.3"
+        captured = {}
 
         def _fake_run(cmd, cwd, env, capture_output, text, timeout):
-            assert cmd[-1] == "mcp_server.migrate"
-            assert env["DATABASE_URL"] == "postgresql://x"
+            captured["cmd"] = cmd
+            captured["cwd"] = cwd
+            captured["env"] = env
             return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
 
         monkeypatch.setattr(subprocess, "run", _fake_run)
         result = run_schema_migration("postgresql://x", plugin_root=plugin_root)
+
         assert result == MigrationResult(
             plugin_found=True, exit_code=0, stderr="", timed_out=False
         )
+        # Frozen contract (Cortex commit 5c931b9b): the FULL argv, not
+        # just the last token — no scripts/launcher.py hop.
+        assert captured["cmd"] == [sys.executable, "-m", "mcp_server.migrate"]
+        assert "launcher.py" not in " ".join(captured["cmd"])
+        assert captured["cwd"] == str(plugin_root)
+        assert captured["env"]["DATABASE_URL"] == "postgresql://x"
+        assert "CLAUDE_PLUGIN_ROOT" not in captured["env"]
 
     def test_nonzero_exit_carries_stderr(self, tmp_path, monkeypatch):
         cache_root = tmp_path / "cortex"
