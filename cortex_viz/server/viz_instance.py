@@ -114,7 +114,16 @@ def _pid_alive_windows(pid: int) -> bool:
     # https://learn.microsoft.com/windows/win32/debug/system-error-codes--0-499-
     error_access_denied = 5
 
-    kernel32 = ctypes.windll.kernel32
+    # ``ctypes.windll.kernel32`` reads the error code via a bound
+    # ``GetLastError()`` call, and the ctypes docs warn this form is
+    # unreliable: internal ctypes machinery can run (and reset the
+    # thread-local error) between the failed Win32 call and the read.
+    # ``WinDLL(..., use_last_error=True)`` + module-level
+    # ``ctypes.get_last_error()`` is the documented safe idiom.
+    # source: Python docs, ctypes — "Accessing functions from loaded
+    # DLLs" / use_last_error
+    # https://docs.python.org/3/library/ctypes.html#ctypes.WinDLL
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel32.OpenProcess.restype = wintypes.HANDLE
     kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
     kernel32.WaitForSingleObject.restype = wintypes.DWORD
@@ -124,7 +133,7 @@ def _pid_alive_windows(pid: int) -> bool:
     if not handle:
         # Access denied implies the pid exists but we can't touch it --
         # mirrors the POSIX PermissionError -> alive branch below.
-        return kernel32.GetLastError() == error_access_denied
+        return ctypes.get_last_error() == error_access_denied
     try:
         # Non-blocking poll (timeout=0): signaled means the process
         # object fired at exit. GetExitCodeProcess is deliberately not
@@ -222,15 +231,42 @@ def reusable_instance(src_root: Path | None) -> dict | None:
 
 
 def kill_and_wait(pid: int, timeout: float = 5.0) -> bool:
-    """SIGTERM ``pid`` and wait for it to actually exit (SIGKILL after
-    ``timeout``). Returns True when the process is gone.
+    """Terminate ``pid`` and wait for it to actually exit. Returns True
+    when the process is gone.
 
     Waiting is the point: spawning while the old listener still holds
     the socket is exactly the bind race that produced the
     ephemeral-port fallback.
+
+    POSIX: SIGTERM, wait up to ``timeout``, SIGKILL if still alive,
+    wait up to a further 2s.
+
+    Windows: a single explicit forced termination, no graceful phase.
+    ``os.kill(pid, sig)`` on Windows calls ``TerminateProcess``
+    unconditionally for any ``sig`` other than CTRL_C_EVENT /
+    CTRL_BREAK_EVENT — there is no SIGTERM-vs-SIGKILL distinction to
+    honor, so a two-phase escalation would just be two identical
+    TerminateProcess calls dressed up as "graceful then forceful". A
+    real graceful phase would need CTRL_BREAK_EVENT, which requires the
+    child to have been spawned with CREATE_NEW_PROCESS_GROUP — none of
+    this codebase's ``subprocess.Popen`` call sites set that flag, so
+    it is not fabricated here.
+    source: CPython docs, os.kill
+    https://docs.python.org/3/library/os.html#os.kill
     """
     if not _pid_alive(pid):
         return True
+    if os.name == "nt":
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            return not _pid_alive(pid)
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if not _pid_alive(pid):
+                return True
+            time.sleep(0.1)
+        return not _pid_alive(pid)
     try:
         os.kill(pid, signal.SIGTERM)
     except OSError:
