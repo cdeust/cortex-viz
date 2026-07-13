@@ -230,6 +230,14 @@ def reusable_instance(src_root: Path | None) -> dict | None:
     return inst
 
 
+def _poll_until_dead(pid: int, deadline: float) -> bool:
+    while time.monotonic() < deadline:
+        if not _pid_alive(pid):
+            return True
+        time.sleep(0.1)
+    return False
+
+
 def kill_and_wait(pid: int, timeout: float = 5.0) -> bool:
     """Terminate ``pid`` and wait for it to actually exit. Returns True
     when the process is gone.
@@ -261,31 +269,20 @@ def kill_and_wait(pid: int, timeout: float = 5.0) -> bool:
             os.kill(pid, signal.SIGTERM)
         except OSError:
             return not _pid_alive(pid)
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            if not _pid_alive(pid):
-                return True
-            time.sleep(0.1)
+        if _poll_until_dead(pid, time.monotonic() + timeout):
+            return True
         return not _pid_alive(pid)
     try:
         os.kill(pid, signal.SIGTERM)
     except OSError:
         return not _pid_alive(pid)
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if not _pid_alive(pid):
-            return True
-        time.sleep(0.1)
+    if _poll_until_dead(pid, time.monotonic() + timeout):
+        return True
     try:
         os.kill(pid, signal.SIGKILL)
     except OSError:
         return not _pid_alive(pid)
-    deadline = time.monotonic() + 2.0
-    while time.monotonic() < deadline:
-        if not _pid_alive(pid):
-            return True
-        time.sleep(0.1)
-    return False
+    return _poll_until_dead(pid, time.monotonic() + 2.0)
 
 
 def _pids_on_port_posix(port: int) -> list[int]:
