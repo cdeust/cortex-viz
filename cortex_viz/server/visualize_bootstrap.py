@@ -180,24 +180,17 @@ def _kill_stale(src: Path, vi) -> None:
     """Terminate the registered instance (whatever port it bound) plus
     any squatter on the well-known port, WAITING for exit. Spawning
     before the old listener releases the socket is the bind race that
-    pushed servers onto ephemeral ports."""
+    pushed servers onto ephemeral ports.
+
+    Port-squatter discovery (``vi.pids_on_port``) is cross-platform:
+    ``lsof`` on POSIX, ``netstat -ano`` on Windows — see
+    ``viz_instance.pids_on_port``."""
     inst = vi.read_instance()
     if inst is not None:
         vi.kill_and_wait(inst["pid"])
-    try:
-        out = (
-            subprocess.check_output(
-                ["lsof", "-t", "-i", f":{PORT}"],
-                stderr=subprocess.DEVNULL,
-            )
-            .decode()
-            .strip()
-        )
-    except Exception:
-        return
-    for pid_s in out.splitlines():
+    for pid in vi.pids_on_port(PORT):
         try:
-            vi.kill_and_wait(int(pid_s.strip()))
+            vi.kill_and_wait(pid)
         except Exception:
             pass
 
