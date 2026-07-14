@@ -104,15 +104,31 @@
     activeEdges = [];
     edgeNodeMap = {};
 
-    // Map entity IDs to node indices
+    var entityIdToIdx = buildEntityIdIndex(allNodes);
+    addRelationshipEdges(rels, entityIdToIdx);
+    addVirtualEdges(allNodes);
+    colorActiveEdges();
+    assignFlowParticles();
+
+    // Update exports after rebuild
+    JMD.edgeNodeMap = edgeNodeMap;
+
+    buildFiberTracts();
+  }
+
+  // Map entity IDs to node indices
+  function buildEntityIdIndex(allNodes) {
     var entityIdToIdx = {};
     allNodes.forEach(function(n, idx) {
       if (n.isEntity && n.data && n.data.id !== undefined) {
         entityIdToIdx[n.data.id] = idx;
       }
     });
+    return entityIdToIdx;
+  }
 
-    // Build edges from relationships (entity↔entity)
+  // Build edges from relationships (entity↔entity)
+  function addRelationshipEdges(rels, entityIdToIdx) {
     rels.forEach(function(r) {
       var srcIdx = entityIdToIdx[r.source];
       var tgtIdx = entityIdToIdx[r.target];
@@ -134,8 +150,36 @@
       edgeNodeMap[srcIdx].push(idx);
       edgeNodeMap[tgtIdx].push(idx);
     });
+  }
 
-    // Build virtual edges: memory→entity (domain match + content/name overlap)
+  // Score how well a memory node matches candidate entity nodes
+  function findBestEntityMatch(n, entityNodes, memIdx) {
+    var memDomain = (n.data.domain || '').toLowerCase();
+    var memContent = ((n.data.content || '') + ' ' + (n.data.tags || []).join(' ')).toLowerCase();
+    var bestMatch = -1;
+    var bestScore = 0;
+
+    entityNodes.forEach(function(ent) {
+      var entName = (ent.node.data.name || '').toLowerCase();
+      var entDomain = (ent.node.data.domain || '').toLowerCase();
+      var score = 0;
+
+      if (memDomain && entDomain && memDomain === entDomain) score += 0.5;
+      if (entName.length > 2 && memContent.indexOf(entName) >= 0) score += 0.4;
+      if (ent.node.data.type && memContent.indexOf(ent.node.data.type.toLowerCase()) >= 0) score += 0.2;
+
+      if (score > bestScore) { bestScore = score; bestMatch = ent.idx; }
+    });
+
+    if (bestMatch < 0 && entityNodes.length > 0) {
+      bestMatch = entityNodes[memIdx % entityNodes.length].idx;
+      bestScore = 0.1;
+    }
+    return { idx: bestMatch, score: bestScore };
+  }
+
+  // Build virtual edges: memory→entity (domain match + content/name overlap)
+  function addVirtualEdges(allNodes) {
     var entityNodes = [];
     allNodes.forEach(function(n, idx) {
       if (n.isEntity) entityNodes.push({ node: n, idx: idx });
@@ -143,51 +187,32 @@
 
     allNodes.forEach(function(n, memIdx) {
       if (n.isEntity) return;
-      var memDomain = (n.data.domain || '').toLowerCase();
-      var memContent = ((n.data.content || '') + ' ' + (n.data.tags || []).join(' ')).toLowerCase();
-      var bestMatch = -1;
-      var bestScore = 0;
+      var match = findBestEntityMatch(n, entityNodes, memIdx);
+      if (match.idx < 0) return;
 
-      entityNodes.forEach(function(ent) {
-        var entName = (ent.node.data.name || '').toLowerCase();
-        var entDomain = (ent.node.data.domain || '').toLowerCase();
-        var score = 0;
-
-        if (memDomain && entDomain && memDomain === entDomain) score += 0.5;
-        if (entName.length > 2 && memContent.indexOf(entName) >= 0) score += 0.4;
-        if (ent.node.data.type && memContent.indexOf(ent.node.data.type.toLowerCase()) >= 0) score += 0.2;
-
-        if (score > bestScore) { bestScore = score; bestMatch = ent.idx; }
-      });
-
-      if (bestMatch < 0 && entityNodes.length > 0) {
-        bestMatch = entityNodes[memIdx % entityNodes.length].idx;
-        bestScore = 0.1;
-      }
-
-      if (bestMatch >= 0) {
-        var vedge = {
-          srcIdx: memIdx, tgtIdx: bestMatch,
-          weight: Math.min(bestScore, 0.6),
-          type: 'context',
-          isCausal: false,
-          isVirtual: true,
-        };
-        var vidx = activeEdges.length;
-        activeEdges.push(vedge);
-        if (!edgeNodeMap[memIdx]) edgeNodeMap[memIdx] = [];
-        if (!edgeNodeMap[bestMatch]) edgeNodeMap[bestMatch] = [];
-        edgeNodeMap[memIdx].push(vidx);
-        edgeNodeMap[bestMatch].push(vidx);
-      }
+      var vedge = {
+        srcIdx: memIdx, tgtIdx: match.idx,
+        weight: Math.min(match.score, 0.6),
+        type: 'context',
+        isCausal: false,
+        isVirtual: true,
+      };
+      var vidx = activeEdges.length;
+      activeEdges.push(vedge);
+      if (!edgeNodeMap[memIdx]) edgeNodeMap[memIdx] = [];
+      if (!edgeNodeMap[match.idx]) edgeNodeMap[match.idx] = [];
+      edgeNodeMap[memIdx].push(vidx);
+      edgeNodeMap[match.idx].push(vidx);
     });
+  }
 
-    // Color edges
+  // Color edges by causality/type/virtual-ness
+  function colorActiveEdges() {
     var causalColor = new THREE.Color(JMD.EDGE_COLORS.causal);
     var defaultColor = new THREE.Color(JMD.EDGE_COLORS['default']);
     var coOccColor = new THREE.Color(JMD.EDGE_COLORS.co_occurrence);
-
     var virtualColor = new THREE.Color(JMD.EDGE_COLORS.virtual);
+
     activeEdges.forEach(function(e, i) {
       if (i >= MAX_EDGES) return;
       var color = e.isVirtual ? virtualColor : (e.isCausal ? causalColor : (e.type === 'co_occurrence' ? coOccColor : defaultColor));
@@ -202,24 +227,24 @@
 
     edgeGeo.setDrawRange(0, Math.min(activeEdges.length, MAX_EDGES) * 2);
     edgeGeo.attributes.color.needsUpdate = true;
+  }
 
-    // Assign flow particles to edges
-    if (activeEdges.length > 0) {
-      for (var fi = 0; fi < NUM_PARTICLES; fi++) {
-        flowData[fi].edgeIdx = Math.floor(Math.random() * activeEdges.length);
-        var e = activeEdges[flowData[fi].edgeIdx];
-        var color = e.isCausal ? causalColor : (e.type === 'co_occurrence' ? coOccColor : defaultColor);
-        flowColors[fi*3] = color.r;
-        flowColors[fi*3+1] = color.g;
-        flowColors[fi*3+2] = color.b;
-      }
-      flowGeo.attributes.color.needsUpdate = true;
+  // Assign flow particles to edges
+  function assignFlowParticles() {
+    if (activeEdges.length === 0) return;
+    var causalColor = new THREE.Color(JMD.EDGE_COLORS.causal);
+    var defaultColor = new THREE.Color(JMD.EDGE_COLORS['default']);
+    var coOccColor = new THREE.Color(JMD.EDGE_COLORS.co_occurrence);
+
+    for (var fi = 0; fi < NUM_PARTICLES; fi++) {
+      flowData[fi].edgeIdx = Math.floor(Math.random() * activeEdges.length);
+      var e = activeEdges[flowData[fi].edgeIdx];
+      var color = e.isCausal ? causalColor : (e.type === 'co_occurrence' ? coOccColor : defaultColor);
+      flowColors[fi*3] = color.r;
+      flowColors[fi*3+1] = color.g;
+      flowColors[fi*3+2] = color.b;
     }
-
-    // Update exports after rebuild
-    JMD.edgeNodeMap = edgeNodeMap;
-
-    buildFiberTracts();
+    flowGeo.attributes.color.needsUpdate = true;
   }
 
   // ─── Fiber tracts for top connections ─────────────────────────────
