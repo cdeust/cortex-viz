@@ -101,20 +101,9 @@
   // Store click regions for each canvas
   var clickRegions = {};
 
-  function drawBarChart(canvasId, items) {
-    var canvas = document.getElementById(canvasId);
-    if (!canvas) return;
-    var rect = canvas.parentElement.getBoundingClientRect();
-    var dpr = devicePixelRatio;
-    canvas.width = rect.width * dpr;
-    canvas.style.width = rect.width + 'px';
-    var ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height * dpr);
-
-    if (!items.length) return;
-    var maxVal = Math.max(1, Math.max.apply(null, items.map(function(d) { return d.value; })));
-    var barH = 14 * dpr, gap = 6 * dpr, labelW = 70 * dpr;
-    var chartW = canvas.width - labelW - 40 * dpr;
+  function drawBarChartBars(ctx, items, dims) {
+    var dpr = dims.dpr, maxVal = dims.maxVal, barH = dims.barH, gap = dims.gap;
+    var labelW = dims.labelW, chartW = dims.chartW;
 
     // Store click regions for this canvas
     var regions = [];
@@ -148,43 +137,69 @@
       ctx.fillText(d.value, labelW + w + 6 * dpr, y + barH * 0.75);
     });
 
-    clickRegions[canvasId] = regions;
+    return regions;
+  }
 
-    // Attach click handler once
-    if (!canvas._hasClickHandler) {
-      canvas._hasClickHandler = true;
-      canvas.style.cursor = 'pointer';
-      canvas.addEventListener('click', function(e) {
-        var canvasRect = canvas.getBoundingClientRect();
-        var clickY = e.clientY - canvasRect.top;
-        var regions = clickRegions[canvasId] || [];
-        for (var r = 0; r < regions.length; r++) {
-          if (clickY >= regions[r].y && clickY <= regions[r].y + regions[r].h && regions[r].filter) {
-            // Apply the filter
-            JMD.setState(regions[r].filter.key, regions[r].filter.value);
+  function applyBarChartRegionFilter(region) {
+    // Apply the filter
+    JMD.setState(region.filter.key, region.filter.value);
 
-            // Also update the filter buttons if changing activeFilter
-            if (regions[r].filter.key === 'activeFilter') {
-              document.querySelectorAll('#type-filter-bar .filter-btn').forEach(function(b) {
-                b.classList.toggle('active', b.dataset.type === regions[r].filter.value);
-              });
-            }
-            // If setting search query, update the search box
-            if (regions[r].filter.key === 'searchQuery') {
-              document.getElementById('search-box').value = regions[r].filter.value;
-            }
-            // Switch to graph view
-            if (JMD.state.activeView !== 'graph') {
-              JMD.setState('activeView', 'graph');
-              document.querySelectorAll('#sidebar .nav-item').forEach(function(b) {
-                b.classList.toggle('active', b.dataset.view === 'graph');
-              });
-            }
-            break;
-          }
-        }
+    // Also update the filter buttons if changing activeFilter
+    if (region.filter.key === 'activeFilter') {
+      document.querySelectorAll('#type-filter-bar .filter-btn').forEach(function(b) {
+        b.classList.toggle('active', b.dataset.type === region.filter.value);
       });
     }
+    // If setting search query, update the search box
+    if (region.filter.key === 'searchQuery') {
+      document.getElementById('search-box').value = region.filter.value;
+    }
+    // Switch to graph view
+    if (JMD.state.activeView !== 'graph') {
+      JMD.setState('activeView', 'graph');
+      document.querySelectorAll('#sidebar .nav-item').forEach(function(b) {
+        b.classList.toggle('active', b.dataset.view === 'graph');
+      });
+    }
+  }
+
+  function attachBarChartClickHandler(canvas, canvasId) {
+    if (canvas._hasClickHandler) return;
+    canvas._hasClickHandler = true;
+    canvas.style.cursor = 'pointer';
+    canvas.addEventListener('click', function(e) {
+      var canvasRect = canvas.getBoundingClientRect();
+      var clickY = e.clientY - canvasRect.top;
+      var regions = clickRegions[canvasId] || [];
+      for (var r = 0; r < regions.length; r++) {
+        if (clickY >= regions[r].y && clickY <= regions[r].y + regions[r].h && regions[r].filter) {
+          applyBarChartRegionFilter(regions[r]);
+          break;
+        }
+      }
+    });
+  }
+
+  function drawBarChart(canvasId, items) {
+    var canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    var rect = canvas.parentElement.getBoundingClientRect();
+    var dpr = devicePixelRatio;
+    canvas.width = rect.width * dpr;
+    canvas.style.width = rect.width + 'px';
+    var ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height * dpr);
+
+    if (!items.length) return;
+    var maxVal = Math.max(1, Math.max.apply(null, items.map(function(d) { return d.value; })));
+    var barH = 14 * dpr, gap = 6 * dpr, labelW = 70 * dpr;
+    var chartW = canvas.width - labelW - 40 * dpr;
+
+    clickRegions[canvasId] = drawBarChartBars(ctx, items, {
+      dpr: dpr, maxVal: maxVal, barH: barH, gap: gap, labelW: labelW, chartW: chartW,
+    });
+
+    attachBarChartClickHandler(canvas, canvasId);
   }
 
   // Toggle analytics panel
