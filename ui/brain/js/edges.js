@@ -166,22 +166,35 @@ window.BRAIN = window.BRAIN || {};
     BRAIN.world.add(overlay);
   }
 
-  // Resolve the tract control point for an edge, or null when it stays straight.
-  function controlPoint(atlas, regA, hemiA, regB, hemiB, ax, ay, az, bx, by, bz, R) {
-    var tb = atlas.tractBow(regA, hemiA, regB, hemiB);
-    if (!tb) return null;
-    var mx = (ax + bx) / 2, my = (ay + by) / 2, mz = (az + bz) / 2;
-    var len = Math.sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay) + (bz - az) * (bz - az));
-    var s = Math.min(Math.max(len / R, BOW_MIN), BOW_MAX);
-    var w = atlas.bowToWorld(tb.bow);
+  // Resolve the tract control point for an edge, or false when it stays
+  // straight. ctx: {atlas, R} — built once per buildEdges call. rt: a
+  // per-edge scratch object reused across the whole routing loop — regA/
+  // hemiA/regB/hemiB/ax/ay/az/bx/by/bz are set by the caller before each
+  // call; cx/cy/cz are written back here on a curved result. Zero
+  // allocation: rt itself is allocated once in resolveEdgeRouting and its
+  // fields are overwritten every edge (same "context object, mutated per
+  // iteration" pattern #22 applied to ctx/routing one level up).
+  function controlPoint(ctx, rt) {
+    var tb = ctx.atlas.tractBow(rt.regA, rt.hemiA, rt.regB, rt.hemiB);
+    if (!tb) return false;
+    var mx = (rt.ax + rt.bx) / 2, my = (rt.ay + rt.by) / 2, mz = (rt.az + rt.bz) / 2;
+    var len = Math.sqrt((rt.bx - rt.ax) * (rt.bx - rt.ax) + (rt.by - rt.ay) * (rt.by - rt.ay) +
+      (rt.bz - rt.az) * (rt.bz - rt.az));
+    var s = Math.min(Math.max(len / ctx.R, BOW_MIN), BOW_MAX);
+    var w = ctx.atlas.bowToWorld(tb.bow);
     var cx = mx + w.x * s, cy = my + w.y * s, cz = mz + w.z * s;
     if (tb.midline) cx = mx * 0.15;  // corpus-callosum arch crosses near midline
-    return { x: cx, y: cy, z: cz };
+    rt.cx = cx; rt.cy = cy; rt.cz = cz;
+    return true;
   }
 
-  function edgeAlpha(ax, ay, az, bx, by, bz, shortLen, longLen, span) {
-    var len = Math.sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay) + (bz - az) * (bz - az));
-    var f = (longLen - len) / span;
+  // Per-edge length fade between ctx.shortLen (full strength) and ctx.longLen
+  // (floor). rt.ax..bz hold the current edge's endpoint coords, set by the
+  // caller — same reused-scratch pattern as controlPoint.
+  function edgeAlpha(ctx, rt) {
+    var len = Math.sqrt((rt.bx - rt.ax) * (rt.bx - rt.ax) + (rt.by - rt.ay) * (rt.by - rt.ay) +
+      (rt.bz - rt.az) * (rt.bz - rt.az));
+    var f = (ctx.longLen - len) / ctx.span;
     if (f > 1) f = 1; else if (f < FLOOR) f = FLOOR;
     return BASE_ALPHA * f;
   }
@@ -191,12 +204,16 @@ window.BRAIN = window.BRAIN || {};
   // size its own buffers.
   function resolveEdgeRouting(ctx) {
     var edges = ctx.edges, positions = ctx.positions, indexOfId = ctx.indexOfId;
-    var regionKey = ctx.regionKey, hemi = ctx.hemi, atlas = ctx.atlas, R = ctx.R;
+    var regionKey = ctx.regionKey, hemi = ctx.hemi;
     var E = edges.length;
     var srcRow = new Int32Array(E), dstRow = new Int32Array(E);
     var ctrl = new Float32Array(E * 3);
     var segCnt = new Uint8Array(E);
     var totalSeg = 0, curved = 0, dropped = 0;
+    // Reusable per-edge scratch for controlPoint (§4.4 PARAM_COUNT fix,
+    // issue #23) — allocated once, fields overwritten every iteration so the
+    // hot loop below allocates nothing per edge.
+    var rt = { regA: 0, hemiA: 0, regB: 0, hemiB: 0, ax: 0, ay: 0, az: 0, bx: 0, by: 0, bz: 0, cx: 0, cy: 0, cz: 0 };
     for (var i = 0; i < E; i++) {
       var si = indexOfId.get(endId(edges[i].source));
       var ti = indexOfId.get(endId(edges[i].target));
@@ -207,11 +224,11 @@ window.BRAIN = window.BRAIN || {};
       if (si == null || ti == null) { srcRow[i] = -1; dropped++; continue; }
       srcRow[i] = si; dstRow[i] = ti;
       var so = si * 3, to = ti * 3;
-      var cp = controlPoint(atlas, regionKey[si], hemi[si], regionKey[ti], hemi[ti],
-        positions[so], positions[so + 1], positions[so + 2],
-        positions[to], positions[to + 1], positions[to + 2], R);
-      if (cp) {
-        ctrl[i * 3] = cp.x; ctrl[i * 3 + 1] = cp.y; ctrl[i * 3 + 2] = cp.z;
+      rt.regA = regionKey[si]; rt.hemiA = hemi[si]; rt.regB = regionKey[ti]; rt.hemiB = hemi[ti];
+      rt.ax = positions[so]; rt.ay = positions[so + 1]; rt.az = positions[so + 2];
+      rt.bx = positions[to]; rt.by = positions[to + 1]; rt.bz = positions[to + 2];
+      if (controlPoint(ctx, rt)) {
+        ctrl[i * 3] = rt.cx; ctrl[i * 3 + 1] = rt.cy; ctrl[i * 3 + 2] = rt.cz;
         segCnt[i] = K_CURVE - 1; totalSeg += K_CURVE - 1; curved++;
       } else {
         segCnt[i] = 1; totalSeg += 1;
@@ -230,7 +247,6 @@ window.BRAIN = window.BRAIN || {};
   // vStart defaults to -1 (untouched = dropped edge, never written below).
   function fillEdgeBuffers(ctx, routing) {
     var positions = ctx.positions, nodeColors = ctx.nodeColors;
-    var shortLen = ctx.shortLen, longLen = ctx.longLen, span = ctx.span;
     var E = routing.E, srcRow = routing.srcRow, dstRow = routing.dstRow;
     var ctrl = routing.ctrl, segCnt = routing.segCnt, totalSeg = routing.totalSeg;
     var seg = new Float32Array(totalSeg * 6);
@@ -239,15 +255,27 @@ window.BRAIN = window.BRAIN || {};
     var vStart = new Int32Array(E).fill(-1);
     var vCount = new Int32Array(E);
     var baseAlpha = new Float32Array(E);
+    // Buffers every edge this pass writes into — built once, threaded through
+    // writeEdge/pushVert instead of passed as individual params (§4.4 fix,
+    // issue #23).
+    var buf = { positions: positions, nodeColors: nodeColors, ctrl: ctrl, seg: seg, ecol: ecol, alpha: alpha };
+    // Reusable per-edge scratch: so/to/segCount/a/p are set below before each
+    // writeEdge call; ax..cz are cached by writeEdge itself for the duration
+    // of that edge's segment steps. Allocated once — zero per-edge alloc.
+    var es = { i: 0, so: 0, to: 0, segCount: 0, a: 0, p: 0,
+      ax: 0, ay: 0, az: 0, bx: 0, by: 0, bz: 0, cx: 0, cy: 0, cz: 0 };
     var p = 0;  // vertex pointer (counts vertices, *3 for floats)
     var pa = bezierBuffers();
     for (var i = 0; i < E; i++) {
       if (srcRow[i] < 0 || segCnt[i] === 0) continue;
       var so = srcRow[i] * 3, to = dstRow[i] * 3;
-      var a = edgeAlpha(positions[so], positions[so + 1], positions[so + 2],
-        positions[to], positions[to + 1], positions[to + 2], shortLen, longLen, span);
+      es.ax = positions[so]; es.ay = positions[so + 1]; es.az = positions[so + 2];
+      es.bx = positions[to]; es.by = positions[to + 1]; es.bz = positions[to + 2];
+      var a = edgeAlpha(ctx, es);
       var vBefore = p;
-      p = writeEdge(i, so, to, ctrl, segCnt[i], positions, nodeColors, seg, ecol, alpha, p, a, pa);
+      es.i = i; es.so = so; es.to = to; es.segCount = segCnt[i]; es.a = a; es.p = p;
+      writeEdge(buf, es, pa);
+      p = es.p;
       vStart[i] = vBefore;
       vCount[i] = p - vBefore;
       baseAlpha[i] = a;
@@ -414,46 +442,54 @@ window.BRAIN = window.BRAIN || {};
   // Scratch arrays reused across edges to avoid per-edge allocation.
   function bezierBuffers() { return { cur: [0, 0, 0], nxt: [0, 0, 0] }; }
 
-  // Write one edge (straight: 1 segment; curved: K_CURVE-1 Bezier segments) into
-  // the geometry buffers starting at vertex pointer `p`; returns the new
-  // pointer. `a` is the edge's final alpha (already length-scaled by the
-  // caller) applied to every vertex this edge writes.
-  function writeEdge(i, so, to, ctrl, segCount, positions, nodeColors,
-    seg, ecol, alpha, p, a, pa) {
-    var ax = positions[so], ay = positions[so + 1], az = positions[so + 2];
-    var bx = positions[to], by = positions[to + 1], bz = positions[to + 2];
-    var cx = ctrl[i * 3], cy = ctrl[i * 3 + 1], cz = ctrl[i * 3 + 2];
-    var steps = segCount;          // straight => 1, curved => K_CURVE-1
+  // Write one edge (straight: 1 segment; curved: K_CURVE-1 Bezier segments)
+  // into buf's geometry buffers, starting at vertex pointer es.p; the new
+  // pointer is left in es.p for the caller to read (fillEdgeBuffers). es.a is
+  // the edge's final alpha (already length-scaled by the caller), applied to
+  // every vertex this edge writes. es.ax/ay/az/bx/by/bz are set by the caller;
+  // cx/cy/cz are read here from buf.ctrl at es.i and cached on es for the
+  // duration of this edge's segment steps — same 4-param-or-fewer scratch
+  // pattern as controlPoint/edgeAlpha above (§4.4 fix, issue #23).
+  function writeEdge(buf, es, pa) {
+    es.cx = buf.ctrl[es.i * 3]; es.cy = buf.ctrl[es.i * 3 + 1]; es.cz = buf.ctrl[es.i * 3 + 2];
+    var steps = es.segCount;          // straight => 1, curved => K_CURVE-1
     var cur = pa.cur, nxt = pa.nxt;
-    pointAt(ax, ay, az, cx, cy, cz, bx, by, bz, 0, steps, cur);
+    pointAt(es, 0, steps, cur);
     for (var k = 0; k < steps; k++) {
-      pointAt(ax, ay, az, cx, cy, cz, bx, by, bz, (k + 1) / steps, steps, nxt);
+      pointAt(es, (k + 1) / steps, steps, nxt);
       var t0 = k / steps, t1 = (k + 1) / steps;
-      p = pushVert(seg, ecol, alpha, p, cur, so, to, t0, nodeColors, a);
-      p = pushVert(seg, ecol, alpha, p, nxt, so, to, t1, nodeColors, a);
+      pushVert(buf, es, cur, t0);
+      pushVert(buf, es, nxt, t1);
       cur[0] = nxt[0]; cur[1] = nxt[1]; cur[2] = nxt[2];
     }
-    return p;
   }
 
-  // Point at parameter t — straight lerp when steps==1, Bezier otherwise.
-  function pointAt(ax, ay, az, cx, cy, cz, bx, by, bz, t, steps, out) {
-    if (steps === 1) { out[0] = ax + (bx - ax) * t; out[1] = ay + (by - ay) * t; out[2] = az + (bz - az) * t; return; }
+  // Point at parameter t along the edge cached on `es` (ax/ay/az/bx/by/bz
+  // endpoints, cx/cy/cz control point) — straight lerp when steps==1, Bezier
+  // otherwise. Writes into `out` (the caller's cur/nxt scratch buffer).
+  function pointAt(es, t, steps, out) {
+    if (steps === 1) {
+      out[0] = es.ax + (es.bx - es.ax) * t;
+      out[1] = es.ay + (es.by - es.ay) * t;
+      out[2] = es.az + (es.bz - es.az) * t;
+      return;
+    }
     var u = 1 - t, w0 = u * u, w1 = 2 * u * t, w2 = t * t;
-    out[0] = w0 * ax + w1 * cx + w2 * bx;
-    out[1] = w0 * ay + w1 * cy + w2 * by;
-    out[2] = w0 * az + w1 * cz + w2 * bz;
+    out[0] = w0 * es.ax + w1 * es.cx + w2 * es.bx;
+    out[1] = w0 * es.ay + w1 * es.cy + w2 * es.by;
+    out[2] = w0 * es.az + w1 * es.cz + w2 * es.bz;
   }
 
-  // Push one vertex: position from `pt`, colour lerped between endpoint colours
-  // by parameter t, alpha `a`.
-  function pushVert(seg, ecol, alpha, p, pt, so, to, t, nodeColors, a) {
-    var o = p * 3;
-    seg[o] = pt[0]; seg[o + 1] = pt[1]; seg[o + 2] = pt[2];
-    ecol[o] = nodeColors[so] + (nodeColors[to] - nodeColors[so]) * t;
-    ecol[o + 1] = nodeColors[so + 1] + (nodeColors[to + 1] - nodeColors[so + 1]) * t;
-    ecol[o + 2] = nodeColors[so + 2] + (nodeColors[to + 2] - nodeColors[so + 2]) * t;
-    alpha[p] = a;
-    return p + 1;
+  // Push one vertex: position from `pt`, colour lerped between the endpoint
+  // colours (buf.nodeColors at es.so/es.to) by parameter t, alpha es.a.
+  // Advances es.p (the shared vertex pointer) by one.
+  function pushVert(buf, es, pt, t) {
+    var o = es.p * 3;
+    buf.seg[o] = pt[0]; buf.seg[o + 1] = pt[1]; buf.seg[o + 2] = pt[2];
+    buf.ecol[o] = buf.nodeColors[es.so] + (buf.nodeColors[es.to] - buf.nodeColors[es.so]) * t;
+    buf.ecol[o + 1] = buf.nodeColors[es.so + 1] + (buf.nodeColors[es.to + 1] - buf.nodeColors[es.so + 1]) * t;
+    buf.ecol[o + 2] = buf.nodeColors[es.so + 2] + (buf.nodeColors[es.to + 2] - buf.nodeColors[es.so + 2]) * t;
+    buf.alpha[es.p] = es.a;
+    es.p += 1;
   }
 })();
