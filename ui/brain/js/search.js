@@ -42,20 +42,7 @@ window.BRAIN = window.BRAIN || {};
     return parts[parts.length - 1] || p;
   }
 
-  function buildDom() {
-    var host = document.getElementById('chrome-top-right');
-    if (!host) return false;
-
-    var wrap = document.createElement('div');
-    wrap.className = 'aia-inputwrap';
-    wrap.id = 'brain-search-wrap';
-
-    var icon = document.createElement('span');
-    icon.className = 'aia-input__icon';
-    icon.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" ' +
-      'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-      '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
-
+  function buildSearchInput() {
     var input = document.createElement('input');
     input.type = 'text';
     input.id = 'brain-search-input';
@@ -72,7 +59,10 @@ window.BRAIN = window.BRAIN || {};
     // ('Loading graph…' -> 'Search nodes…' -> 'Search unavailable'), so a
     // static aria-label is required (placeholder stays as a visual hint).
     input.setAttribute('aria-label', 'Search nodes');
+    return input;
+  }
 
+  function buildDropdown() {
     // Outer positioned/scrollable container. role=listbox's required-owned-
     // elements rule (ARIA 1.2) only allows option/group children, so the
     // actual listbox is an INNER element; the match-count / empty-state text
@@ -94,9 +84,29 @@ window.BRAIN = window.BRAIN || {};
     dropdown.appendChild(listbox);
     dropdown.appendChild(status);
 
+    return { dropdown: dropdown, listbox: listbox, status: status };
+  }
+
+  function buildDom() {
+    var host = document.getElementById('chrome-top-right');
+    if (!host) return false;
+
+    var wrap = document.createElement('div');
+    wrap.className = 'aia-inputwrap';
+    wrap.id = 'brain-search-wrap';
+
+    var icon = document.createElement('span');
+    icon.className = 'aia-input__icon';
+    icon.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" ' +
+      'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+      '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
+
+    var input = buildSearchInput();
+    var parts = buildDropdown();
+
     wrap.appendChild(icon);
     wrap.appendChild(input);
-    wrap.appendChild(dropdown);
+    wrap.appendChild(parts.dropdown);
     // First child: search reads left-to-right before the toggle/reset pair,
     // and keeps their click handlers (wired separately in boot.js) untouched.
     host.insertBefore(wrap, host.firstChild);
@@ -104,9 +114,9 @@ window.BRAIN = window.BRAIN || {};
     els.host = host;
     els.wrap = wrap;
     els.input = input;
-    els.dropdown = dropdown;
-    els.listbox = listbox;
-    els.status = status;
+    els.dropdown = parts.dropdown;
+    els.listbox = parts.listbox;
+    els.status = parts.status;
     return true;
   }
 
