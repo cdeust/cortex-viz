@@ -105,110 +105,138 @@ window.BRAIN = window.BRAIN || {};
     hoverRing.visible = true;
   }
 
-  BRAIN.initPicking = function (nodes) {
-    BRAIN.scene.add(ring);
-    BRAIN.scene.add(hoverRing);
-    var dom = BRAIN.renderer.domElement;
-    var tip = document.getElementById('brain-tip');
-    var down = null;
-    var lastHover = 0;
-    var pickIdx = -1;     // node the hover ring currently pins == what a click commits
-    var hoverRow = -1;    // node currently under the cursor (-1 = none)
-    var selectedRow = -1; // node locked by a click; its highlight persists until deselect
-    var shownRow = -1;    // row whose highlight is currently painted (skips redundant repaints)
+  // Mutable picking state, held in one object so the extracted helpers below
+  // (which used to be closures inside initPicking) can share it by reference
+  // without widening their own parameter lists past §4.4.
+  function createPickState() {
+    return {
+      down: null,        // pointerdown origin, for click-vs-drag detection
+      lastHover: 0,       // throttle clock for hover searches
+      pickIdx: -1,        // node the hover ring currently pins == what a click commits
+      hoverRow: -1,        // node currently under the cursor (-1 = none)
+      selectedRow: -1,     // node locked by a click; its highlight persists until deselect
+      shownRow: -1         // row whose highlight is currently painted (skips redundant repaints)
+    };
+  }
 
-    // Show the HOVERED node's associations while hovering; otherwise fall back
-    // to the SELECTED node's (so a committed selection keeps its edges + neighbour
-    // nodes lit until the user clicks away or closes the detail panel — both emit
-    // graph:deselectNode). Repaints only when the effective row changes.
-    function applyHighlight() {
-      var target = hoverRow >= 0 ? hoverRow : selectedRow;
-      if (target === shownRow) return;
-      if (BRAIN.highlightNode) BRAIN.highlightNode(target);
-      shownRow = target;
+  // Show the HOVERED node's associations while hovering; otherwise fall back
+  // to the SELECTED node's (so a committed selection keeps its edges + neighbour
+  // nodes lit until the user clicks away or closes the detail panel — both emit
+  // graph:deselectNode). Repaints only when the effective row changes.
+  function applyHighlight(state) {
+    var target = state.hoverRow >= 0 ? state.hoverRow : state.selectedRow;
+    if (target === state.shownRow) return;
+    if (BRAIN.highlightNode) BRAIN.highlightNode(target);
+    state.shownRow = target;
+  }
+
+  // Pin the hover ring + tooltip on `idx` (or hide when idx < 0), and record
+  // it as the node a click will select. Shared by the throttled hover and the
+  // pointerdown refresh so the LABEL, the RING, and the eventual SELECTION are
+  // always the same node — the passive hover is throttled and can lag the
+  // cursor in the dense core, which made a click look like it grabbed an
+  // unrelated node (user report 2026-07-08).
+  // `ctx` bundles the four collaborators pinHover needs (dom, tip, nodes,
+  // state) into one parameter object — Introduce Parameter Object, §4.4.
+  function pinHover(ctx, idx, clientX, clientY) {
+    ctx.state.pickIdx = idx;
+    // Light up the hovered node's associations (edges + neighbour nodes).
+    ctx.state.hoverRow = idx;
+    applyHighlight(ctx.state);
+    if (idx < 0) {
+      ctx.dom.style.cursor = '';
+      hoverRing.visible = false;
+      if (ctx.tip) ctx.tip.style.display = 'none';
+      return;
     }
-
-    // Pin the hover ring + tooltip on `idx` (or hide when idx < 0), and record
-    // it as the node a click will select. Shared by the throttled hover and the
-    // pointerdown refresh so the LABEL, the RING, and the eventual SELECTION are
-    // always the same node — the passive hover is throttled and can lag the
-    // cursor in the dense core, which made a click look like it grabbed an
-    // unrelated node (user report 2026-07-08).
-    function pinHover(idx, clientX, clientY) {
-      pickIdx = idx;
-      // Light up the hovered node's associations (edges + neighbour nodes).
-      hoverRow = idx;
-      applyHighlight();
-      if (idx < 0) {
-        dom.style.cursor = '';
-        hoverRing.visible = false;
-        if (tip) tip.style.display = 'none';
-        return;
-      }
-      dom.style.cursor = 'pointer';
-      showHoverRing(worldOf(idx));
-      if (tip) {
-        var n = nodes[idx];
-        var kind = n.kind || n.type || '';
-        tip.textContent = (kind ? kind + ' · ' : '') + (n.label || n.id || '').slice(0, 80);
-        tip.style.left = (clientX + 14) + 'px';
-        tip.style.top = (clientY + 14) + 'px';
-        tip.style.display = 'block';
-      }
+    ctx.dom.style.cursor = 'pointer';
+    showHoverRing(worldOf(idx));
+    if (ctx.tip) {
+      var n = ctx.nodes[idx];
+      var kind = n.kind || n.type || '';
+      ctx.tip.textContent = (kind ? kind + ' · ' : '') + (n.label || n.id || '').slice(0, 80);
+      ctx.tip.style.left = (clientX + 14) + 'px';
+      ctx.tip.style.top = (clientY + 14) + 'px';
+      ctx.tip.style.display = 'block';
     }
+  }
 
-    dom.addEventListener('pointerdown', function (e) {
-      down = { x: e.clientX, y: e.clientY };
+  // A click commits the ring-pinned node unless the pointer moved (orbit
+  // drag) or nothing was pinned. Split out of the pointerup listener to keep
+  // that listener's nesting within §4.5 (guard clauses, no nested if).
+  function commitClickIfValid(ctx, e) {
+    if (!ctx.state.down || Math.abs(e.clientX - ctx.state.down.x) > 4 || Math.abs(e.clientY - ctx.state.down.y) > 4) return;
+    if (ctx.state.pickIdx < 0) {
+      ring.visible = false;
+      if (window.JUG && JUG.deselectNode) JUG.deselectNode();
+      return;
+    }
+    // Ring placement is handled by the graph:selectNode listener below, so a
+    // node selected via a connection link gets the same highlight.
+    BRAIN.selectNode(ctx.nodes[ctx.state.pickIdx]);   // exactly the node the ring pinned at press
+  }
+
+  // pointerdown/up/move/leave: click-vs-drag detection, throttled hover, and
+  // the tooltip/cursor/ring feedback that makes picking feel precise.
+  function attachPointerHandlers(ctx) {
+    ctx.dom.addEventListener('pointerdown', function (e) {
+      ctx.state.down = { x: e.clientX, y: e.clientY };
       // Recompute the pick at the EXACT press point, unthrottled and with the
       // forgiving CLICK_PX radius, and snap the ring/tooltip to it — so the
       // release commits precisely the node shown, not a throttle-stale one.
-      pinHover(nearestToCursor(e.clientX, e.clientY, CLICK_PX), e.clientX, e.clientY);
+      pinHover(ctx, nearestToCursor(e.clientX, e.clientY, CLICK_PX), e.clientX, e.clientY);
     });
 
-    dom.addEventListener('pointerup', function (e) {
-      // Only a click if the pointer barely moved (else it was an orbit drag).
-      if (!down || Math.abs(e.clientX - down.x) > 4 || Math.abs(e.clientY - down.y) > 4) return;
-      if (pickIdx < 0) {
-        ring.visible = false;
-        if (window.JUG && JUG.deselectNode) JUG.deselectNode();
-        return;
-      }
-      // Ring placement is handled by the graph:selectNode listener below, so a
-      // node selected via a connection link gets the same highlight.
-      BRAIN.selectNode(nodes[pickIdx]);   // exactly the node the ring pinned at press
+    ctx.dom.addEventListener('pointerup', function (e) {
+      commitClickIfValid(ctx, e);
     });
 
     // Hover: throttled label tooltip + pointer cursor. Skipped while dragging.
-    dom.addEventListener('pointermove', function (e) {
-      if (e.buttons) { if (tip) tip.style.display = 'none'; return; }
+    ctx.dom.addEventListener('pointermove', function (e) {
+      if (e.buttons) { if (ctx.tip) ctx.tip.style.display = 'none'; return; }
       var now = (window.performance && performance.now) ? performance.now() : Date.now();
-      if (now - lastHover < HOVER_MS) return;
-      lastHover = now;
-      pinHover(nearestToCursor(e.clientX, e.clientY, HOVER_PX), e.clientX, e.clientY);
+      if (now - ctx.state.lastHover < HOVER_MS) return;
+      ctx.state.lastHover = now;
+      pinHover(ctx, nearestToCursor(e.clientX, e.clientY, HOVER_PX), e.clientX, e.clientY);
     });
 
-    dom.addEventListener('pointerleave', function () {
+    ctx.dom.addEventListener('pointerleave', function () {
       hoverRing.visible = false;
-      if (tip) tip.style.display = 'none';
-      hoverRow = -1;
-      applyHighlight();   // fall back to the selected node's highlight, or clear
+      if (ctx.tip) ctx.tip.style.display = 'none';
+      ctx.state.hoverRow = -1;
+      applyHighlight(ctx.state);   // fall back to the selected node's highlight, or clear
     });
+  }
 
-    if (window.JUG && JUG.on) {
-      // Highlight whatever node becomes selected — by direct click here, or by
-      // clicking a connection link in the detail panel (which selects by id).
-      JUG.on('graph:selectNode', function (node) {
-        var i = BRAIN.indexOfId ? BRAIN.indexOfId.get(node.id) : null;
-        if (i == null) { ring.visible = false; return; }
-        showRing(worldOf(i));
-        selectedRow = i;   // lock the highlight on the selection until deselect
-        applyHighlight();
-      });
-      JUG.on('graph:deselectNode', function () {
-        ring.visible = false;
-        selectedRow = -1;
-        applyHighlight();
-      });
-    }
+  // Highlight whatever node becomes selected — by direct click (handled via
+  // pinHover/pointerup above), or by clicking a connection link in the detail
+  // panel (which selects by id and only reaches BRAIN through these events).
+  function attachSelectionListeners(state) {
+    if (!(window.JUG && JUG.on)) return;
+    JUG.on('graph:selectNode', function (node) {
+      var i = BRAIN.indexOfId ? BRAIN.indexOfId.get(node.id) : null;
+      if (i == null) { ring.visible = false; return; }
+      showRing(worldOf(i));
+      state.selectedRow = i;   // lock the highlight on the selection until deselect
+      applyHighlight(state);
+    });
+    JUG.on('graph:deselectNode', function () {
+      ring.visible = false;
+      state.selectedRow = -1;
+      applyHighlight(state);
+    });
+  }
+
+  BRAIN.initPicking = function (nodes) {
+    BRAIN.scene.add(ring);
+    BRAIN.scene.add(hoverRing);
+    var ctx = {
+      dom: BRAIN.renderer.domElement,
+      tip: document.getElementById('brain-tip'),
+      nodes: nodes,
+      state: createPickState()
+    };
+    attachPointerHandlers(ctx);
+    attachSelectionListeners(ctx.state);
   };
 })();
