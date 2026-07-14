@@ -186,15 +186,13 @@ window.BRAIN = window.BRAIN || {};
     return BASE_ALPHA * f;
   }
 
-  // edges, positions, indexOfId, nodeColors as before; regionKey/hemi from
-  // layout.js; atlas from anatomy.js (for tract bows).
-  BRAIN.buildEdges = function (edges, positions, indexOfId, nodeColors, regionKey, hemi, atlas) {
-    var R = BRAIN.TARGET_RADIUS || 80;
-    var shortLen = SHORT_FRAC * R, longLen = LONG_FRAC * R;
-    var span = Math.max(longLen - shortLen, 1e-3);
+  // Pass 1: resolve endpoints + control points, size the buffers. Returns the
+  // per-edge routing arrays plus segment-count totals that pass 2 needs to
+  // size its own buffers.
+  function resolveEdgeRouting(ctx) {
+    var edges = ctx.edges, positions = ctx.positions, indexOfId = ctx.indexOfId;
+    var regionKey = ctx.regionKey, hemi = ctx.hemi, atlas = ctx.atlas, R = ctx.R;
     var E = edges.length;
-
-    // Pass 1: resolve endpoints + control points, size the buffers.
     var srcRow = new Int32Array(E), dstRow = new Int32Array(E);
     var ctrl = new Float32Array(E * 3);
     var segCnt = new Uint8Array(E);
@@ -219,12 +217,22 @@ window.BRAIN = window.BRAIN || {};
         segCnt[i] = 1; totalSeg += 1;
       }
     }
+    return {
+      E: E, srcRow: srcRow, dstRow: dstRow, ctrl: ctrl, segCnt: segCnt,
+      totalSeg: totalSeg, curved: curved, dropped: dropped,
+    };
+  }
 
-    // Pass 2: fill segment geometry (2 verts/segment). vStart/vCount/baseAlpha
-    // persist per-edge (indexed by the SAME `i` as edges[]) so a later filter
-    // change (repaintEdgeFilter) can re-derive each edge's alpha and splat it
-    // across exactly its own vertex range without rebuilding geometry.
-    // vStart defaults to -1 (untouched = dropped edge, never written below).
+  // Pass 2: fill segment geometry (2 verts/segment). vStart/vCount/baseAlpha
+  // persist per-edge (indexed by the SAME `i` as edges[]) so a later filter
+  // change (repaintEdgeFilter) can re-derive each edge's alpha and splat it
+  // across exactly its own vertex range without rebuilding geometry.
+  // vStart defaults to -1 (untouched = dropped edge, never written below).
+  function fillEdgeBuffers(ctx, routing) {
+    var positions = ctx.positions, nodeColors = ctx.nodeColors;
+    var shortLen = ctx.shortLen, longLen = ctx.longLen, span = ctx.span;
+    var E = routing.E, srcRow = routing.srcRow, dstRow = routing.dstRow;
+    var ctrl = routing.ctrl, segCnt = routing.segCnt, totalSeg = routing.totalSeg;
     var seg = new Float32Array(totalSeg * 6);
     var alpha = new Float32Array(totalSeg * 2);
     var ecol = new Float32Array(totalSeg * 6);
@@ -233,7 +241,7 @@ window.BRAIN = window.BRAIN || {};
     var baseAlpha = new Float32Array(E);
     var p = 0;  // vertex pointer (counts vertices, *3 for floats)
     var pa = bezierBuffers();
-    for (i = 0; i < E; i++) {
+    for (var i = 0; i < E; i++) {
       if (srcRow[i] < 0 || segCnt[i] === 0) continue;
       var so = srcRow[i] * 3, to = dstRow[i] * 3;
       var a = edgeAlpha(positions[so], positions[so + 1], positions[so + 2],
@@ -244,11 +252,20 @@ window.BRAIN = window.BRAIN || {};
       vCount[i] = p - vBefore;
       baseAlpha[i] = a;
     }
+    return { seg: seg, alpha: alpha, ecol: ecol, vStart: vStart, vCount: vCount, baseAlpha: baseAlpha };
+  }
 
+  // Build the THREE.LineSegments mesh from filled buffers and add it to the
+  // scene. Depth-test off so the synapse web floats OVER the opaque brain
+  // hull — the opaque shell (depthWrite:true) would otherwise occlude every
+  // interior tract, leaving only the front-most edges. renderOrder 1 draws
+  // the web after the hull (0) and under the node cloud (2). source: DS Spec
+  // V-01.
+  function buildEdgeMesh(buffers, totalSeg) {
     var geom = new THREE.BufferGeometry();
-    geom.setAttribute('position', new THREE.BufferAttribute(seg, 3));
-    geom.setAttribute('ealpha', new THREE.BufferAttribute(alpha, 1));
-    geom.setAttribute('ecolor', new THREE.BufferAttribute(ecol, 3));
+    geom.setAttribute('position', new THREE.BufferAttribute(buffers.seg, 3));
+    geom.setAttribute('ealpha', new THREE.BufferAttribute(buffers.alpha, 1));
+    geom.setAttribute('ecolor', new THREE.BufferAttribute(buffers.ecol, 3));
     // Highlight flag per vertex (0 = data colour, 1 = mix to accent). Splatted
     // by highlightNode over an edge's own vertex range, exactly like ealpha;
     // starts all-zero so a fresh build shows no selection tint.
@@ -258,23 +275,16 @@ window.BRAIN = window.BRAIN || {};
       vertexShader: VERT, fragmentShader: FRAG,
       uniforms: { uAccent: { value: new THREE.Color(accentHex()) } },
       transparent: true, blending: THREE.NormalBlending, depthWrite: false,
-      // depthTest off so the synapse web floats OVER the opaque brain hull — the
-      // opaque shell (depthWrite:true) would otherwise occlude every interior
-      // tract, leaving only the front-most edges. renderOrder 1 draws the web
-      // after the hull (0) and under the node cloud (2). source: DS Spec V-01.
       depthTest: false,
     });
     var lines = new THREE.LineSegments(geom, mat);
     lines.renderOrder = 1;
     lines.frustumCulled = false;
     BRAIN.world.add(lines);
-    BRAIN.edgeLines = lines;
-    BRAIN.edgeCount = totalSeg;
-    BRAIN.curvedEdgeCount = curved;
-    BRAIN.droppedEdgeCount = dropped;
-    // Persisted for repaintEdgeFilter() (below) — keyed by the same edge
-    // index `i` as the `edges` array passed in.
-    BRAIN.edgeIndex = { srcRow: srcRow, dstRow: dstRow, vStart: vStart, vCount: vCount, baseAlpha: baseAlpha };
+    return lines;
+  }
+
+  function logEdgeStats(E, dropped, curved, totalSeg) {
     console.log('[brain] edges:', E, '| drawn:', E - dropped, '| tract-routed:', curved,
       '-> segments:', totalSeg);
     if (dropped > 0) {
@@ -282,6 +292,36 @@ window.BRAIN = window.BRAIN || {};
         (100 * dropped / Math.max(E, 1)).toFixed(2) +
         '%) whose endpoint was filtered out of the node set.');
     }
+  }
+
+  // edges, positions, indexOfId, nodeColors as before; regionKey/hemi from
+  // layout.js; atlas from anatomy.js (for tract bows).
+  BRAIN.buildEdges = function (edges, positions, indexOfId, nodeColors, regionKey, hemi, atlas) {
+    var R = BRAIN.TARGET_RADIUS || 80;
+    // Built once per call (never inside the per-edge loop) and threaded through
+    // both passes so each helper stays within the §4.4 4-parameter limit.
+    var ctx = {
+      edges: edges, positions: positions, indexOfId: indexOfId, nodeColors: nodeColors,
+      regionKey: regionKey, hemi: hemi, atlas: atlas, R: R,
+      shortLen: SHORT_FRAC * R, longLen: LONG_FRAC * R,
+    };
+    ctx.span = Math.max(ctx.longLen - ctx.shortLen, 1e-3);
+
+    var routing = resolveEdgeRouting(ctx);
+    var buffers = fillEdgeBuffers(ctx, routing);
+    var lines = buildEdgeMesh(buffers, routing.totalSeg);
+
+    BRAIN.edgeLines = lines;
+    BRAIN.edgeCount = routing.totalSeg;
+    BRAIN.curvedEdgeCount = routing.curved;
+    BRAIN.droppedEdgeCount = routing.dropped;
+    // Persisted for repaintEdgeFilter() (below) — keyed by the same edge
+    // index `i` as the `edges` array passed in.
+    BRAIN.edgeIndex = {
+      srcRow: routing.srcRow, dstRow: routing.dstRow,
+      vStart: buffers.vStart, vCount: buffers.vCount, baseAlpha: buffers.baseAlpha,
+    };
+    logEdgeStats(routing.E, routing.dropped, routing.curved, routing.totalSeg);
     return lines;
   };
 
