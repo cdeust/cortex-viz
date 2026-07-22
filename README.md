@@ -42,6 +42,15 @@ Restart your Claude Code session, then launch the visualizer:
 
 One launcher opens all six reading angles (Graph · Brain · Trace · Knowledge · Wiki · Board) in the browser, served live from the Cortex store, your session JSONL, the code graph, and git.
 
+### Works without Cortex
+
+No Cortex, no PostgreSQL, no setup — cortex-viz is still useful on its own. The **Trace** view (the default landing view) reads only `~/.claude/projects/*.jsonl` and your local git: every Claude Code session becomes a navigable domain → session → prompt → action → file chain, with per-file diffs and commit history. If you use Claude Code, the data is already on your disk.
+
+- Just install the plugin and run `/cortex-visualize`. When Cortex's database isn't reachable, the server logs one line and starts in **no-DB mode** automatically: Trace is fully live; the five DB-backed views (Graph, Brain, Knowledge, Wiki, Board) appear greyed out with an install pointer instead of erroring.
+- To skip the database probe entirely, set `CORTEX_VIZ_NO_DB=1` (or pass `--no-db` when running the standalone server directly).
+
+Installing [Cortex](https://github.com/cdeust/Cortex) later lights up the other five views against the same UI — no reconfiguration.
+
 <details>
 <summary><strong>More options</strong> (Clone, manual run)</summary>
 
@@ -50,6 +59,8 @@ One launcher opens all six reading angles (Graph · Brain · Trace · Knowledge 
 git clone https://github.com/cdeust/cortex-viz.git && cd cortex-viz
 pip install -e .
 DATABASE_URL=postgresql://127.0.0.1:5432/cortex python3 -m cortex_viz
+# Without Cortex/Postgres (Trace view only):
+CORTEX_VIZ_NO_DB=1 python3 -m cortex_viz
 ```
 
 </details>

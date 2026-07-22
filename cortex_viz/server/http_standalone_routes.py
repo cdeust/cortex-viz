@@ -20,6 +20,11 @@ from cortex_viz.server.http_standalone_endpoints import (
     serve_static,
     serve_stats,
 )
+from cortex_viz.server.http_standalone_nodb import (
+    requires_store,
+    serve_capabilities,
+    serve_db_unavailable,
+)
 
 
 def _feature_moved(handler, feature: str, use_instead: str) -> None:
@@ -58,6 +63,18 @@ def _route_unified_get(
     path = handler.path
     path_no_qs = path.split("?")[0]
     ui_root = html_path.parent
+    if path_no_qs == "/api/capabilities":
+        # Boot signal for the frontend: which views this instance can
+        # serve (no-DB mode greys the five DB-backed tabs).
+        serve_capabilities(handler, store)
+        return
+    if store is None and requires_store(path_no_qs):
+        # No-DB mode (explicit --no-db, or the startup probe found
+        # PostgreSQL down): DB-backed routes answer an honest 503
+        # instead of a psycopg stack trace. Trace/static routes below
+        # never consume the store and serve normally.
+        serve_db_unavailable(handler, path_no_qs)
+        return
     if path_no_qs == "/api/dashboard":
         # Memory graph (entities + memories + heat) for the atom-shell 3D view.
         from cortex_viz.server.http_standalone_endpoints import serve_dashboard

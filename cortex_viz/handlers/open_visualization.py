@@ -19,6 +19,10 @@ from typing import Any
 
 from cortex_viz.server.http_launcher import launch_server, open_in_browser
 from cortex_viz.handlers._tool_meta import READ_ONLY_EXTERNAL
+from cortex_viz.infrastructure.db_probe import (
+    DB_UNREACHABLE_ERRORS,
+    no_db_requested,
+)
 from cortex_viz.infrastructure.memory_read import MemoryReader
 from cortex_viz.infrastructure.schema_migrate import (
     MigrationResult,
@@ -46,7 +50,13 @@ schema = {
         "(i.e. when the user opens the Graph view). First paint of the "
         "skeleton lands in ~1 s; the full graph fills in behind it and "
         "depends on the DB size (seconds for typical, ~1-3 min on a 100k+ "
-        "memory store). Returns {url, message, dev_source, bootstrap, layout}."
+        "memory store). Works WITHOUT Cortex too: when its PostgreSQL is "
+        "unreachable (or CORTEX_VIZ_NO_DB=1 / --no-db is set) the server "
+        "starts in no-DB mode — the Trace view is fully live from "
+        "~/.claude session logs + git, and the five DB-backed views "
+        "(Graph, Brain, Knowledge, Wiki, Board) appear greyed out with an "
+        "install pointer instead of erroring. "
+        "Returns {url, message, dev_source, bootstrap, layout}."
     ),
     "inputSchema": {
         "type": "object",
@@ -343,10 +353,25 @@ def _ensure_schema_ready() -> dict[str, Any] | None:
     result (see ``_schema_error_result``) when the schema remains
     unusable after that one attempt; the caller MUST NOT launch a
     server or open a browser in that case.
+
+    No-DB paths (both return ``None`` — the launch proceeds and the
+    standalone server serves Trace-only):
+      * explicit ``CORTEX_VIZ_NO_DB=1`` — the preflight is skipped
+        outright, no connection is attempted;
+      * PostgreSQL unreachable (``DB_UNREACHABLE_ERRORS`` out of the
+        preflight query) — "database down" is a supported degraded mode
+        (the standalone server probes again at startup and auto-enters
+        no-DB mode with one actionable stderr line), NOT the
+        old-schema condition this preflight exists to block on.
     """
+    if no_db_requested():
+        return None
     reader = _build_memory_reader()
     try:
-        result = check_schema(reader)
+        try:
+            result = check_schema(reader)
+        except DB_UNREACHABLE_ERRORS:
+            return None
         if result.ok:
             return None
         migration = run_schema_migration(reader.url)

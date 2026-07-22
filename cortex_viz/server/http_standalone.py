@@ -94,17 +94,31 @@ def _get_ui_root() -> Path:
     raise RuntimeError(f"UI files not found — looked in {[str(c) for c in candidates]}")
 
 
-def _get_store():
-    """Return the read-only viz store for this standalone process.
+def _get_store(no_db: bool):
+    """Return the read-only viz store for this standalone process, or
+    ``None`` when this process runs without a database.
 
     The boundary cut (thin-viz): cortex-viz never instantiates Cortex's
     MemoryStore (writes, schema init, embeddings, the full storage layer).
     It reads Cortex's shared PostgreSQL through MemoryReader, which exposes
     exactly the 14 read methods + dict-row `_conn` the viz routes consume.
-    """
-    from cortex_viz.infrastructure.memory_read import MemoryReader
 
-    return MemoryReader()
+    ``no_db=True`` (the ``--no-db`` flag / ``CORTEX_VIZ_NO_DB=1``) skips
+    PostgreSQL entirely. Otherwise the reader is probed once at startup
+    (``db_probe.open_store_or_none``): an unreachable database logs one
+    actionable line and falls back to ``None`` instead of killing the
+    server before it can bind — the Trace view needs no DB at all.
+    """
+    if no_db:
+        print(
+            "[cortex-viz] no-DB mode (explicit): serving the Trace view "
+            "from ~/.claude session logs + git; DB-backed views disabled.",
+            file=sys.stderr,
+        )
+        return None
+    from cortex_viz.infrastructure.db_probe import open_store_or_none
+
+    return open_store_or_none()
 
 
 def _build_unified_handler(ui_root: Path, store) -> type:
@@ -333,7 +347,7 @@ def _warm_tile_renderer() -> None:
         pass
 
 
-def main() -> None:
+def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Cortex standalone HTTP server")
     # The ``methodology`` type was removed in Gap 10 — its handler
     # imported ``build_methodology_graph`` (never existed) so it could
@@ -341,15 +355,31 @@ def main() -> None:
     # same need without the broken HTTP surface.
     parser.add_argument("--type", required=True, choices=["unified"])
     parser.add_argument("--port", type=int, required=True)
-    args = parser.parse_args()
+    parser.add_argument(
+        "--no-db",
+        action="store_true",
+        help=(
+            "Run without Cortex's PostgreSQL: skip the store entirely and "
+            "serve the Trace view only (equivalent to CORTEX_VIZ_NO_DB=1). "
+            "Without this flag an unreachable database auto-falls-back to "
+            "the same mode after one startup probe."
+        ),
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = _parse_args()
 
     # _auto_enable_ap() only resolves the AP binary path; the
     # per-project analyze_codebase roster walk is opt-in via
     # CORTEX_AP_AUTO_INDEX=1 (it pinned CPU for 30+ min otherwise).
     _auto_enable_ap()
 
+    from cortex_viz.infrastructure.db_probe import no_db_requested
+
     ui_root = _get_ui_root()
-    store = _get_store()
+    store = _get_store(no_db=args.no_db or no_db_requested())
     handler_cls = _build_unified_handler(ui_root, store)
 
     # Kick the galaxy build at launch (user direction 2026-06-12) so the
@@ -357,9 +387,12 @@ def main() -> None:
     # for the first GRAPH-tab visit. Non-blocking: ensure_build_started
     # spawns _kick_background_build on a daemon thread and acquires the
     # build lock non-blocking, so serve_forever starts immediately.
-    from cortex_viz.server.http_standalone_graph import ensure_build_started
+    # No-DB mode: no store → no graph to build; the Graph tab is greyed
+    # out client-side (capabilities.js) and its routes answer 503.
+    if store is not None:
+        from cortex_viz.server.http_standalone_graph import ensure_build_started
 
-    ensure_build_started(store)
+        ensure_build_started(store)
 
     server = _bind_server(handler_cls, args.port)
     bound_port = server.server_address[1]
@@ -381,7 +414,9 @@ def main() -> None:
     # Warm the datashader/numba JIT off the request thread so the FIRST real
     # tile request does not pay one-time kernel compilation (~3-4 s). The LOD
     # data path is already O(1) in N; this removes the only remaining cold cost.
-    threading.Thread(target=_warm_tile_renderer, daemon=True).start()
+    # Skipped in no-DB mode: /api/tile/* is DB-backed and answers 503.
+    if store is not None:
+        threading.Thread(target=_warm_tile_renderer, daemon=True).start()
 
     print(f"[cortex] Standalone {args.type} server at {url}", file=sys.stderr)
     server.serve_forever()
