@@ -17,8 +17,10 @@ from __future__ import annotations
 
 import inspect
 
+import psycopg
 import pytest
 
+from cortex_viz.infrastructure.memory_config import get_memory_settings
 from cortex_viz.infrastructure.memory_read import MemoryReader, _resolve_database_url
 
 # The exact surface grepped from mcp_server/server/ (store.<method>( call sites).
@@ -89,9 +91,21 @@ def test_default_database_url() -> None:
 
 @pytest.fixture
 def reader():
+    r = MemoryReader()
+    # MemoryReader() is lazy — pools open on first query, so construction
+    # alone can never fail and the old try/except-around-init skip was a
+    # no-op: in environments without the shared Cortex Postgres (CI) the
+    # first query blocked until the pool timeout instead of skipping.
+    # Probe explicitly with a bounded connect; the bound reuses
+    # POOL_INTERACTIVE_TIMEOUT_S (memory_config), the same budget the
+    # reader itself grants an interactive connection.
     try:
-        r = MemoryReader()
-    except Exception as exc:  # noqa: BLE001 — any connect failure → skip
+        probe = psycopg.connect(
+            r.url,
+            connect_timeout=int(get_memory_settings().POOL_INTERACTIVE_TIMEOUT_S),
+        )
+        probe.close()
+    except psycopg.Error as exc:
         pytest.skip(f"no Cortex database reachable: {exc}")
     yield r
     r.close()
