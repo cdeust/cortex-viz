@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/mcp-claude--code-blue.svg" alt="MCP">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License">
   <img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+">
-  <img src="https://img.shields.io/badge/version-2.6.3-brightgreen.svg" alt="Version 2.6.3">
+  <img src="https://img.shields.io/badge/version-2.7.0-brightgreen.svg" alt="Version 2.7.0">
 </p>
 
 # cortex-viz
@@ -138,6 +138,8 @@ cortex-viz                          # or: python -m cortex_viz   (stdio MCP tran
 ```
 
 Set `DATABASE_URL` to the shared Cortex database. `open_visualization` launches the galaxy UI in the browser, bound to `127.0.0.1`.
+
+**Other MCP hosts.** Any MCP host can launch the server — it is a plain stdio process. From a clone after `pip install -e .`, register `{"command": "python3", "args": ["-m", "cortex_viz"]}` in your host's MCP config (Gemini CLI `~/.gemini/settings.json`, Cursor `.cursor/mcp.json`, Windsurf `~/.codeium/windsurf/mcp_config.json`, VS Code `.vscode/mcp.json` under `"servers"`, or Codex CLI: `codex mcp add cortex-viz -- python3 -m cortex_viz`) and the `open_visualization` tool opens the UI in the browser. Be clear about what you'll see: the **Trace** view reads Claude Code session JSONLs under `~/.claude/projects/` — it is Claude-data-specific and stays empty if you don't use Claude Code — and the galaxy/brain/knowledge/wiki/board views need a [Cortex](https://github.com/cdeust/Cortex) store to read. On a non-Claude host, cortex-viz is only useful as a viewer over data those two produce.
 
 ## Boundary
 

@@ -64,7 +64,7 @@ def layout(
     except ImportError as exc:  # pragma: no cover
         raise ImportError(
             "igraph is required for layout — install the 'viz-tile' extra: "
-            "pip install neuro-cortex-memory[viz-tile]"
+            "pip install cortex-viz[viz-tile]"
         ) from exc
 
     if not node_ids:

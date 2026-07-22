@@ -75,7 +75,7 @@ def render_tile_png(
     except ImportError as exc:  # pragma: no cover
         raise ImportError(
             "datashader + pandas are required for tile rendering — install "
-            "the 'viz-tile' extra: pip install neuro-cortex-memory[viz-tile]"
+            "the 'viz-tile' extra: pip install cortex-viz[viz-tile]"
         ) from exc
 
     min_x, min_y, max_x, max_y = tile_world_bbox(z, x, y)
