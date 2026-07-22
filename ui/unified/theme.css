@@ -346,6 +346,45 @@ body::before {
   box-shadow: none; text-shadow: none;
 }
 
+/* No-DB mode (capabilities.js): DB-backed view tabs stay visible so the
+   user sees what Cortex would add, but are inert and visually recessed. */
+.view-btn--nodb,
+.view-btn--nodb:hover {
+  opacity: 0.35;
+  cursor: not-allowed;
+  color: var(--text-muted);
+}
+
+/* No-DB explanatory panel — bottom-left card, dismissible. */
+#nodb-panel {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  max-width: 320px;
+  z-index: 120;
+  padding: 12px 14px;
+  background: color-mix(in oklab, var(--surface) 92%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  font-family: var(--sans);
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+#nodb-panel .nodb-title { color: var(--text); font-weight: 600; margin-bottom: 4px; }
+#nodb-panel .nodb-link { display: inline-block; margin-top: 6px; color: var(--accent-ink); }
+#nodb-panel code { font-family: var(--mono, monospace); font-size: 11px; }
+#nodb-panel #nodb-panel-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+
 /* Filter chips — match design's .chip */
 .filter-btn {
   display: inline-flex; align-items: center; gap: 6px;

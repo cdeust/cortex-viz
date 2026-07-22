@@ -109,7 +109,15 @@ def serve_activity_ingest(handler, store) -> None:
     onto the live activity stream so every open ``/api/activity/stream``
     subscriber paints it within ~1 s. Fire-and-forget: a malformed or
     actionless event returns 204 and never errors the hook.
+
+    No-DB mode (``store is None``): the durable log lives in PostgreSQL
+    (``session_activity``), so the event is acknowledged and dropped —
+    204, same fire-and-forget contract, no error back to the hook.
     """
+    if store is None:
+        handler.send_response(204)
+        handler.end_headers()
+        return
     from cortex_viz.core.activity_graph import event_to_graph, normalize_event
     from cortex_viz.infrastructure import activity_store
     from cortex_viz.server.activity_stream import stream as _activity_stream

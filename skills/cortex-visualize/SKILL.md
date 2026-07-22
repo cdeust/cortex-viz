@@ -19,9 +19,16 @@ and **Pipeline**.
 **Use this skill when:** the user wants a visual overview, is exploring the
 knowledge/codebase graph, or needs to present or screenshot Cortex's state.
 
-**Requires:** the `cortex-viz` MCP installed alongside Cortex. If its tools are
-not available, tell the user to install cortex-viz
-(https://github.com/cdeust/cortex-viz).
+**Requires:** the `cortex-viz` MCP. If its tools are not available, tell the
+user to install cortex-viz (https://github.com/cdeust/cortex-viz).
+
+**Works without Cortex:** cortex-viz does NOT require the Cortex memory
+engine to be useful. When Cortex's PostgreSQL is unreachable (or
+`CORTEX_VIZ_NO_DB=1` is set) the server starts in no-DB mode: the **Trace**
+view — the per-session execution drill over `~/.claude` session logs + git —
+is fully live, and the five DB-backed views (Graph, Brain, Knowledge, Wiki,
+Board) appear greyed out with an install pointer instead of erroring. So
+launch it freely even if the user hasn't installed Cortex.
 
 ## Workflow
 

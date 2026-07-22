@@ -381,6 +381,9 @@
   // renders zero memory nodes, so without this the HUD read "Memories 0"
   // against a full store. /api/stats is a handful of COUNT(*) queries.
   function fetchStats() {
+    // No-DB mode (capabilities.js): /api/stats is PG-backed and answers
+    // 503 — skip the poll instead of warning every 30 s.
+    if (window.JUG && JUG.capabilities && JUG.capabilities.db === false) return;
     fetch('/api/stats')
       .then(function(res) { if (!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
       .then(function(s) { _lastServerMeta = s; updateStats(s); })

@@ -93,6 +93,11 @@
   function start() {
     if (es) return es;
     if (typeof EventSource === 'undefined') return null;
+    // No-DB mode: the durable session_activity log is PG-backed and the
+    // stream answers 503 — an EventSource would 503-retry forever.
+    // capabilities.js also calls stopActivityStream() when its probe
+    // resolves after this boot call already opened the stream.
+    if (window.JUG && JUG.capabilities && JUG.capabilities.db === false) return null;
     // Drain the deferred batches the moment the galaxy payload takes over
     // lastData (view switch to Graph re-emits state:lastData via the bridge).
     if (window.JUG && typeof JUG.on === 'function') {

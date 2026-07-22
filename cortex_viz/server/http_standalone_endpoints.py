@@ -436,8 +436,23 @@ def serve_graph_node(handler, store) -> None:
 
         # Coarse LOD dot drill-down: ``lod:L:cx:cy`` resolves to the REAL nodes
         # in that cell via a raw-layout bbox pick. source: cortex-viz-scaling.md
-        # DECISION 4.
+        # DECISION 4. No-DB mode: the layout store is PG-backed, so the
+        # cell degrades to an honest empty resolve instead of erroring —
+        # this endpoint must stay usable (the Trace detail panel resolves
+        # file paths through it with hasattr-guarded store reads).
         if kind == "lod":
+            if store is None:
+                send_json_ok(
+                    handler,
+                    {
+                        "id": node_id,
+                        "kind": "lod",
+                        "found": False,
+                        "member_count": 0,
+                        "members": [],
+                    },
+                )
+                return
             send_json_ok(handler, _resolve_lod_cell(store, node_id))
             return
 
