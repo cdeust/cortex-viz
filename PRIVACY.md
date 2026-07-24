@@ -1,4 +1,4 @@
-# Privacy Policy — cortex-viz
+# Privacy Policy: cortex-viz
 
 _Last updated: 2026-07-22_
 
@@ -9,8 +9,8 @@ serves, and what leaves your machine.
 ## What the server processes
 
 - Your local Cortex database (PostgreSQL or SQLite), read-only, when present.
-- Claude Code artifacts under `~/.claude/` — session transcripts
-  (`projects/**/*.jsonl`), wiki pages, profiles — and local git state.
+- Claude Code artifacts under `~/.claude/`: session transcripts
+  (`projects/**/*.jsonl`), wiki pages, profiles, and local git state.
 - In `--no-db` mode, only the `~/.claude/` artifacts and git.
 
 The UI is served on **127.0.0.1 only**, with host-header and same-origin
@@ -21,10 +21,10 @@ guards; it is not reachable from your network.
 - **Your data: nothing.** No memory content, session content, code, or
   metadata is transmitted to the author, to Anthropic, or to any analytics
   service. There is no telemetry.
-- **One disclosed exception — a CDN asset fetch:** the 3D brain view loads
+- **One disclosed exception, a CDN asset fetch:** the 3D brain view loads
   the three.js library (and related loaders) from the public unpkg CDN at
   page load. This transfers a standard library request to the CDN (your IP
-  and a static file path — no user content). The other views use only
+  and a static file path, no user content). The other views use only
   vendored, locally-served assets and work fully offline.
 
 ## Your controls
