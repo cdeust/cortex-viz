@@ -3,6 +3,11 @@
 All notable changes to cortex-viz are documented in this file.
 Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in git history.
 
+## [2.7.1] - 2026-07-25
+
+### Fixed
+- Redaction pass on the two user-visible panel stage hints that carried em dashes (house rule: zero in published copy) (#31). Surface audit recorded in #31: cortex-viz generates no LLM prose, so no runtime redaction machinery applies here; README/docs copy sweep tracked in #32.
+
 ## [2.7.0] - 2026-07-22
 
 ### Added

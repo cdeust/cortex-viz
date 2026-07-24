@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/mcp-claude--code-blue.svg" alt="MCP">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License">
   <img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+">
-  <img src="https://img.shields.io/badge/version-2.7.0-brightgreen.svg" alt="Version 2.7.0">
+  <img src="https://img.shields.io/badge/version-2.7.1-brightgreen.svg" alt="Version 2.7.1">
 </p>
 
 # cortex-viz
