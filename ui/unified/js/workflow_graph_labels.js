@@ -80,11 +80,11 @@
   };
 
   var STAGE_HINTS = {
-    labile:          'Fresh — still fragile, can be updated or forgotten easily.',
+    labile:          'Fresh: still fragile, can be updated or forgotten easily.',
     early_ltp:       'Starting to stick. A few more recalls and it will stabilize.',
     late_ltp:        'Settled. It would take active forgetting to lose this.',
     consolidated:    'Baked in. This is part of the long-term picture.',
-    reconsolidating: 'Recalled and reopened — briefly fragile again while it re-settles.',
+    reconsolidating: 'Recalled and reopened, briefly fragile again while it re-settles.',
   };
 
   // ── Edge kinds — what the relationship means in English ──────────────
