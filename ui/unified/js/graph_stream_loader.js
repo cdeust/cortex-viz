@@ -138,9 +138,24 @@ window.JUG = window.JUG || {};
                 counts.edges + '/' + counts.edge_total + ' edges,',
                 'done=' + sawDone);
             }
-            resolve({ ok: complete, truncated: !complete,
+            var result = { ok: complete, truncated: !complete,
                       nodes: counts.nodes, edges: counts.edges,
-                      meta: counts.meta || {} });
+                      // Snapshot totals the render was drawn from — the
+                      // coverage indicator (issue #36) reads these as the
+                      // staleness denominator (node_total/edge_total) and
+                      // captured_at as the snapshot age origin. revision is
+                      // the AP#55 snapshot revision when the server frames
+                      // carry it (absent on older servers → null, handled).
+                      node_total: counts.node_total, edge_total: counts.edge_total,
+                      revision: (counts.meta && counts.meta.revision != null)
+                                ? counts.meta.revision : null,
+                      captured_at: Date.now(),
+                      meta: counts.meta || {} };
+            // Publish the last full-stream outcome for the coverage indicator.
+            // Read-only external probe (same pattern as JUG.__wfgRendered); no
+            // production path mutates through it.
+            if (window.JUG) window.JUG.__streamResult = result;
+            resolve(result);
             return;
           }
           requestAnimationFrame(pump);

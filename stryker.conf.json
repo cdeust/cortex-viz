@@ -1,12 +1,13 @@
 {
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
-  "_comment": "Scoped per-commit mutation gate (coding-standards §12.1/§12.5): mutate ONLY the load-bearing logic this change introduced — the extracted pure seams — not the surrounding DOM code the JS suite does not yet cover. Line ranges track: renderer.js computeNeighborSet+linkTier, workflow_graph_filters.js buildPredicate, workflow_graph.js wfgLodTier.",
+  "_comment": "Scoped per-commit mutation gate (coding-standards §12.1/§12.5): mutate ONLY the load-bearing logic THIS change touched — the pure seams issue #36 added — not pre-existing code or DOM writers. Ranges: workflow_graph.js wfgEdgeCoverage, coverage_model.js verdict logic, coverage_indicator.js gatherSources + fmtAge. The prior seams (renderer computeNeighborSet/linkTier, filters buildPredicate, wfgLodTier) were unchanged here; their mutation state is recorded in tests/js/MUTATION_NOTES.md from issue #35.",
   "testRunner": "vitest",
   "reporters": ["clear-text", "progress"],
   "coverageAnalysis": "perTest",
   "mutate": [
-    "ui/unified/js/renderer.js:18-41",
-    "ui/unified/js/workflow_graph_filters.js:33-108",
-    "ui/unified/js/workflow_graph.js:29-35"
+    "ui/unified/js/workflow_graph.js:48-63",
+    "ui/unified/js/coverage_model.js:30-253",
+    "ui/unified/js/coverage_indicator.js:55-73",
+    "ui/unified/js/coverage_indicator.js:84-101"
   ]
 }

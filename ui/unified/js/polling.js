@@ -32,6 +32,10 @@
         return res.json();
       })
       .then(function(p) {
+        // Publish build progress for the coverage indicator (issue #36):
+        // full_ready / baseline_ready / phase drive the staleness + "build in
+        // progress" degraded mode. Reuses this existing poll — no extra fetch.
+        if (window.JUG) window.JUG.__progress = p;
         // Counts come from the phase loader's cumulative store
         // (JUG.state.lastData). progress.node_count reflects the
         // server-side cache, but we want the panel to mirror what
@@ -386,7 +390,15 @@
     if (window.JUG && JUG.capabilities && JUG.capabilities.db === false) return;
     fetch('/api/stats')
       .then(function(res) { if (!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
-      .then(function(s) { _lastServerMeta = s; updateStats(s); })
+      .then(function(s) {
+        _lastServerMeta = s;
+        // Publish the store totals for the coverage indicator (issue #36) so
+        // it reads the same /api/stats figures the HUD does — one poll, one
+        // source of truth, no duplicate network.
+        if (window.JUG) window.JUG.__storeMeta = s;
+        updateStats(s);
+        if (window.JUG && JUG.emit) JUG.emit('coverage:refresh');
+      })
       .catch(function(err) { console.warn('[cortex] stats poll error:', err.message); });
   }
 

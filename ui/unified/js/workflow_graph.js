@@ -34,6 +34,34 @@
     };
   }
 
+  // Edge-set reduction for one render, and its coverage accounting (issue #36).
+  // Pure: given the input edges, the id-set of rendered nodes, and whether the
+  // EXTREME tier is engaged, return the SURVIVING raw edges plus the two
+  // DISJOINT drop counts the coverage indicator names —
+  //   * droppedEdges  = dense `calls` edges the EXTREME LOD tier sheds (0 when
+  //                     not extreme): a genuine aggregation the user must see.
+  //   * danglingEdges = edges whose endpoint was sampled out of the node set:
+  //                     a data-integrity prune, at every tier.
+  // Post: droppedEdges + danglingEdges + rendered.length === input.length, so
+  // the accounting is exhaustive (no edge is silently unaccounted for). mount()
+  // consumes `rendered`; the counts ride on JUG.__wfgRendered.
+  function wfgEdgeCoverage(dataEdges, nodeIdSet, extreme) {
+    var input = dataEdges || [];
+    var afterLod = extreme
+      ? input.filter(function (e) { return e.kind !== 'calls'; })
+      : input;
+    var rendered = afterLod.filter(function (e) {
+      var s = typeof e.source === 'object' ? e.source.id : e.source;
+      var t = typeof e.target === 'object' ? e.target.id : e.target;
+      return nodeIdSet[s] && nodeIdSet[t];
+    });
+    return {
+      rendered: rendered,
+      droppedEdges: input.length - afterLod.length,
+      danglingEdges: afterLod.length - rendered.length,
+    };
+  }
+
   // Tokens — kind-driven radii, colors, edge distances, strengths.
   var KIND_RADIUS = {
     domain: 26, tool_hub: 14, agent: 10, skill: 10, command: 8,
@@ -357,20 +385,13 @@
     // really dense symbol↔symbol edges (`calls`) under extreme load
     // to keep tick-rate manageable.
     var EXTREME = _lod.extreme;
-    var renderedEdges;
-    if (EXTREME) {
-      renderedEdges = (data.edges || []).filter(function (e) {
-        return e.kind !== 'calls';
-      });
-    } else {
-      renderedEdges = data.edges || [];
-    }
-    // Drop dangling edges — endpoints must exist in the nodes array.
-    renderedEdges = renderedEdges.filter(function (e) {
-      var s = typeof e.source === 'object' ? e.source.id : e.source;
-      var t = typeof e.target === 'object' ? e.target.id : e.target;
-      return _nidSet[s] && _nidSet[t];
-    });
+    // Coverage honesty (issue #36): the edge reduction AND its accounting come
+    // from the pure wfgEdgeCoverage seam so the collapsed magnitude the
+    // indicator DISPLAYS (criterion 3) is computed by tested logic, not
+    // inferred from a thinner picture. `_cov.rendered` is the surviving raw
+    // edge set (LOD `calls`-drop + dangling prune already applied).
+    var _cov = wfgEdgeCoverage(data.edges || [], _nidSet, EXTREME);
+    var renderedEdges = _cov.rendered;
     var edges = renderedEdges.map(function (e) {
       return Object.assign({}, e, {
         source: typeof e.source === 'object' ? e.source.id : e.source,
@@ -388,7 +409,13 @@
     // and edge arrays this render draws, with the same kind breakdown polling.js
     // needs (entities = nodes − domain − memory − discussion).
     var _rc = { nodes: nodes.length, edges: edges.length,
-                domain: 0, memory: 0, discussion: 0 };
+                domain: 0, memory: 0, discussion: 0,
+                // Coverage-honesty fields (issue #36) — additive; polling.js
+                // reads only the counts above. lodTier + droppedEdges let the
+                // coverage indicator name the client-side collapse.
+                lodTier: _lod,
+                droppedEdges: _cov.droppedEdges,
+                danglingEdges: _cov.danglingEdges };
     for (var _rci = 0; _rci < nodes.length; _rci++) {
       var _rk = nodes[_rci].kind || nodes[_rci].type || '';
       if (_rk === 'domain') _rc.domain++;
@@ -1409,5 +1436,6 @@
   window.JUG._wfg.nodeColor  = nodeColor;
   window.JUG._wfg.labelOf    = labelOf;
   window.JUG._wfg.lodTier    = wfgLodTier;
+  window.JUG._wfg.edgeCoverage = wfgEdgeCoverage;
   window.JUG.renderWorkflowGraph = renderWorkflowGraph;
 })();
