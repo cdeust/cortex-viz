@@ -1,0 +1,48 @@
+name: CodeQL
+
+# Issue #37 criterion 7. cortex-viz is HALF browser-executed code: the
+# standalone HTTP server (cortex_viz/) is Python, but the UI it serves is 91
+# JS files / ~25k lines that run in the user's browser. Both halves are
+# analysed, and the JS half is the whole reason this is not Python-only.
+#
+# On a SCHEDULE, not only PR: a new query pack lands out-of-band against code
+# that has not changed, and the weekly cron is what catches it — inaction
+# never opens a PR.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 5 * * 1"   # Mondays 05:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write   # upload analysis SARIF to code scanning
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, javascript-typescript]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@4187e74d05793876e9989daffde9c3e66b4acd07 # v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-and-quality
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@4187e74d05793876e9989daffde9c3e66b4acd07 # v3
+        with:
+          category: "/language:${{ matrix.language }}"

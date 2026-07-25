@@ -1,0 +1,30 @@
+name: OpenSSF Scorecard
+
+# Issue #37 criterion 8. cortex-viz adopts the ecosystem's single Scorecard
+# definition as a CALL SITE, not a copy: the reusable workflow lives in
+# cdeust/automatised-pipeline (AP #66/#77), so the pinned action SHAs and the
+# report-only policy are maintained in one place. Scorecard grades repo-level
+# posture and is language-agnostic — SBOM and build provenance stay per-repo
+# in release.yml because their toolchains differ.
+#
+# The first score is a BASELINE recorded as-is (§8); it deliberately does not
+# gate a PR — a contributor cannot fix repo-level policy inside their diff.
+
+on:
+  schedule:
+    - cron: "0 7 * * 2"   # Tuesdays 07:00 UTC — posture drifts by inaction
+  branch_protection_rule:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  scorecard:
+    uses: cdeust/automatised-pipeline/.github/workflows/scorecard.yml@main
+    permissions:
+      security-events: write   # upload SARIF to code scanning
+      id-token: write          # publish signed results to the OpenSSF API
+      contents: read
+      actions: read
