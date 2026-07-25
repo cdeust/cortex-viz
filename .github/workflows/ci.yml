@@ -16,3 +16,23 @@ jobs:
         run: python -m pip install -e ".[dev]"
       - name: Run test suite
         run: python -m pytest
+
+  js-tests:
+    name: UI JavaScript Tests (hard gate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # `npm ci` needs the committed lockfile; the UI itself has no build step
+      # and no runtime dependencies — these are test-only devDependencies.
+      - name: Install test dependencies
+        run: npm ci
+
+      # HARD gate: ui/ carries ~25.5k lines of browser JavaScript that CI never
+      # executed (issue #35). A regression there is silent and user-facing.
+      - name: Run UI test suite
+        run: npm test

@@ -82,8 +82,16 @@
   // Eco + Feynman audit renamed from Hot/Warm/Cool/Cold — "Cold"
   // projected "broken/offline" and red Hot projected "CPU/error."
   function heatBadge(value) {
+    // Absent heat must render as ABSENT, not as measured-cold. `Number('')`
+    // and `Number(null)` are both 0 in JS, so the previous `isNaN` guard let a
+    // missing measurement through as a confident "Dormant, 0%" badge — a
+    // silent default the reader cannot distinguish from a real zero. Reject
+    // the empty cases explicitly, and require a finite number, while keeping
+    // a genuine numeric 0 (and the numeric strings the JSON API returns).
+    // Found by the tests added for issue #35.
+    if (value === null || value === undefined || value === '') return null;
     var v = Number(value);
-    if (isNaN(v)) return null;
+    if (!isFinite(v)) return null;
     var pct = Math.max(0, Math.min(100, Math.round(v * 100)));
     var label, color;
     if (v >= 0.70)      { label = 'Active';  color = '#E08A50'; }

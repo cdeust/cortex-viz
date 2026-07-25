@@ -1,0 +1,14 @@
+{
+  "name": "cortex-viz-ui-tests",
+  "private": true,
+  "description": "Test harness for the browser UI under ui/. NOTE: this package deliberately does NOT set \"type\": \"module\" \u2014 the UI ships as CommonJS-compatible script-tag JavaScript, and flipping the package type reinterprets every .js in the repo as ESM, which silently skips the UMD `module.exports` branch in ui/unified/js/spatial_hash.js and ui/brain/js/trigram.js and breaks the existing tests/js/run_trigram_conformance.mjs harness. Test files use .mjs explicitly instead.",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "jsdom": "^25.0.1",
+    "vitest": "^2.1.9"
+  }
+}
