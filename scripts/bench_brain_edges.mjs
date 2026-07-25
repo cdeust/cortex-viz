@@ -10,7 +10,7 @@
 // This harness is the "measure before merging" gate the backlog requires: it
 // (1) times BRAIN.buildEdges over a synthetic graph at realistic scale
 //     (median of several runs, per tasks/todo.md §2 methodology — see
-//     tests/js/run_trigram_conformance.mjs for the sibling pattern), and
+//     tests/js/trigram.test.mjs for the sibling scale-benchmark pattern), and
 // (2) proves the two versions produce BYTE-IDENTICAL output buffers on the
 //     exact same input (position/colour/segment arrays, edgeIndex, counts) —
 //     the equivalence proof requested by the issue.

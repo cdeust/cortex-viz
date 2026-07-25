@@ -3,6 +3,14 @@
 All notable changes to cortex-viz are documented in this file.
 Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in git history.
 
+## [Unreleased]
+
+### Added
+- JavaScript test harness for the browser UI (`ui/`, ~25.5k lines), wired into CI as a required job alongside pytest — a failing JS test now fails CI (#35). Vitest + jsdom, no bundler. Initial suites cover the highest-silent-risk surfaces: force-layout neighbour-set + edge-tier styling, workflow-graph filter predicates (state→visible-set), LOD aggregation thresholds, palette resolution + `cortex:surface-change` refresh, and SVG-vs-canvas renderer agreement on one model. Test strength is gated by mutation (Stryker), not line coverage; survivors triaged in `tests/js/MUTATION_NOTES.md`.
+
+### Changed
+- The pg_trgm conformance + scale benchmark for `ui/brain/js/trigram.js` is now a first-class vitest suite (`tests/js/trigram.test.mjs`), absorbing the former side-channel harness `tests/js/run_trigram_conformance.mjs` and its pytest wrapper `tests/test_trigram_conformance.py` (both removed) (#35).
+
 ## [2.7.1] - 2026-07-25
 
 ### Fixed

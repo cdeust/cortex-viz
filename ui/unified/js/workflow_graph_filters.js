@@ -22,84 +22,94 @@
   // of an edge of this kind (and domain anchors for scaffolding).
   var AST_EDGE_KINDS = { defined_in: 1, calls: 1, imports: 1, member_of: 1 };
 
-  // Precomputed on each filter change: for edge-based filters, the
-  // set of node ids that touch the chosen edge kind. Rebuilt lazily.
-  var _edgeHits = null;
-  var _edgeHitsKey = '';
+  // Pure filter contract: state → predicate(node, ctx) → boolean. Each call
+  // owns its own lazily-rebuilt edge-hit cache, so a predicate is a
+  // self-contained snapshot of the filter state it was built from. Both the
+  // live apply() below and JUG._wfgFilterTest (tail) route through THIS, so
+  // the state→visible-set rule cannot silently diverge between them.
+  // Note: `st` is captured by reference — apply() rebuilds the predicate on
+  // every filter change, immediately after mutating `state`, so it always
+  // reflects the current selection.
+  function buildPredicate(st) {
+    // Precomputed for edge-based filters: the set of node ids that touch the
+    // chosen edge kind. Rebuilt lazily, keyed by (edgeKind, edge-count).
+    var _edgeHits = null;
+    var _edgeHitsKey = '';
 
-  function rebuildEdgeHits(edgeKind, ctx) {
-    var key = edgeKind + '@' + (ctx.edges ? ctx.edges.length : 0);
-    if (_edgeHits && _edgeHitsKey === key) return _edgeHits;
-    var hits = {};
-    var edges = ctx.edges || [];
-    for (var i = 0; i < edges.length; i++) {
-      var e = edges[i];
-      if (e.kind !== edgeKind) continue;
-      var sId = (typeof e.source === 'object') ? e.source.id : e.source;
-      var tId = (typeof e.target === 'object') ? e.target.id : e.target;
-      hits[sId] = 1; hits[tId] = 1;
-    }
-    _edgeHits = hits; _edgeHitsKey = key;
-    return hits;
-  }
-
-  function predicate(n, ctx) {
-    // Domain filter: include the node if it belongs to the selected
-    // domain (or IS the selected domain node). Domain label comparison
-    // ignores the `domain:` prefix.
-    if (state.domain) {
-      var sel = state.domain;
-      var dom = n.kind === 'domain'
-        ? (n.label || n.id.replace('domain:', ''))
-        : (ctx.byId[n.domain_id] ? (ctx.byId[n.domain_id].label || '') : '');
-      var extras = (n.extra_domain_ids || []).map(function (d) {
-        return ctx.byId[d] ? (ctx.byId[d].label || '') : '';
-      });
-      if (dom !== sel && extras.indexOf(sel) === -1) return false;
+    function rebuildEdgeHits(edgeKind, ctx) {
+      var key = edgeKind + '@' + (ctx.edges ? ctx.edges.length : 0);
+      if (_edgeHits && _edgeHitsKey === key) return _edgeHits;
+      var hits = {};
+      var edges = ctx.edges || [];
+      for (var i = 0; i < edges.length; i++) {
+        var e = edges[i];
+        if (e.kind !== edgeKind) continue;
+        var sId = (typeof e.source === 'object') ? e.source.id : e.source;
+        var tId = (typeof e.target === 'object') ? e.target.id : e.target;
+        hits[sId] = 1; hits[tId] = 1;
+      }
+      _edgeHits = hits; _edgeHitsKey = key;
+      return hits;
     }
 
-    // Main selector.
-    var f = state.wfgFilter || 'all';
-    if (f !== 'all') {
-      if (f.charAt(0) === 'L') {
-        if (!(LAYER_KINDS[f] && LAYER_KINDS[f][n.kind])) return false;
-      } else if (f.indexOf('kind:') === 0) {
-        if (n.kind !== f.slice(5)) return false;
-      } else if (f.indexOf('file:') === 0) {
-        if (n.kind === 'domain') {
-          // keep domain anchors so the cloud still has its hub.
-        } else if (n.kind !== 'file' || n.primary_cluster !== f.slice(5)) {
-          return false;
-        }
-      } else if (f.indexOf('edge:') === 0) {
-        var ek = f.slice(5);
-        if (n.kind === 'domain') {
-          // keep domain hubs so context remains readable.
-        } else if (AST_EDGE_KINDS[ek]) {
-          var hits = rebuildEdgeHits(ek, ctx);
-          if (!hits[n.id]) return false;
-        }
-      } else if (f === 'cross-domain') {
-        if (n.kind === 'domain') {
-          // keep.
-        } else if (!(n.extra_domain_ids && n.extra_domain_ids.length)) {
-          return false;
+    return function predicate(n, ctx) {
+      // Domain filter: include the node if it belongs to the selected
+      // domain (or IS the selected domain node). Domain label comparison
+      // ignores the `domain:` prefix.
+      if (st.domain) {
+        var sel = st.domain;
+        var dom = n.kind === 'domain'
+          ? (n.label || n.id.replace('domain:', ''))
+          : (ctx.byId[n.domain_id] ? (ctx.byId[n.domain_id].label || '') : '');
+        var extras = (n.extra_domain_ids || []).map(function (d) {
+          return ctx.byId[d] ? (ctx.byId[d].label || '') : '';
+        });
+        if (dom !== sel && extras.indexOf(sel) === -1) return false;
+      }
+
+      // Main selector.
+      var f = st.wfgFilter || 'all';
+      if (f !== 'all') {
+        if (f.charAt(0) === 'L') {
+          if (!(LAYER_KINDS[f] && LAYER_KINDS[f][n.kind])) return false;
+        } else if (f.indexOf('kind:') === 0) {
+          if (n.kind !== f.slice(5)) return false;
+        } else if (f.indexOf('file:') === 0) {
+          if (n.kind === 'domain') {
+            // keep domain anchors so the cloud still has its hub.
+          } else if (n.kind !== 'file' || n.primary_cluster !== f.slice(5)) {
+            return false;
+          }
+        } else if (f.indexOf('edge:') === 0) {
+          var ek = f.slice(5);
+          if (n.kind === 'domain') {
+            // keep domain hubs so context remains readable.
+          } else if (AST_EDGE_KINDS[ek]) {
+            var hits = rebuildEdgeHits(ek, ctx);
+            if (!hits[n.id]) return false;
+          }
+        } else if (f === 'cross-domain') {
+          if (n.kind === 'domain') {
+            // keep.
+          } else if (!(n.extra_domain_ids && n.extra_domain_ids.length)) {
+            return false;
+          }
         }
       }
-    }
 
-    // Text search — matches on label, path, body, id (case-insensitive).
-    if (state.query) {
-      var q = state.query.toLowerCase();
-      var hay = (n.label || '') + ' ' + (n.path || '') + ' ' + (n.body || '') + ' ' + (n.id || '');
-      if (hay.toLowerCase().indexOf(q) === -1) return false;
-    }
-    return true;
+      // Text search — matches on label, path, body, id (case-insensitive).
+      if (st.query) {
+        var q = st.query.toLowerCase();
+        var hay = (n.label || '') + ' ' + (n.path || '') + ' ' + (n.body || '') + ' ' + (n.id || '');
+        if (hay.toLowerCase().indexOf(q) === -1) return false;
+      }
+      return true;
+    };
   }
 
   function apply() {
     if (!window.JUG || typeof JUG.wfgApplyFilter !== 'function') return;
-    JUG.wfgApplyFilter(predicate);
+    JUG.wfgApplyFilter(buildPredicate(state));
   }
 
   function bindButtons() {
@@ -233,4 +243,9 @@
   } else {
     boot();
   }
+
+  // Read-only test seam — exposes the pure state→predicate contract for
+  // regression testing (tests/js/filters.test.mjs). No production path reads
+  // this; it never touches DOM or module state.
+  if (window.JUG) window.JUG._wfgFilterTest = { buildPredicate: buildPredicate };
 })();
