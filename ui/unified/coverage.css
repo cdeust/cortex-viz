@@ -1,0 +1,89 @@
+/* Coverage honesty indicator (issue #36) — a compact, NON-MODAL HUD affordance.
+   Greyscale chrome + the design-system status tokens: green (--ok-ink) for the
+   quiet "complete" state, terracotta (--accent-deep) for omissions. It never
+   blocks interaction (no overlay/backdrop); the drill-down expands in place. */
+
+#coverage-indicator {
+  position: fixed;
+  left: 24px;
+  bottom: 66px; /* sits directly above #status-bar (bottom:24px) */
+  z-index: 101;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  max-width: 340px;
+}
+
+.coverage-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  background: color-mix(in oklab, var(--surface) 96%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.coverage-pill:hover { border-color: var(--border-bright); }
+
+.coverage-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--text-faint);
+  flex: 0 0 auto;
+}
+.coverage-pill.is-complete .coverage-dot { background: var(--ok-ink); }
+.coverage-pill.is-incomplete .coverage-dot { background: var(--accent-deep); }
+.coverage-pill.is-unknown .coverage-dot { background: var(--text-faint); }
+
+.coverage-pill.is-incomplete { color: var(--text); }
+
+.coverage-drill[hidden] { display: none; }
+.coverage-drill {
+  margin-top: 6px;
+  padding: 12px 14px;
+  background: color-mix(in oklab, var(--surface) 97%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  line-height: 1.6;
+}
+
+.coverage-omissions { list-style: none; margin: 0 0 8px; padding: 0; }
+.coverage-omission { display: flex; gap: 8px; align-items: baseline; }
+.coverage-omission-count {
+  color: var(--accent-deep);
+  font-weight: 600;
+  min-width: 40px;
+  text-align: right;
+}
+.coverage-omission-label { color: var(--text-dim); text-transform: none; letter-spacing: 0; }
+
+.coverage-axes {
+  margin: 8px 0;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in oklab, var(--accent-ink) 8%, transparent);
+}
+.coverage-axis { display: flex; justify-content: space-between; gap: 16px; }
+.coverage-axis-label { color: var(--text-faint); text-transform: uppercase; }
+.coverage-axis-val { color: var(--text-dim); }
+.coverage-axis[data-complete="0"] .coverage-axis-val { color: var(--accent-deep); }
+.coverage-axis[data-complete="1"] .coverage-axis-val { color: var(--ok-ink); }
+
+.coverage-lod,
+.coverage-staleness {
+  margin-top: 8px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-dim);
+}
+.coverage-staleness.is-stale { color: var(--accent-deep); }
+
+.coverage-degraded-list { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.coverage-degraded {
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-faint);
+  font-style: italic;
+}

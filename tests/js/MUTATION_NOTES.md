@@ -60,3 +60,41 @@ Behaviour-bearing structure — every field's *inclusion* in the haystack, every
 filter branch's *decision*, both edge-endpoint *object/string* forms, the
 directional neighbour attribution, and all three LOD thresholds — is pinned by
 a killing test.
+
+---
+
+# Coverage-honesty seams (issue #36 AC#6)
+
+Same discipline for the coverage-honesty logic. Scope (`stryker.conf.json`,
+per-commit narrow gate — only the lines this change touched):
+
+| File | Range | Meaning | Score |
+|---|---|---|---|
+| `ui/unified/js/workflow_graph.js` | 48–63 | `wfgEdgeCoverage` (LOD/dangling edge accounting) | 27 killed / 0 survived |
+| `ui/unified/js/coverage_model.js` | 30–253 | verdict logic (`axis`/`filesAxis`/`lodAxis`/`staleness`/`omissions`/`computeCoverage`) | 276 killed / 3 equivalent |
+| `ui/unified/js/coverage_indicator.js` | 55–73, 84–101 | `gatherSources` + `fmtAge` | 59 killed / 0 survived |
+
+`workflow_graph.js` and `coverage_indicator.js` reach 100% (0 survivors). Every
+behaviour-bearing mutant of the model is killed — each omission's *presence*
+and *exact label*, every staleness rule (revision-mismatch, count-growth,
+zero-snapshot guard, both-revisions requirement, node-only/edge-only growth),
+the age computation, the `complete`/`incomplete`/`unknown` verdict on every
+denominator combination, and every named degraded mode — is pinned by a killing
+test. Two rounds of triage turned three redundant survivors into killed mutants
+by removing the redundancy (§9): the second `report.status = 'unknown'`
+assignment (the initial value already carries it), the dead `omissions: []`
+initialiser (always overwritten), and two needless `!= null ? x : null`
+null-normalisations (`now`, `captured_at`) that the downstream guard already
+handles.
+
+The 3 residual survivors are provably equivalent — the mutated boundary maps to
+the identical value on both sides, so no test can distinguish them:
+
+- `coverage_model.js:32` `count()` `n < 0` → `n <= 0`: the boundary value `0`
+  returns `0` either way (`floor(0) === 0`).
+- `coverage_model.js:48` `axis()` `s > r` → `s >= r`: when `s === r`, the
+  taken branch computes `s - r === 0`, identical to the `: 0` else.
+- `coverage_model.js:60` `filesAxis()` `present > indexed` → `>=`: same shape —
+  at equality, `present - indexed === 0 === the else`.
+
+Non-equivalent survivors: 0 (§12.4 satisfied).

@@ -15,6 +15,7 @@
 <link rel="stylesheet" href="/css/knowledge.css">
 <link rel="stylesheet" href="/css/workflow_graph.css">
 <link rel="stylesheet" href="/css/memory_science.css">
+<link rel="stylesheet" href="/css/coverage.css">
 <script src="/shared/palette.js"></script>
 <!-- KaTeX for scientific math rendering (load early; math appears in view mode too) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
@@ -480,6 +481,12 @@
      sidebar counters and the discussion batches. -->
 <script src="/js/polling.js?v=117ece5"></script>
 <script src="/js/workflow_graph_filters.js?v=117ece5"></script>
+<!-- Coverage honesty (issue #36): the pure model then the HUD indicator that
+     surfaces what each graph view is NOT showing (nodes vs store, LOD collapse,
+     staleness, engine parse-failures). Loaded after config/state/workflow_graph/
+     polling so the globals it reads are already published. -->
+<script src="/js/coverage_model.js?v=117ece5"></script>
+<script src="/js/coverage_indicator.js?v=117ece5"></script>
 <!-- Trace view: a live, domain-split execution-trace
      (domain -> session -> chain -> file) fetched per level on demand. -->
 <script src="/js/trace.js"></script>

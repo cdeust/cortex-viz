@@ -119,6 +119,14 @@ def _route_unified_get(
 
         serve_graph_progress(handler, store)
         return
+    if path_no_qs == "/api/graph/coverage":
+        # Coverage-honesty read-path (issue #36): engine parse-coverage for the
+        # UI indicator. Returns available:false (still 200) when the engine
+        # predates automatised-pipeline#57 — a named degraded mode, not a 404.
+        from cortex_viz.server.graph_coverage import serve_graph_coverage
+
+        serve_graph_coverage(handler, store)
+        return
     if path_no_qs == "/api/graph/events":
         from cortex_viz.server.http_standalone_endpoints import serve_graph_events
 
