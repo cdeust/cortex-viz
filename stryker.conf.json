@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "_comment": "Scoped per-commit mutation gate (coding-standards §12.1/§12.5): mutate ONLY the load-bearing logic this change introduced — the extracted pure seams — not the surrounding DOM code the JS suite does not yet cover. Line ranges track: renderer.js computeNeighborSet+linkTier, workflow_graph_filters.js buildPredicate, workflow_graph.js wfgLodTier.",
+  "testRunner": "vitest",
+  "reporters": ["clear-text", "progress"],
+  "coverageAnalysis": "perTest",
+  "mutate": [
+    "ui/unified/js/renderer.js:18-41",
+    "ui/unified/js/workflow_graph_filters.js:33-108",
+    "ui/unified/js/workflow_graph.js:29-35"
+  ]
+}

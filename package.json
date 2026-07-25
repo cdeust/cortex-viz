@@ -1,0 +1,20 @@
+{
+  "name": "cortex-viz-ui-tests",
+  "version": "0.0.0",
+  "private": true,
+  "description": "JavaScript test harness for cortex-viz's browser UI (ui/). Vanilla ESM + jsdom under vitest; no bundler.",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:mutation": "stryker run"
+  },
+  "devDependencies": {
+    "@stryker-mutator/core": "^8.7.1",
+    "@stryker-mutator/vitest-runner": "^8.7.1",
+    "@vitest/coverage-v8": "^2.1.8",
+    "jsdom": "^25.0.1",
+    "vitest": "^2.1.8"
+  }
+}

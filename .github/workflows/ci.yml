@@ -16,3 +16,18 @@ jobs:
         run: python -m pip install -e ".[dev]"
       - name: Run test suite
         run: python -m pytest
+
+  js-test:
+    # Required job: the browser UI (ui/, ~25.5k lines) is the product's primary
+    # surface. A failing JS test fails CI exactly like a failing pytest.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - name: Install JS test dependencies
+        run: npm ci
+      - name: Run JS test suite
+        run: npm test

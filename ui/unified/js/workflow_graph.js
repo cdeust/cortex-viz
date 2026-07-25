@@ -17,6 +17,23 @@
   // a unified renderer path are worth the trade.
   var CANVAS_THRESHOLD = 0;
 
+  // ── LOD aggregation tiers ─────────────────────────────────────────────────
+  // Node-count thresholds that decide how much of the graph the simulation and
+  // renderer materialise. Above each bound the main thread starts to stall, so
+  // the layout progressively drops work: pin symbols + drop dense sim edges
+  // (heavy), start every node AT its deterministic slot then decay fast so the
+  // first paint is the settled galaxy (snapToSlots), and drop the densest
+  // symbol↔symbol `calls` edges from the render set entirely (extreme).
+  // source: tasks/galaxy-lag-and-ap-aggregation-audit.md (measured main-thread
+  // freeze points on the N≈17k → N≈27k jump; see also ADR-0047).
+  function wfgLodTier(nodeCount) {
+    return {
+      heavy: nodeCount > 8000,
+      snapToSlots: nodeCount > 15000,
+      extreme: nodeCount > 25000,
+    };
+  }
+
   // Tokens — kind-driven radii, colors, edge distances, strengths.
   var KIND_RADIUS = {
     domain: 26, tool_hub: 14, agent: 10, skill: 10, command: 8,
@@ -329,7 +346,8 @@
     // geometrically, so the visual edge of every symbol→file pair is
     // redundant. Keep only structural edges (domain hubs, tools,
     // files ↔ tools, discussions ↔ files, memories) for rendering.
-    var HEAVY = nodes.length > 8000;
+    var _lod = wfgLodTier(nodes.length);
+    var HEAVY = _lod.heavy;
     var _nidSet = {};
     for (var _ni = 0; _ni < nodes.length; _ni++) _nidSet[nodes[_ni].id] = 1;
     // Keep AST edges in the simulation — they carry real semantic
@@ -338,7 +356,7 @@
     // REFLECT this connectivity, not randomize it. Only drop the
     // really dense symbol↔symbol edges (`calls`) under extreme load
     // to keep tick-rate manageable.
-    var EXTREME = nodes.length > 25000;
+    var EXTREME = _lod.extreme;
     var renderedEdges;
     if (EXTREME) {
       renderedEdges = (data.edges || []).filter(function (e) {
@@ -467,7 +485,7 @@
     // initial paint AND every live-activity re-mount render the structured
     // galaxy almost immediately, so the graph stays FLUID. Symbols keep the
     // outward-ray pre-seed assigned above; everything else snaps to slotOf.
-    if (nodes.length > 15000) {
+    if (_lod.snapToSlots) {
       for (var sp = 0; sp < nodes.length; sp++) {
         var spn = nodes[sp];
         var sps = ctx.slotOf[spn.id];
@@ -1390,5 +1408,6 @@
   window.JUG._wfg.nodeRadius = nodeRadius;
   window.JUG._wfg.nodeColor  = nodeColor;
   window.JUG._wfg.labelOf    = labelOf;
+  window.JUG._wfg.lodTier    = wfgLodTier;
   window.JUG.renderWorkflowGraph = renderWorkflowGraph;
 })();

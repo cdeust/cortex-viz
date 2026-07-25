@@ -1,5 +1,5 @@
 {
- "_source": "Generated 2026-07-13 from PostgreSQL 17.9 pg_trgm via: SELECT similarity(a,b) on DB cortex (extension pg_trgm). Regenerate with the SQL in tests/test_trigram_conformance.py.",
+ "_source": "Generated 2026-07-13 from PostgreSQL 17.9 pg_trgm via: SELECT similarity(a,b) on DB cortex (extension pg_trgm). Regenerate with the SQL in tests/js/trigram.test.mjs (the VALUES list is this file's {a,b} pairs).",
  "pairs": [
   {
    "a": "http",

@@ -7,6 +7,38 @@
   var selectedNode = null;
   var neighborSet = {};
 
+  // ── Pure layout/interaction contracts (no DOM, no closure state) ──────────
+  // Extracted so the neighbour-set computation and the edge-styling tier can
+  // be regression-tested directly (tests/js/renderer.test.mjs). Both the live
+  // handlers below and JUG._rendererTest (tail) route through THESE — there is
+  // no second copy of the rule that could silently diverge.
+
+  // Neighbours of `nodeId` over `edges` (plus the node itself), as an id-set.
+  // Endpoints may be raw ids OR force-graph-hydrated {id} objects.
+  function computeNeighborSet(nodeId, edges) {
+    var set = {};
+    set[nodeId] = true;
+    edges = edges || [];
+    for (var i = 0; i < edges.length; i++) {
+      var e = edges[i];
+      var sid = typeof e.source === 'object' ? e.source.id : e.source;
+      var tid = typeof e.target === 'object' ? e.target.id : e.target;
+      if (sid === nodeId) set[tid] = true;
+      if (tid === nodeId) set[sid] = true;
+    }
+    return set;
+  }
+
+  // Edge styling tier given the focused node id (selection, else hover, else
+  // none): 'active' = edge touches the focus, 'dimmed' = a focus exists but
+  // this edge does not touch it, 'default' = nothing focused.
+  function linkTier(edge, focusId) {
+    if (!focusId) return 'default';
+    var sid = typeof edge.source === 'object' ? edge.source.id : edge.source;
+    var tid = typeof edge.target === 'object' ? edge.target.id : edge.target;
+    return (sid === focusId || tid === focusId) ? 'active' : 'dimmed';
+  }
+
   // ── Surface-correct edge/background colour ──────────────────────────────
   // Edges are graph chrome, not data points (G3: "chrome is greyscale;
   // colour comes only from data tokens or the single terracotta accent") —
@@ -85,22 +117,24 @@
   }
 
   // ── Link styling — greyscale chrome, accent only on the focused edges ──
+  function focusId() {
+    return selectedNode ? selectedNode.id : (hoveredNode ? hoveredNode.id : null);
+  }
+
   function linkColor(e) {
-    var focusId = selectedNode ? selectedNode.id : (hoveredNode ? hoveredNode.id : null);
-    if (!focusId) return pal.edgeDefault;
-    var sid = typeof e.source === 'object' ? e.source.id : e.source;
-    var tid = typeof e.target === 'object' ? e.target.id : e.target;
-    if (sid === focusId || tid === focusId) return pal.edgeActive;
-    return pal.edgeDimmed;
+    switch (linkTier(e, focusId())) {
+      case 'active': return pal.edgeActive;
+      case 'dimmed': return pal.edgeDimmed;
+      default: return pal.edgeDefault;
+    }
   }
 
   function linkWidth(e) {
-    var focusId = selectedNode ? selectedNode.id : (hoveredNode ? hoveredNode.id : null);
-    if (!focusId) return 0.4 + (e.weight || 0.3) * 1.2;
-    var sid = typeof e.source === 'object' ? e.source.id : e.source;
-    var tid = typeof e.target === 'object' ? e.target.id : e.target;
-    if (sid === focusId || tid === focusId) return 1.5;
-    return 0.15;
+    switch (linkTier(e, focusId())) {
+      case 'active': return 1.5;
+      case 'dimmed': return 0.15;
+      default: return 0.4 + (e.weight || 0.3) * 1.2;
+    }
   }
 
   // ── Layout forces ──
@@ -165,16 +199,7 @@
 
   // ── Neighbor precomputation ──
   function buildNeighborSet(nodeId) {
-    neighborSet = {};
-    neighborSet[nodeId] = true;
-    var edges = JUG._currentEdges || [];
-    for (var i = 0; i < edges.length; i++) {
-      var e = edges[i];
-      var sid = typeof e.source === 'object' ? e.source.id : e.source;
-      var tid = typeof e.target === 'object' ? e.target.id : e.target;
-      if (sid === nodeId) neighborSet[tid] = true;
-      if (tid === nodeId) neighborSet[sid] = true;
-    }
+    neighborSet = computeNeighborSet(nodeId, JUG._currentEdges || []);
   }
 
   // ── Interaction ──
@@ -316,4 +341,12 @@
   JUG.selectNodeById = selectNodeById;
   JUG.deselectNode = deselectNode;
   JUG.getGraph = function() { return graph; };
+
+  // Read-only test seam — same pattern as JUG.__wfgCtx (workflow_graph.js):
+  // exposes the pure layout/styling contracts for regression testing. No
+  // production code path reads this; it never mutates renderer state.
+  JUG._rendererTest = {
+    computeNeighborSet: computeNeighborSet,
+    linkTier: linkTier,
+  };
 })();
