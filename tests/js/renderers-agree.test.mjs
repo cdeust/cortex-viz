@@ -185,7 +185,11 @@ beforeAll(() => {
   globalThis.d3 = window.d3;
   window.HTMLCanvasElement.prototype.getContext = () => makeCtx2D();
 
-  loadScript('ui/unified/js/workflow_graph.js'); // defines wfg.nodeRadius/Color/labelOf
+  // issue #41: nodeRadius/nodeColor/labelOf moved to the workflow_graph_tokens.js
+  // sibling module (colour/label resolution concern), which reads the constant
+  // tables from workflow_graph_const.js. Both still publish on JUG._wfg.
+  loadScript('ui/unified/js/workflow_graph_const.js');
+  loadScript('ui/unified/js/workflow_graph_tokens.js'); // defines wfg.nodeRadius/Color/labelOf
   loadScript('ui/unified/js/workflow_graph_render_svg.js');
   loadScript('ui/unified/js/workflow_graph_render_canvas.js');
 
