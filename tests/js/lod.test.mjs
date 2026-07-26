@@ -10,7 +10,9 @@ let lodTier;
 beforeAll(() => {
   window.JUG = window.JUG || {};
   globalThis.JUG = window.JUG;
-  loadScript('ui/unified/js/workflow_graph.js');
+  // issue #41: wfgLodTier moved to the workflow_graph_lod.js sibling module
+  // (the pure LOD/edge-coverage seam), still published on JUG._wfg.lodTier.
+  loadScript('ui/unified/js/workflow_graph_lod.js');
   lodTier = window.JUG._wfg.lodTier;
 });
 
