@@ -1,0 +1,51 @@
+# Dependency monitoring (OpenSSF Best Practices `dependency_monitoring`, silver).
+#
+# Until this file existed, cortex-viz had no automated check on its external
+# dependencies: the 19 advisories a manual `npm audit` surfaced on 2026-07-28
+# (2 critical, 7 high, all in the JS test harness's devDependencies) had gone
+# unnoticed precisely because nothing was watching. Scorecard's
+# Dependency-Update-Tool check scored 0 for the same reason.
+#
+# Three ecosystems, because the project has three dependency surfaces:
+#   pip     -> pyproject.toml, the shipped Python package
+#   npm     -> package.json, the vitest/Stryker test harness (devDeps only)
+#   actions -> the workflows, which are SHA-pinned and so cannot self-update
+#
+# Weekly, not daily: posture drifts by inaction, but a daily cadence on a
+# single-maintainer project produces a pull-request backlog nobody reviews,
+# which is worse than none.
+
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "python"]
+    commit-message:
+      prefix: "chore(deps)"
+
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "javascript"]
+    commit-message:
+      prefix: "chore(deps-dev)"
+
+  # SHA-pinned actions are immune to tag re-pointing but also never pick up a
+  # security fix on their own. Dependabot rewrites the pin and the trailing
+  # version comment together, which keeps the pinning guarantee intact.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "ci"]
+    commit-message:
+      prefix: "chore(ci)"

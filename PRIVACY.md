@@ -2,13 +2,21 @@
 
 _Last updated: 2026-07-22_
 
-cortex-viz is a **read-only, local** visualization server for Cortex and
+cortex-viz is a **local** visualization server for Cortex and
 Claude Code session data. This policy states exactly what it reads, what it
 serves, and what leaves your machine.
 
 ## What the server processes
 
-- Your local Cortex database (PostgreSQL or SQLite), read-only, when present.
+- Your local Cortex database (PostgreSQL or SQLite), when present. Your
+  memories, entities, and relationships are read and never written. cortex-viz
+  does write five tables of its own into that same database:
+  `workflow_graph_snapshot`, `workflow_graph_snapshot_scoped`,
+  `workflow_graph_layout`, `workflow_graph_layout_lod` (derived layout and
+  graph caches, so a view opens without re-running a long build), and
+  `session_activity` (a record of tool calls, file accesses, and skill
+  invocations, which is what lets the graph stream live). All of it stays in
+  your local database. Nothing is transmitted.
 - Claude Code artifacts under `~/.claude/`: session transcripts
   (`projects/**/*.jsonl`), wiki pages, profiles, and local git state.
 - In `--no-db` mode, only the `~/.claude/` artifacts and git.
