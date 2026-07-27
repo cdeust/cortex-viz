@@ -11,11 +11,12 @@
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License">
   <img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/version-2.7.1-brightgreen.svg" alt="Version 2.7.1">
+  <a href="https://www.bestpractices.dev/projects/13846"><img src="https://www.bestpractices.dev/projects/13846/badge" alt="OpenSSF Best Practices"></a>
 </p>
 
 # cortex-viz
 
-**The visualization layer for [Cortex](https://github.com/cdeust/Cortex).** A standalone MCP that turns Cortex's memory store, your Claude Code session history, and your codebase graph into six live reading angles over the same data: a galaxy of every project, that same graph rendered inside a 3D anatomical brain, a per-session execution trace, a consolidation kanban, a curated knowledge browser, and a wiki. It reads Cortex's shared PostgreSQL store **read-only** plus the `~/.claude` artifacts; it renders, it never remembers.
+**The visualization layer for [Cortex](https://github.com/cdeust/Cortex).** A standalone MCP that turns Cortex's memory store, your Claude Code session history, and your codebase graph into six live reading angles over the same data: a galaxy of every project, that same graph rendered inside a 3D anatomical brain, a per-session execution trace, a consolidation kanban, a curated knowledge browser, and a wiki. It reads Cortex's shared PostgreSQL store plus the `~/.claude` artifacts, and it **never writes a memory**: it renders, it never remembers. (It does keep its own derived graph/layout caches in that same database, listed under [Boundary](#boundary).)
 
 Launch with the `open_visualization` tool (or `/cortex-visualize`). One launcher opens six reading angles; the default landing view is **Trace**.
 
@@ -32,7 +33,7 @@ claude plugin marketplace add cdeust/Cortex
 claude plugin install cortex-viz
 ```
 
-> **cortex-viz is a read-only companion to [Cortex](https://github.com/cdeust/Cortex).** Install Cortex first (`claude plugin install cortex`): cortex-viz reads its shared PostgreSQL store and never writes to it. Point both at the same database: the `database_url` plugin setting defaults to `postgresql://127.0.0.1:5432/cortex`; set it to the same value you gave Cortex.
+> **cortex-viz is a companion to [Cortex](https://github.com/cdeust/Cortex) that never writes a memory.** Install Cortex first (`claude plugin install cortex`): cortex-viz reads its shared PostgreSQL store, and writes only its own derived caches there ([Boundary](#boundary)). Point both at the same database: the `database_url` plugin setting defaults to `postgresql://127.0.0.1:5432/cortex`; set it to the same value you gave Cortex.
 
 Restart your Claude Code session, then launch the visualizer:
 
@@ -126,7 +127,7 @@ Five columns by consolidation stage (`labile` · `early_ltp` · `late_ltp` · `c
 
 ## Install
 
-cortex-viz is a Claude Code plugin (and a plain MCP server). Point it at the **same database as your Cortex install**: it reads that store read-only.
+cortex-viz is a Claude Code plugin (and a plain MCP server). Point it at the **same database as your Cortex install**: it reads Cortex's memories from that store and never writes them.
 
 **As a plugin**: ships the MCP server, the `/cortex-visualize` skill, and the live session-activity hooks. The bundled `scripts/launcher.py` bootstraps its own dependencies on first launch (no manual `pip` needed). Configure the DB via the plugin's `database_url` user-config (defaults to `postgresql://127.0.0.1:5432/cortex`).
 
@@ -153,12 +154,33 @@ cortex-viz consumes Cortex's **artifacts on disk + PostgreSQL**, never Cortex's 
 | Cognitive profiles | `~/.claude/methodology/profiles.json` |
 | Codebase graph (AST symbols, impact) | [`automatised-pipeline`](https://github.com/cdeust/ai-automatised-pipeline) MCP (stdio) |
 | PRD document/section nodes | [`prd-spec-generator`](https://github.com/cdeust/ai-prd-generator) MCP + on-disk artifacts |
+| **Written** by cortex-viz (its own tables, in the same PG database) | `workflow_graph_snapshot`, `workflow_graph_snapshot_scoped`, `workflow_graph_layout`, `workflow_graph_layout_lod` (derived graph and layout caches) and `session_activity` (live activity stream). Cortex's own memory tables are never written. |
 
 No `import mcp_server.*` is permitted anywhere in `cortex_viz/`: that invariant is the extraction's correctness check.
 
 ## MCP tools
 
 `open_visualization` (launch the browser UI: pass `view="brain"` for the 3D anatomical brain, `view="galaxy"` or omit for the 2D graph) and `get_methodology_graph` (graph data). The six views are served over HTTP by the server `open_visualization` launches; a live session-activity stream (every tool call, MCP call, file access, skill, and command) feeds the graph in real time via the activity-capture hooks.
+
+## Project
+
+| Document | What it answers |
+|---|---|
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute, the coding style, and the test requirement |
+| [GOVERNANCE.md](GOVERNANCE.md) | Who decides, who has which role, and the continuity gap |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Expected behaviour and how to report a problem |
+| [SECURITY.md](SECURITY.md) | What cortex-viz accesses, the supply-chain assurance, and how to report a vulnerability |
+| [PRIVACY.md](PRIVACY.md) | What is read, what is written, and what leaves your machine |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | The layers, the read contract, and the trust boundaries |
+| [docs/ASSURANCE_CASE.md](docs/ASSURANCE_CASE.md) | The threat model and why the security requirements are met, including where the argument is incomplete |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Direction, known gaps, and what is explicitly not planned |
+| [CHANGELOG.md](CHANGELOG.md) | What changed in each release |
+
+### Achievements
+
+- **OpenSSF Best Practices**: registered as [project 13846](https://www.bestpractices.dev/projects/13846), with the badge shown above. Answers for every passing and silver criterion are committed in [`.bestpractices.json`](.bestpractices.json), audited against this repository rather than copied, and the five silver blockers are listed there and in the [roadmap](docs/ROADMAP.md).
+- **OpenSSF Scorecard**: runs weekly ([`scorecard.yml`](.github/workflows/scorecard.yml)). Current score **3.6** (2026-07-26), recorded as a baseline rather than displayed as a badge.
+- **Build provenance**: every release artifact carries a Sigstore-backed attestation. Verify with `gh attestation verify <file> --repo cdeust/cortex-viz`.
 
 ## Status
 
