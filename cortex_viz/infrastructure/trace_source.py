@@ -67,9 +67,16 @@ _ACTION_TOOLS = frozenset(
 def _memory_op(name: str) -> str | None:
     """Classify a Cortex memory MCP tool name → ``'remember'`` | ``'recall'``.
 
-    MCP tool names are namespaced (``mcp__plugin_cortex_cortex__remember``,
+    MCP tool names are namespaced (``mcp__plugin_hypermnesia-mcp_cortex__remember``,
     ``cortex:recall``, …), so match on the operation substring scoped to a
     cortex tool. Returns None for anything that isn't a memory write/read.
+
+    The plugin-scoped prefix is ``mcp__plugin_<plugin-name>_<server-key>__``.
+    Cortex v4.15.0 renamed the plugin ``cortex`` -> ``hypermnesia-mcp`` and kept
+    the server key ``cortex``, so both the old and new spellings still contain
+    "cortex" and this classifier is unaffected by the rename — the test suite
+    pins that, so a future server-key change fails loudly instead of silently
+    classifying every memory op as None.
     """
     n = (name or "").lower()
     if "cortex" not in n:
