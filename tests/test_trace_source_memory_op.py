@@ -32,7 +32,7 @@ from cortex_viz.infrastructure.trace_source import _memory_op
         "mcp__plugin_hypermnesia-mcp_cortex__remember",
         # Pre-rename spelling: still classified, so historical transcripts
         # recorded before 4.15.0 keep rendering their memory nodes.
-        "mcp__plugin_cortex_cortex__remember",
+        "mcp__plugin_cortex_cortex__remember",  # mcp-prefix-allow-legacy
         # Bare server-scoped spelling (.mcp.json style).
         "mcp__cortex__remember",
         "cortex:remember",
@@ -48,7 +48,7 @@ def test_remember_spellings_classify_as_remember(name: str) -> None:
     "name",
     [
         "mcp__plugin_hypermnesia-mcp_cortex__recall",
-        "mcp__plugin_cortex_cortex__recall",
+        "mcp__plugin_cortex_cortex__recall",  # mcp-prefix-allow-legacy
         "mcp__cortex__recall",
         "cortex:recall",
         "MCP__PLUGIN_HYPERMNESIA-MCP_CORTEX__RECALL",
@@ -65,8 +65,8 @@ def test_recall_spellings_classify_as_recall(name: str) -> None:
         "mcp__plugin_hypermnesia-mcp_cortex__memory_stats",
         "mcp__plugin_hypermnesia-mcp_cortex__navigate_memory",
         # Right operation word, wrong server — must not be attributed to Cortex.
-        "mcp__plugin_someone-else_other__remember",
-        "mcp__plugin_someone-else_other__recall",
+        "mcp__plugin_someone-else_other__remember",  # mcp-prefix-allow-legacy
+        "mcp__plugin_someone-else_other__recall",  # mcp-prefix-allow-legacy
         # Ordinary session tools.
         "Read",
         "Bash",
