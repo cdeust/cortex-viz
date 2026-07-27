@@ -2,12 +2,19 @@
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
   "_comment": "Scoped per-commit mutation gate (coding-standards §12.1/§12.5): mutate ONLY the load-bearing logic THIS change touched — the pure seams issue #36 added — not pre-existing code or DOM writers. Ranges: workflow_graph_lod.js wfgEdgeCoverage (moved out of workflow_graph.js by the issue #41 split, behaviour-preserving), coverage_model.js verdict logic, coverage_indicator.js gatherSources + fmtAge. The prior seams (renderer computeNeighborSet/linkTier, filters buildPredicate, wfgLodTier) were unchanged here; their mutation state is recorded in tests/js/MUTATION_NOTES.md from issue #35.",
   "testRunner": "vitest",
-  "reporters": ["clear-text", "progress"],
+  "reporters": [
+    "clear-text",
+    "progress"
+  ],
   "coverageAnalysis": "perTest",
   "mutate": [
     "ui/unified/js/workflow_graph_lod.js:41-56",
     "ui/unified/js/coverage_model.js:30-253",
     "ui/unified/js/coverage_indicator.js:55-73",
     "ui/unified/js/coverage_indicator.js:84-101"
-  ]
+  ],
+  "vitest": {
+    "related": false
+  },
+  "_comment_vitest": "related:false — source: stryker-mutator.io/docs/stryker-js/troubleshooting #vitest-failed-to-find-test-files-related-to-mutated-files. The suites load the browser IIFEs into a shared jsdom global instead of importing them, so Stryker 9's related-file tracing finds no tests."
 }
