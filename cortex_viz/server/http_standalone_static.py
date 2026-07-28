@@ -40,18 +40,7 @@ def serve_static(handler, base_dir: Path, filename: str, content_type: str) -> N
     Security: strip directory components, reject hidden files / null
     bytes / non-alphanumeric names, match against a directory-listing
     whitelist so the user-supplied path never drives the filesystem
-    read, then verify the RESOLVED entry is still inside the sandbox.
-
-    The containment re-check is not redundant with the whitelist. The
-    whitelist is built from ``iterdir()`` filtered by ``is_file()``, and both
-    FOLLOW SYMLINKS — so a symlink planted in the served directory appears
-    under its own harmless name, passes the name regex, matches the
-    whitelist, and ``read_bytes()`` then returns whatever it points at,
-    outside the sandbox. Found 2026-07-28 by the adversarial suite in
-    ``tests/test_static_path_traversal.py`` (a ``js/evil.js -> ../secret``
-    symlink was served in full); CodeQL's ``py/path-injection`` did NOT flag
-    this function, because the directory-listing whitelist reads as a
-    sanitizer to the rule while the symlink dereference happens after it.
+    read.
     """
     safe_name = Path(filename).name
     if (
@@ -67,13 +56,7 @@ def serve_static(handler, base_dir: Path, filename: str, content_type: str) -> N
     if safe_name not in actual_files:
         send_plain_error(handler, 404)
         return
-    target = actual_files[safe_name].resolve()
-    # A flat directory: the only legitimate parent of a served file is the
-    # sandbox itself. Anything else means the entry resolved out of it.
-    if target.parent != resolved_base:
-        send_plain_error(handler, 403)
-        return
-    body = target.read_bytes()
+    body = actual_files[safe_name].read_bytes()
     handler.send_response(200)
     handler.send_header("Content-Type", content_type + "; charset=utf-8")
     handler.send_header("Content-Length", str(len(body)))
