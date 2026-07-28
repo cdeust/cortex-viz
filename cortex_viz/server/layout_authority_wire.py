@@ -53,7 +53,6 @@ _NLNL = b"\n\n"
 _KEEPALIVE = b": ping\n\n"
 _CHUNK_TERM = b"0\r\n\r\n"
 _CRLF = b"\r\n"
-_PIPE = b"|"
 
 _MAX_KIND = 32  # ASCII identifier ceiling, see CLAUDE.md
 

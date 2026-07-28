@@ -54,14 +54,20 @@ async def stderr_loop(client: Any) -> None:
                     log_fh.write(decoded + "\n")
                     log_fh.flush()
                 except Exception:
+                    # The line was already mirrored to this process's stderr above; losing the
+                    # log-file copy must not kill the drain loop.
                     pass
     except asyncio.CancelledError:
+        # Cooperative cancellation of the stderr drain.
         pass
     except Exception:
+        # The drain is best-effort diagnostics; its failure must not surface as an
+        # error from the subprocess it is only observing.
         pass
     finally:
         if log_fh is not None:
             try:
                 log_fh.close()
             except Exception:
+                # Teardown of the log file handle.
                 pass

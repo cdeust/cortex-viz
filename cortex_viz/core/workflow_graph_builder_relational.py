@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 
+from cortex_viz.core.workflow_graph_builder_ingest import _as_tool, _require
 from cortex_viz.core.workflow_graph_palette import (
     AGENT_COLOR,
     COMMAND_COLOR,
@@ -36,22 +37,6 @@ from cortex_viz.core.workflow_graph_schema import (
 from cortex_viz.core.workflow_graph_schema_enums import PrimaryToolCluster
 
 logger = logging.getLogger(__name__)
-
-
-def _require(rec: dict, key: str, ctx: str):
-    """Mirror of ``workflow_graph_builder._require`` — local copy avoids
-    cross-module import flutter."""
-    if key not in rec or rec[key] is None:
-        raise ValueError(f"{ctx}: missing key {key!r} in {rec!r}")
-    return rec[key]
-
-
-def _as_tool(name: str) -> ToolKind:
-    """Parse a tool name; raises ``ValueError`` on unknown."""
-    for t in ToolKind:
-        if t.value == name or t.value.lower() == name.lower():
-            return t
-    raise ValueError(f"unknown ToolKind: {name!r}")
 
 
 def ingest_discussion_file(b, dfe: dict) -> None:

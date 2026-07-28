@@ -162,6 +162,8 @@ def run_l6(
                 )
             )
         except Exception:
+            # Pure cache write. A failure costs the next run a recomputation, and
+            # _cache_load independently rejects anything it cannot read back.
             pass
 
     async def _load_with_timeout(gp_):
@@ -393,11 +395,7 @@ def run_l6(
             if not fid_:
                 return None
             cached = state._node_index.get(fid_)
-            if (
-                cached
-                and cached.get("x") is not None
-                and cached.get("y") is not None
-            ):
+            if cached and cached.get("x") is not None and cached.get("y") is not None:
                 return (cached["x"], cached["y"])
             return _local_file_xy.get(fid_)
 

@@ -128,9 +128,7 @@ def kill_current_build() -> None:
             _proc = None
 
 
-def _worker(
-    q: "mp.Queue", url: str, domain_filter: str | None, epoch: int
-) -> None:
+def _worker(q: "mp.Queue", url: str, domain_filter: str | None, epoch: int) -> None:
     """Child process: run the real build, forwarding progress + full-dict
     deltas over ``q`` (epoch-stamped) and the full final graph via a temp
     file."""
@@ -212,6 +210,8 @@ def _drain(q: "mp.Queue", proc, epoch: int) -> None:
                 try:
                     os.unlink(msg[2])
                 except OSError:
+                    # Best-effort cleanup of a stale spill file. If it is already gone, the
+                    # state this call wanted is the state that exists.
                     pass
             continue
         try:
@@ -233,6 +233,7 @@ def _drain(q: "mp.Queue", proc, epoch: int) -> None:
                     try:
                         os.unlink(path)
                     except OSError:
+                        # Same spill-file cleanup, on the path where the pickle was consumed.
                         pass
         except Exception as exc:  # pragma: no cover - defensive
             print(f"[cortex] build drain error: {exc}", file=sys.stderr)
@@ -240,6 +241,7 @@ def _drain(q: "mp.Queue", proc, epoch: int) -> None:
     try:
         proc.join(timeout=5)
     except Exception:
+        # Teardown: the child may have already been reaped.
         pass
     # Clear the live-child handle if it is still ours, so a future roster
     # re-kick is allowed.

@@ -295,5 +295,8 @@ def write_dashboards(
     try:
         (target_dir / "_index.md").write_text("\n".join(index) + "\n", encoding="utf-8")
     except OSError:
+        # Best-effort index write. The per-project dashboards are already on disk
+        # and are returned either way — a failed _index.md costs navigation, not
+        # the generated content.
         pass
     return out

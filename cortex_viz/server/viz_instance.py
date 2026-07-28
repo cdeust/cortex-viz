@@ -67,6 +67,8 @@ def write_instance(port: int) -> None:
             json.dump(payload, f)
         os.replace(tmp, path)
     except OSError:
+        # Best-effort instance record. Losing it costs a later launcher its fast
+        # path to this PID — pids_on_port is the documented fallback.
         pass
 
 
@@ -164,6 +166,8 @@ def _pid_alive(pid: int) -> bool:
         if done == pid:
             return False
     except (ChildProcessError, OSError):
+        # ChildProcessError means the PID was never ours to reap, so it is not a
+        # zombie of ours and the caller should treat it as alive.
         pass
     return True
 

@@ -23,14 +23,11 @@ from cortex_viz.server.http_standalone_response import (
 )
 
 # Impact / blast-radius computation + the warm AP AST-source singleton
-# were split into ``trace_impact`` (500-line limit). Re-imported here for
-# the serve_* glue below; re-exported so any historical import path keeps
-# resolving.
-from cortex_viz.server.trace_impact import (  # noqa: F401
+# were split into ``trace_impact`` (500-line limit). Imported here for the
+# serve_* glue below — only the names that glue actually calls.
+from cortex_viz.server.trace_impact import (
     _ast_and_impact,
     _basename,
-    _get_ast_source,
-    _to_repo_relative,
     impact_for_path,
 )
 

@@ -7,8 +7,8 @@ This module was 1396 lines; it is now split into:
   * ``wiki_coverage_scope_type``     — ``Scope`` dataclass + constants
   * ``wiki_coverage_scopes(_part*)`` — the canonical ``SCOPES`` table
   * ``wiki_coverage_score``          — anchor-page scope scoring + audit
-  * ``wiki_coverage`` (this file)    — public re-export shim + file-level
-                                       coverage axis
+  * ``wiki_coverage`` (this file)    — the public audit entry points +
+                                       file-level coverage axis
 
 Problem this module solves
 ==========================
@@ -28,27 +28,14 @@ import re
 from dataclasses import dataclass, field
 from typing import Final
 
-# ── Public re-export shim ───────────────────────────────────────────────
-# Preserve every historical import path
-# (``from cortex_viz.core.wiki_coverage import audit_domain`` etc.).
+# ── Public surface ─────────────────────────────────────────────────────
+# The audit entry points and the SCOPES table are re-exported because
+# callers outside this package import them from here; each name below has
+# a live importer.
 from cortex_viz.core.wiki_coverage_score import (  # noqa: F401
-    _DEFAULT_MAX_AGE_DAYS,
-    _COVERAGE_THRESHOLDS,
-    _DOMAIN_REJECT_RE,
-    _KNOWN_KINDS,
-    _count_substantive_pages,
-    _has_substantive_anchor,
-    _is_plausible_domain,
-    _suggested_path_for,
     audit_all_domains,
     audit_domain,
-    DomainCoverage,
     list_domains,
-    ScopeCoverage,
-)
-from cortex_viz.core.wiki_coverage_scope_type import (  # noqa: F401
-    _MIN_PAGE_BYTES,
-    Scope,
 )
 from cortex_viz.core.wiki_coverage_scopes import SCOPES  # noqa: F401
 

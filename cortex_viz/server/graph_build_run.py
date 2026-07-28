@@ -353,8 +353,7 @@ def run_build(store, domain_filter: str | None) -> None:
                 phase="layout bake (DrL)",
                 pct=0.29,
                 message=(
-                    f"DrL layout over {len(_bl_nodes)} baseline nodes — "
-                    "the long phase"
+                    f"DrL layout over {len(_bl_nodes)} baseline nodes — the long phase"
                 ),
             )
             _ids = [n["id"] for n in _bl_nodes if n.get("id")]
@@ -438,16 +437,14 @@ def run_build(store, domain_filter: str | None) -> None:
                 phase="layout",
                 pct=0.95,
                 message=(
-                    f"laying out {len(baseline.get('nodes', []))} nodes "
-                    "(full DrL)"
+                    f"laying out {len(baseline.get('nodes', []))} nodes (full DrL)"
                 ),
             )
             _persist_full_layout(store)
             _set_progress(
                 phase="full_ready",
                 pct=1.0,
-                message=f"ready: {len(baseline.get('nodes', []))} nodes "
-                "(AP disabled)",
+                message=f"ready: {len(baseline.get('nodes', []))} nodes (AP disabled)",
                 full_ready=True,
             )
             # finally block closes the SSE stream.
@@ -491,8 +488,7 @@ def run_build(store, domain_filter: str | None) -> None:
         counts["ast_edges"] = sum(
             1
             for e in cur["edges"]
-            if (e.get("kind") or "")
-            in ("defined_in", "calls", "imports", "member_of")
+            if (e.get("kind") or "") in ("defined_in", "calls", "imports", "member_of")
         )
         # Knowledge-graph entities + their MEMORY→ENTITY links
         # (ADR-0046 Gap 10 wiring). Counted at the finalisation step
@@ -519,9 +515,7 @@ def run_build(store, domain_filter: str | None) -> None:
         _set_progress(
             phase="full_ready",
             pct=1.0,
-            message=(
-                f"ready: {len(cur['nodes'])} nodes ({counts['symbols']} symbols)"
-            ),
+            message=(f"ready: {len(cur['nodes'])} nodes ({counts['symbols']} symbols)"),
             full_ready=True,
             node_count=len(cur["nodes"]),
             edge_count=len(cur["edges"]),
@@ -544,5 +538,7 @@ def run_build(store, domain_filter: str | None) -> None:
 
             _ev.close()
         except Exception:
+            # close() is idempotent and the buffer survives for late-subscriber replay;
+            # a failure here must not mask the build outcome being unwound.
             pass
         state._graph_build_lock.release()

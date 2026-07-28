@@ -43,6 +43,16 @@ _FILE_LINE_RE = re.compile(r"\*\*(?:File|Read):\*\*\s*`([^`]+)`")
 # matched files come through separately via JSONL tool_uses.
 _GREP_ROOT_RE = re.compile(r"\*\*Grep:\*\*\s*`[^`]*`\s+in\s+`([^`]+)`")
 _GLOB_ROOT_RE = re.compile(r"\*\*Glob:\*\*\s*`[^`]*`\s*\(root=`([^`]+)`\)")
+# Which body pattern carries this tool's path. Adding a tool is one row,
+# not a new branch. A tool absent from the table contributes no path and
+# buckets under ``file_path=None`` (Bash, Task).
+_TOOL_PATH_RE = {
+    "Edit": _FILE_LINE_RE,
+    "Write": _FILE_LINE_RE,
+    "Read": _FILE_LINE_RE,
+    "Grep": _GREP_ROOT_RE,
+    "Glob": _GLOB_ROOT_RE,
+}
 _COMMAND_LINE_RE = re.compile(r"\*\*Command:\*\*\s*`([^`]+)`")
 _PATH_TOKEN_RE = re.compile(r"(?:^|\s)((?:\.{1,2}/|~/|/)[^\s`'\"]{3,})")
 
@@ -98,8 +108,9 @@ def load_tool_events(
         )
         content = mem.get("content") or ""
         file_path: str | None = None
-        if tool in ("Edit", "Write", "Read"):
-            m = _FILE_LINE_RE.search(content)
+        path_re = _TOOL_PATH_RE.get(tool)
+        if path_re is not None:
+            m = path_re.search(content)
             if m:
                 file_path = m.group(1).strip() or None
         ts = _iso(mem.get("created_at"))

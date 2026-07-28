@@ -55,11 +55,10 @@ from cortex_viz.core.workflow_graph_schema import (
 # Per-source node-ingest helpers were split into
 # ``workflow_graph_builder_ingest`` (500-line limit). Imported here; the
 # class methods below delegate to them so the streaming-build dispatch
-# table (``self._ingest_*``) is unchanged. ``_require`` / ``_as_tool`` /
-# ``_MEMORY_SCIENTIFIC_KEYS`` are re-exported for any historical importer.
-from cortex_viz.core.workflow_graph_builder_ingest import (  # noqa: F401
-    _MEMORY_SCIENTIFIC_KEYS,
-    _as_tool,
+# table (``self._ingest_*``) is unchanged. Only the names this module
+# actually delegates to are imported — callers that want ``_require`` /
+# ``_as_tool`` import them from ``_ingest``, which owns them.
+from cortex_viz.core.workflow_graph_builder_ingest import (
     _finalize_files,
     _ingest_agent,
     _ingest_command,
@@ -68,7 +67,6 @@ from cortex_viz.core.workflow_graph_builder_ingest import (  # noqa: F401
     _ingest_memory,
     _ingest_skill,
     _ingest_tool_event,
-    _require,
     _track_file_timestamp,
 )
 

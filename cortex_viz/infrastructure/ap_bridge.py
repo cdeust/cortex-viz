@@ -220,6 +220,8 @@ def _resolve_command() -> dict | None:
             if binary.is_file() and os.access(binary, os.X_OK):
                 return {"command": str(binary), "args": []}
     except (OSError, ValueError, KeyError, IndexError, TypeError, AttributeError):
+        # A malformed manifest entry only means this candidate is not the AP
+        # binary; the caller falls through to None and the next discovery route.
         pass
     return None
 
@@ -469,6 +471,8 @@ class APBridge:
                 # was ``await None`` → TypeError on every teardown.
                 self._client.close()
             except Exception:
+                # Teardown: the client is dropped either way, and a failing close must not
+                # mask whatever error triggered the teardown.
                 pass
             self._client = None
         self._connected = False

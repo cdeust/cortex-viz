@@ -261,11 +261,13 @@ def _apply_phase_param(
         try:
             offset = int(p[7:])
         except ValueError:
+            # A non-integer offset is ignored so the default stands.
             pass
     elif p.startswith("limit="):
         try:
             limit = int(p[6:])
         except ValueError:
+            # Likewise for limit.
             pass
     return name, offset, limit
 

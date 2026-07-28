@@ -48,6 +48,8 @@ def _write_terminator(handler) -> None:
         handler.wfile.write(_wire.format_terminator())
         handler.wfile.flush()
     except (BrokenPipeError, ConnectionResetError, OSError):
+        # The client hung up before the terminator flushed. The response is
+        # already complete and there is no channel left to report on.
         pass
 
 
@@ -119,4 +121,5 @@ def serve_stats(handler, store) -> None:
     try:
         handler.wfile.write(body)
     except (BrokenPipeError, ConnectionResetError, OSError):
+        # The client hung up before the JSON body flushed; nothing to report it to.
         pass

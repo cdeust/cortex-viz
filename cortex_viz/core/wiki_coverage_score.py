@@ -19,6 +19,7 @@ from cortex_viz.core.wiki_coverage_scope_type import (
 )
 from cortex_viz.core.wiki_coverage_scopes import SCOPES
 
+
 @dataclass
 class ScopeCoverage:
     """Whether a single scope is covered for a domain, and how."""
@@ -190,12 +191,6 @@ def audit_domain(
             )
         )
     return out
-
-
-_DOMAIN_REJECT_RE = (
-    # Bare year buckets (notes/2026/*.md) — these are time buckets, not projects.
-    "year",
-)
 
 
 def _is_plausible_domain(name: str) -> bool:

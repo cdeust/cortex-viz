@@ -36,6 +36,8 @@ def _parse_jsonl_lines(lines: list[str]) -> list[dict]:
         try:
             records.append(json.loads(trimmed))
         except (json.JSONDecodeError, ValueError):
+            # Invalid JSON is skipped per the contract in this function's docstring —
+            # JSONL sources are appended live and can end mid-record.
             pass
     return records
 

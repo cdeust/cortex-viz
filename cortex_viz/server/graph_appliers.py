@@ -39,7 +39,6 @@ def begin_epoch(epoch: int) -> None:
             "data": {"nodes": [], "edges": [], "links": [], "meta": {}},
             "domain_filter": None,
         }
-        state._graph_cache_ts = time.monotonic()
         state._applied_node_ids.clear()
         state._node_index.clear()
         state._adjacency.clear()
@@ -162,7 +161,6 @@ def apply_delta(
         meta = cur.setdefault("meta", {})
         meta["node_count"] = len(cur_nodes)
         meta["edge_count"] = len(cur_edges)
-        state._graph_cache_ts = time.monotonic()
         # Rebuild the server-side per-phase buffer from the delta stream.
         # _phase_payloads is authoritative for /api/graph/phase on the
         # server; the slim wire dropped phase membership so the real
@@ -239,7 +237,6 @@ def apply_graph_replace(epoch: int, data: dict) -> None:
         return  # stale build — drop
     with state._apply_lock:
         state._graph_cache = {"data": data, "domain_filter": None}
-        state._graph_cache_ts = time.monotonic()
         state._applied_node_ids.clear()
         state._node_index.clear()
         state._adjacency.clear()

@@ -7,6 +7,7 @@ infrastructure I/O — no build/appliers coupling.
 
 from __future__ import annotations
 
+import logging
 import time
 
 from cortex_viz.server import graph_cache_state as state
@@ -15,6 +16,39 @@ from cortex_viz.server.http_standalone_state import (
     get_cached_conversations_state,
     set_cached_conversations_state,
 )
+
+logger = logging.getLogger(__name__)
+
+
+def _optional_vital(store, method: str, default, /, *args, **kwargs):
+    """Read one optional memory-vital from ``store``, falling back to
+    ``default`` when the store cannot provide it.
+
+    Two very different things used to land here identically. A store built
+    before a vital existed simply has no such method — expected, silent, and
+    the reason these reads are optional at all. A store that HAS the method
+    but fails the query (dropped connection, missing column after a partial
+    migration, permission change) is a live fault, and reporting its default
+    unannounced put a confident ``0`` on the dashboard that was
+    indistinguishable from a real zero. The absent-method case stays silent; the
+    failure case is logged with the method and the exception before falling
+    back, so the degraded reading is traceable to its cause.
+    """
+    fn = getattr(store, method, None)
+    if fn is None:
+        return default  # store predates this vital — the expected quiet path
+    try:
+        return fn(*args, **kwargs)
+    except Exception as exc:
+        logger.warning(
+            "memory-vitals: %s() failed on a store that defines it; "
+            "reporting the %r fallback — %s: %s",
+            method,
+            default,
+            type(exc).__name__,
+            exc,
+        )
+        return default
 
 
 def parse_discussion_params(path: str) -> dict:
@@ -29,11 +63,14 @@ def parse_discussion_params(path: str) -> dict:
             try:
                 result["batch"] = int(p[6:])
             except ValueError:
+                # A non-integer batch is ignored so the documented default stands —
+                # pagination params are advisory on this endpoint.
                 pass
         elif p.startswith("batch_size="):
             try:
                 result["batch_size"] = int(p[11:])
             except ValueError:
+                # Likewise for batch_size.
                 pass
     return result
 
@@ -63,95 +100,72 @@ def _compute_memory_vitals(store) -> dict:
     # Distinct from provenance['inferred'] (inferred memories AT REST) — this is
     # the subset that was PROMOTED to knowledge. Zero on a store predating the
     # C1 read-side gate.
-    crystallized_confabulations = 0
-    try:
-        crystallized_confabulations = store.count_crystallized_confabulations()
-    except Exception:
-        pass
-    procedural_skills = 0
-    habitual_skills = 0
-    try:
-        skill_rows = store.list_procedural_skills(min_proficiency=0.0, limit=1000)
-        procedural_skills = len(skill_rows)
-        habitual_skills = sum(1 for r in skill_rows if r.get("is_habitual"))
-    except Exception:
-        pass  # store predates procedural memory (B1) — report zero
+    crystallized_confabulations = _optional_vital(
+        store, "count_crystallized_confabulations", 0
+    )
+    skill_rows = _optional_vital(
+        store, "list_procedural_skills", [], min_proficiency=0.0, limit=1000
+    )
+    procedural_skills = len(skill_rows)
+    habitual_skills = sum(1 for r in skill_rows if r.get("is_habitual"))
 
     # E1 habituation & sensitization: surplus repeated presentations the write
     # gate's response decrement is damping (Rankin 2009). Zero on a store
     # predating habituation.
-    habituated_repeats = 0
-    try:
-        habituated_repeats = store.count_habituated_repeats()
-    except Exception:
-        pass
+    habituated_repeats = _optional_vital(store, "count_habituated_repeats", 0)
 
     # E2 fear extinction / inhibitory learning: memories carrying a reversible
     # inhibitory extinction tag — deprecated-but-retained (suppressed WITHOUT
     # deletion), so they can spontaneously recover or be reinstated (Bouton
     # 2004; Milad & Quirk 2012). Distinct from is_stale (active_forgetting's
     # soft-delete). Zero on a store predating extinction.
-    extinguished = 0
-    try:
-        extinguished = store.count_extinguished()
-    except Exception:
-        pass
+    extinguished = _optional_vital(store, "count_extinguished", 0)
 
     # A2 conflict monitoring: pairs of persisted claims that disagree (share an
     # entity, opposing claim_type) — the standing counterpart of the recall-time
     # conflict monitor's claim_resolver routing (Botvinick 2001). Zero on a
     # store predating the claim/wiki layer.
-    conflicting_claim_pairs = 0
-    try:
-        conflicting_claim_pairs = store.count_conflicting_claim_pairs()
-    except Exception:
-        pass
+    conflicting_claim_pairs = _optional_vital(store, "count_conflicting_claim_pairs", 0)
 
     # C2 dual-process retrieval: over a bounded recent sample, the share of
     # memories resolvable by FAMILIARITY ALONE (a near-duplicate neighbour above
     # the familiarity threshold) — the standing counterpart of the recall-time
     # familiarity triage (Yonelinas 2002; Diana et al 2007). Zero-filled on a
     # store predating vectors.
-    familiarity_resolvable = {
-        "sampled": 0, "resolvable": 0, "share": 0.0, "mean_top_sim": 0.0
-    }
-    try:
-        familiarity_resolvable = store.count_familiarity_resolvable()
-    except Exception:
-        pass
+    familiarity_resolvable = _optional_vital(
+        store,
+        "count_familiarity_resolvable",
+        {"sampled": 0, "resolvable": 0, "share": 0.0, "mean_top_sim": 0.0},
+    )
 
     # F1 two-phase consolidation: standing footprint of the NREM/REM split
     # (mcp_server/core/sleep_phases.py) — NREM-like replay stores auto-narration
     # semantic memories (source='sleep-compute'); REM-like recombination forms
     # abstract schemas (schemas table). Diekelmann & Born 2010; van de Ven 2020.
     # Zero-filled on a store predating either phase.
-    sleep_phase_outputs = {"nrem": 0, "rem": 0}
-    try:
-        sleep_phase_outputs = store.count_sleep_phase_outputs()
-    except Exception:
-        pass
+    sleep_phase_outputs = _optional_vital(
+        store, "count_sleep_phase_outputs", {"nrem": 0, "rem": 0}
+    )
 
     # D1 stress-hormone (glucocorticoid) modulation: the session-stress scalar
     # and inverted-U consolidation gain of the LAST offline CLS cycle. Moderate
     # session stress enhances consolidation, extreme impairs it (Roozendaal &
     # McGaugh 2011; McGaugh 2000). None-safe neutral (stress 0, gain 1.0) when
     # the store predates stress logging or the last cycle was calm/ablated.
-    stress_modulation = {"stress": 0.0, "gain": 1.0, "is_impairing": False}
-    try:
-        stress_modulation = store.count_stress_modulation()
-    except Exception:
-        pass
+    stress_modulation = _optional_vital(
+        store,
+        "count_stress_modulation",
+        {"stress": 0.0, "gain": 1.0, "is_impairing": False},
+    )
 
     # F2 targeted memory reactivation: the cue that biased the last offline
     # consolidation's NREM replay (mcp_server/core/targeted_reactivation.py) —
     # cueing biases *which* memories consolidate (Rasch 2007; Oudiette & Paller
     # 2013). None when the last cycle ran cue-free / TMR was ablated / the store
     # predates cue logging.
-    targeted_reactivation = {"cue": None, "cued_replayed": 0}
-    try:
-        targeted_reactivation = store.count_targeted_reactivation()
-    except Exception:
-        pass
+    targeted_reactivation = _optional_vital(
+        store, "count_targeted_reactivation", {"cue": None, "cued_replayed": 0}
+    )
 
     # A3 goal / task-set maintenance: the sustained goal vector promoted from
     # the store's active prospective triggers (mcp_server/core/goal_maintenance.py).
@@ -161,11 +175,11 @@ def _compute_memory_vitals(store) -> dict:
     # identity, exactly the no-goal case. Zero-filled/inactive on a store
     # predating goal maintenance. DESIGN INFERENCE — a keyword/entity goal-match
     # promoted from the trigger surface, not a learned PFC task-set controller.
-    active_goal = {"active": False, "triggers": 0, "keywords": 0, "label": None}
-    try:
-        active_goal = store.count_active_goal()
-    except Exception:
-        pass
+    active_goal = _optional_vital(
+        store,
+        "count_active_goal",
+        {"active": False, "triggers": 0, "keywords": 0, "label": None},
+    )
 
     # B3 cerebellar forward model: over a bounded recent sample, the mean
     # absolute one-step forward-model prediction error of the heat trajectory
@@ -174,11 +188,9 @@ def _compute_memory_vitals(store) -> dict:
     # predictable. Zero-filled on a store predating heat_base. Wolpert, Miall &
     # Kawato 1998; Ito 2008. A minimal deterministic predict→error→correct EMA
     # (LOW AI PRIORITY per the gap analysis), not a learned cerebellar circuit.
-    forward_model = {"sampled": 0, "mean_error": 0.0}
-    try:
-        forward_model = store.count_forward_model()
-    except Exception:
-        pass
+    forward_model = _optional_vital(
+        store, "count_forward_model", {"sampled": 0, "mean_error": 0.0}
+    )
 
     # A1 central-executive attentional control: the standing bottom-up SALIENCE
     # footprint that feeds the recall-time attentional re-weight
@@ -191,13 +203,11 @@ def _compute_memory_vitals(store) -> dict:
     # driven capture; low = salience spread evenly (attention rests on the query
     # alone). Descriptive salience statistic, NOT the softmax spotlight (which
     # needs a live query) — zero-filled on a store predating affect columns.
-    attentional_salience = {
-        "sampled": 0, "focus_share": 0.0, "mean_salience": 0.0, "max_salience": 0.0
-    }
-    try:
-        attentional_salience = store.count_attentional_salience()
-    except Exception:
-        pass
+    attentional_salience = _optional_vital(
+        store,
+        "count_attentional_salience",
+        {"sampled": 0, "focus_share": 0.0, "mean_salience": 0.0, "max_salience": 0.0},
+    )
 
     return {
         "consolidation_pipeline": stages,
