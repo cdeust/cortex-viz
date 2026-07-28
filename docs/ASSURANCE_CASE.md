@@ -104,10 +104,22 @@ memory content, session transcripts, wiki pages, file paths, commit messages.
 The views are vanilla DOM code with no framework escaping by default, so this
 is a real class here rather than a theoretical one.
 
-Open findings: **2 `js/remote-property-injection` (high)** in
-`ui/brain/js/search_worker.js` and `ui/brain/js/trigram.js`, and **4
-`js/incomplete-html-attribute-sanitization` (medium)**. These are in the same
-untriaged batch as §3.2 and are covered by
+The **2 `js/remote-property-injection` (high)** findings in
+`ui/brain/js/search_worker.js` and `ui/brain/js/trigram.js` are closed. Triage
+result: not exploitable as rated — both sinks wrote into `Object.create(null)`
+maps, which absorb `__proto__`/`constructor` as own properties, and a
+reproduction confirmed `Object.prototype` unchanged across every hostile key
+the tokenizer can emit. The null prototype was nonetheless load-bearing, and
+what it prevented was a search-correctness defect rather than a pollution one:
+backed by a plain object, `seen['constructor']` is truthy before any write, so
+a node labelled `constructor` would be dropped from the index and become
+unfindable. Both maps are now `Set`s. The claim rests on
+`tests/js/trigram.test.mjs` "trigram dedup does not collide with inherited
+property names" — 5 tests, verified to fail against the object-backed
+implementation, so the property is pinned rather than merely currently-true.
+
+Open findings: **4 `js/incomplete-html-attribute-sanitization` (medium)**, in
+the same untriaged batch as §3.2 and covered by
 [#46](https://github.com/cdeust/cortex-viz/issues/46). This section does not
 yet carry a completed argument.
 
