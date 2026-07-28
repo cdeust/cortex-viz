@@ -67,13 +67,18 @@ def _resolve_by_relative_fragment(store, name: str) -> tuple[str | None, str | N
     search over the activity spine. Returns ``(abs_path, reason)``.
     """
     from cortex_viz.shared.domain_mapping import _build_registry
+    from cortex_viz.shared.path_containment import resolve_under
 
     if ".." in name.split("/"):
         return None, "unresolved relative name: path traversal rejected"
 
     for repo in _build_registry().repos:
-        candidate = os.path.join(repo.fs_path, name)
-        if os.path.exists(candidate):
+        # Containment, not the textual ``..`` check above: that check reads
+        # the caller's string, while this resolves symlinks and proves the
+        # result is still inside the repo — a symlink committed in the repo
+        # would otherwise carry the read outside it.
+        candidate = resolve_under(repo.fs_path, os.path.join(repo.fs_path, name))
+        if candidate is not None and os.path.exists(candidate):
             return candidate, None
 
     if store is None:

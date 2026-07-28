@@ -416,6 +416,40 @@ def test_resolve_name_relative_matches_known_repo_root(tmp_path: Path, monkeypat
     assert reason is None
 
 
+def test_resolve_name_relative_refuses_a_symlink_leaving_the_repo(
+    tmp_path: Path, monkeypatch
+):
+    """The ``..``-segment check reads the caller's string; a symlink
+    committed inside the repo carries the read out without ever spelling
+    ``..``. Containment must be decided on the resolved path.
+    """
+    from cortex_viz.server.http_file_diff import _resolve_name
+
+    repo_dir = tmp_path / "known_repo"
+    repo_dir.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.txt").write_text("TOP-SECRET\n")
+    # No ``..`` anywhere in the name the caller sends — the escape is the
+    # symlinked directory, which the textual check cannot see.
+    (repo_dir / "vendor").symlink_to(outside)
+
+    class _FakeRepoInfo:
+        def __init__(self, fs_path: str) -> None:
+            self.fs_path = fs_path
+
+    class _FakeRegistry:
+        repos = [_FakeRepoInfo(str(repo_dir))]
+
+    monkeypatch.setattr(
+        "cortex_viz.shared.domain_mapping._build_registry",
+        lambda: _FakeRegistry(),
+    )
+    abs_path, reason = _resolve_name(None, "vendor/secret.txt")
+    assert abs_path is None
+    assert reason == "unresolved relative name: not found in known repos"
+
+
 # ── (i) /api/trace/file without ?include=ast never computes AST ─────────
 
 

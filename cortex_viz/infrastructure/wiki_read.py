@@ -15,22 +15,27 @@ from pathlib import Path
 from typing import Any
 
 from cortex_viz.infrastructure.config import WIKI_ROOT
+from cortex_viz.shared.path_containment import resolve_under
 from cortex_viz.shared.yaml_parser import parse_yaml_frontmatter
 
 
 def _safe_path(rel_path: str, *, suffix: str | None = None) -> Path | None:
     """Resolve ``rel_path`` under WIKI_ROOT, defeating path traversal.
 
-    Uses realpath + commonpath (not pathlib.is_relative_to, which CodeQL does
-    not recognise as a containment check — see codeql_pathinj_weakhash_fix).
-    Returns None if the resolved path escapes the wiki root or fails an
-    optional suffix gate.
+    Containment goes through ``shared.path_containment.resolve_under``.
+    The previous form (``os.path.commonpath([root, cand]) != root``) is a
+    correct containment check but, like ``pathlib.is_relative_to`` before
+    it, is not one CodeQL models — so ``py/path-injection`` kept reporting
+    ``save_page``'s ``mkdir``/``write_text`` on every scan. See that
+    module's docstring for the difference between correct and provable.
+
+    Returns None if the resolved path escapes the wiki root, IS the wiki
+    root, or fails an optional suffix gate.
     """
     if not rel_path:
         return None
-    root = os.path.realpath(str(WIKI_ROOT))
-    cand = os.path.realpath(os.path.join(root, rel_path))
-    if os.path.commonpath([root, cand]) != root:
+    cand = resolve_under(str(WIKI_ROOT), os.path.join(str(WIKI_ROOT), rel_path))
+    if cand is None:
         return None
     if suffix is not None and not cand.endswith(suffix):
         return None
