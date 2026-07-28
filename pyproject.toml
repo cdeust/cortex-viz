@@ -59,7 +59,12 @@ viz-tile = [
     "pyarrow>=15.0",
     "pandas>=2.2",
     "cachetools>=5.0",
-    "Pillow>=10.0",
+    # Floor is the fix version, not the API floor: 12.3.0 closes 13 advisories
+    # that all land on the image decoders this extra feeds (PYSEC-2026-2253..2257,
+    # -3451..3454, -3493..3496 — OOB read, TGA/JPEG2000 memory disclosure, PDF
+    # decompression-bomb DoS). Pillow 12.3.0 requires Python >=3.10, which this
+    # project already requires. source: osv.dev, resolved 2026-07-28.
+    "Pillow>=12.3.0",
 ]
 # The viz read contract: cortex-viz reads Cortex's PG store + ~/.claude
 # artifacts directly. These read-path drivers were PROMOTED to core

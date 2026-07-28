@@ -4,6 +4,15 @@ on:
   push:
   pull_request:
 
+# Least privilege for GITHUB_TOKEN. Without this block the token inherits the
+# repository default, which can be read/write across every scope — on a
+# workflow that runs untrusted pull-request code, that hands a writable token
+# to any fork that opens a PR. Nothing here writes: both jobs check out,
+# install, and run tests. Any job that needs more must widen it at the JOB
+# level (release.yml is the worked example), never here.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -12,10 +21,18 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
+      # Install from uv.lock, not by resolving fresh at CI time. The lock
+      # carries a sha256 for all 1932 artifacts, so the dependency set is
+      # hash-verified — `pip install -e ".[dev]"` accepted whatever the index
+      # served for an open range, which is the supply-chain hole Scorecard's
+      # PinnedDependencies check flags. `--frozen` fails loudly if the lock has
+      # drifted from pyproject.toml rather than silently re-resolving, so a
+      # dependency can only change through a reviewed lockfile diff.
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
       - name: Install package with test dependencies
-        run: python -m pip install -e ".[dev]"
+        run: uv sync --frozen --extra dev
       - name: Run test suite
-        run: python -m pytest
+        run: uv run --frozen pytest
 
   js-test:
     # Required job: the browser UI (ui/, ~25.5k lines) is the product's primary
