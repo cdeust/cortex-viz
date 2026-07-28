@@ -14,7 +14,6 @@ merge mutates it via ``state.X = ...`` direct attribute assignment.
 from __future__ import annotations
 
 import sys
-import time
 
 from cortex_viz.server import graph_cache_state as state
 from cortex_viz.server.graph_build_helpers import _set_progress
@@ -119,7 +118,6 @@ def make_merge(domain_filter: str | None, events):
             buf["nodes"].extend(added_nodes)
             buf["edges"].extend(added_edges)
         state._graph_cache = {"data": cur, "domain_filter": domain_filter}
-        state._graph_cache_ts = time.monotonic()
         # ── Live SSE emission — the delivery path ──
         # Every _merge (skeleton, baseline, every L6 batch) pushes
         # its added delta onto the event stream the moment it lands

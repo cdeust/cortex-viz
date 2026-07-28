@@ -52,7 +52,6 @@ def get_layout_authority():
 
 
 _graph_cache: dict | None = None
-_graph_cache_ts: float = 0.0
 # id → node dict over the cumulative cache, maintained incrementally by
 # the build's _merge. Backs ``get_node_record`` so /api/graph/node can
 # serve the full record for ANY node kind in O(1) — symbols, files,

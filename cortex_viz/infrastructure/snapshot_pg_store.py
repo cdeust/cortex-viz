@@ -84,8 +84,6 @@ import json
 # valid (possibly empty) source. Kept verbatim (same DDL as inc5.5) for an
 # old binary's continued operation; not touched by write_snapshot/
 # read_latest_snapshot below. Decommission is a future increment.
-_LEGACY_TABLE = "workflow_graph_snapshot"
-
 _DDL_LEGACY = """
 CREATE TABLE IF NOT EXISTS workflow_graph_snapshot (
     fingerprint TEXT PRIMARY KEY,
@@ -111,8 +109,6 @@ ALTER TABLE workflow_graph_snapshot
 # residual risks BY CONSTRUCTION (see module docstring). Primary key is the
 # composite (scope, fingerprint): a fingerprint collision between two scopes
 # is not a key collision, both rows coexist.
-_TABLE = "workflow_graph_snapshot_scoped"
-
 _DDL_SCOPED = """
 CREATE TABLE IF NOT EXISTS workflow_graph_snapshot_scoped (
     scope TEXT NOT NULL,
