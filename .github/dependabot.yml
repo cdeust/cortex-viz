@@ -63,3 +63,16 @@ updates:
     labels: ["dependencies", "ci"]
     commit-message:
       prefix: "chore(ci)"
+    # `github/codeql-action/init`, `/analyze` and `/upload-sarif` are three
+    # dependabot targets cut from one repository at one SHA, and the CodeQL
+    # action requires them to be the same version: `init` writes the tool
+    # state that `analyze` and `upload-sarif` later read. Ungrouped, dependabot
+    # opens one PR per path — #79 raised `init` to v4 while #56 raised
+    # `upload-sarif` and `analyze` was not proposed at all — so merging any one
+    # alone leaves codeql.yml straddling two majors and the scan fails at the
+    # step that reads the other version's state. Same shape as the
+    # `@stryker-mutator/*` split in #77, one ecosystem over.
+    groups:
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
