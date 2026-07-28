@@ -13,9 +13,33 @@
 // The per-edge alpha FADES WITH LENGTH so the dense surface web leads and long
 // interior crossings sink to a floor (still worth doing under normal blending:
 // without it, the dense short-edge surface web and the sparse long interior
-// crossings would compete at equal weight). Curved edges are sampled into
-// K_CURVE points; the segment budget is bounded (curved-edge count is logged)
-// so a future tweak can't silently blow the vertex count.
+// crossings would compete at equal weight).
+//
+// GPU-INSTANCED CURVES, not a CPU-expanded polyline per edge. The graph is not
+// sampled, thinned, or capped — every edge whose endpoints are both in the node
+// set is drawn, at any corpus size. The live graph has been observed at 531,252
+// edges and as large as 5,526,180, ~99% cross-region (curved); expanding each
+// into K_CURVE-1 line SEGMENTS on the main thread (the previous approach) meant
+// millions of segments — a blocking JS loop building hundreds of MB of
+// Float32Array geometry, plus a control-point object per curved edge (GC
+// pressure), before a single frame could render.
+//   source: measured 2026-07-08 (curl-drained /api/graph/full/stream in 1.5s
+//   for 1.17 GB — network was not the bottleneck; the CPU-side segment
+//   expansion was; on that snapshot it produced 27.4M segments).
+// Curve evaluation is exactly the identical-per-instance math GPUs parallelize,
+// so it moves there: the CPU writes one small per-edge attribute record
+// (endpoints + control point + endpoint colours + alpha — O(E), no per-segment
+// expansion, no per-edge allocation), and an InstancedBufferGeometry draws a
+// single shared K_CURVE-point line-strip template once per edge, instanced. The
+// vertex shader evaluates the quadratic Bezier per instance. A control point
+// equal to the segment midpoint makes that same formula collapse to an exact
+// straight line (u²A + 2ut·mid(A,B) + t²B == (1-t)A + tB when C=(A+B)/2), so
+// straight edges need no special case and no second draw call.
+//
+// repaintEdgeFilter / highlightNode get CHEAPER under this layout: alpha and the
+// highlight flag are ONE float per EDGE (instance attributes), not one per
+// vertex-per-segment, so a repaint writes E floats instead of totalSeg*2 and
+// indexes by edge row directly — no vStart/vCount vertex-range bookkeeping.
 
 window.BRAIN = window.BRAIN || {};
 
@@ -28,7 +52,7 @@ window.BRAIN = window.BRAIN || {};
   // re-ink pass 2026-07-04 (README data-family re-inking rule).
   var BASE_ALPHA = 0.09;
   var FLOOR = 0.04;        // fraction of BASE kept for the longest edges
-  var K_CURVE = 6;         // sample points per tract-routed edge (=> 5 segments)
+  var K_CURVE = 6;         // template points per edge (=> 5 instanced segments)
   var BOW_MIN = 0.15, BOW_MAX = 1.0;  // edge-length scaling of the tract bow
   // User-driven per-kind filter (BRAIN.filterKind, set by clicking a legend
   // row — boot.js). Default null (NO filtering): every edge keeps its
@@ -38,7 +62,7 @@ window.BRAIN = window.BRAIN || {};
   var FILTER_EDGE_DIM = 0.04;
   // Hover/selection highlight (BRAIN.highlightNode): edges INCIDENT to the
   // node go fully opaque (HL_FLOOR) AND recolour to the terracotta selection
-  // accent (ehl=1 -> mix in the shader), while every other edge fades to
+  // accent (iHl=1 -> mix in the shader), while every other edge fades to
   // HL_DIM * its base alpha so the incident web is the only thing lit. Floor
   // raised 0.85->1.0 and dim lowered 0.05->0.02 to widen the separation on
   // the dense cloud (screenshot: "Read .c" 25 links lost in 358k edges).
@@ -52,7 +76,7 @@ window.BRAIN = window.BRAIN || {};
   // neighbour dimming (user report 2026-07-09: "je te demande des lignes
   // bold"). 2.5px reads as a deliberate bold trace without haloing. Overlay is
   // built on select / disposed on deselect (only ~20 incident edges), so the
-  // fat-line cost never touches the full 358k-edge cloud. UI-legibility param.
+  // fat-line cost never touches the full edge cloud. UI-legibility param.
   var HL_BOLD_PX = 2.5;
   // The fat-line overlay for the current selection (LineSegments2), or null when
   // nothing is highlighted. Rebuilt per selection change, disposed on deselect.
@@ -62,15 +86,23 @@ window.BRAIN = window.BRAIN || {};
   function endId(v) { return (typeof v === 'object' && v) ? v.id : v; }
 
   var VERT = [
-    'attribute float ealpha;',
-    'attribute vec3 ecolor;',
-    'attribute float ehl;',
+    'attribute vec3 iA;',
+    'attribute vec3 iB;',
+    'attribute vec3 iC;',
+    'attribute vec3 iColorA;',
+    'attribute vec3 iColorB;',
+    'attribute float iAlpha;',
+    'attribute float iHl;',
     'varying float vA;',
     'varying vec3 vC;',
     'varying float vHL;',
     'void main() {',
-    '  vA = ealpha; vC = ecolor; vHL = ehl;',
-    '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
+    // The shared template's only payload is the curve parameter in position.x.
+    '  float t = position.x;',
+    '  float u = 1.0 - t;',
+    '  vec3 p = u * u * iA + 2.0 * u * t * iC + t * t * iB;',
+    '  vA = iAlpha; vC = mix(iColorA, iColorB, t); vHL = iHl;',
+    '  gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);',
     '}',
   ].join('\n');
 
@@ -129,25 +161,54 @@ window.BRAIN = window.BRAIN || {};
     overlay = null;
   }
 
-  // Build a fat-line overlay for the edges whose indices are in `edgeRows`
-  // (the selected node's incident edges). Their segment vertices already live
-  // in the base geometry's position buffer as consecutive start/end PAIRS —
-  // exactly LineSegments2's expected layout — so we copy each edge's own vertex
-  // range out and hand the flat array to LineSegmentsGeometry.setPositions. The
-  // overlay draws terracotta (the selection accent, DS gate G4) at HL_BOLD_PX,
-  // normal-blended (no additive glow, DS gate G6), depth-test off so it floats
-  // over the hull like the base web, at a renderOrder between the web (1) and
-  // the node cloud (2). Replaces any previous overlay.
-  function buildHighlightOverlay(edgeRows) {
+  // The one shared line-strip template every instance reuses: K_CURVE-1
+  // segments as consecutive vertex PAIRS (LineSegments layout), carrying only
+  // the curve parameter t in position.x. Identical for straight and curved
+  // edges — the control point decides which the shader draws.
+  function curveTemplate() {
+    var steps = K_CURVE - 1;
+    var pos = new Float32Array(steps * 2 * 3);
+    for (var k = 0; k < steps; k++) {
+      pos[k * 6] = k / steps;             // segment start t
+      pos[k * 6 + 3] = (k + 1) / steps;   // segment end t
+    }
+    return pos;
+  }
+
+  // Evaluate the same quadratic Bezier the vertex shader does, on the CPU, for
+  // ONE instance. Used only by the fat-line overlay (a handful of incident
+  // edges), never on the full cloud — the whole point of the instanced layout
+  // is that the hot path never touches this.
+  function bezierPoint(inst, i, t, out) {
+    var u = 1 - t, w0 = u * u, w1 = 2 * u * t, w2 = t * t;
+    var o = i * 3;
+    out[0] = w0 * inst.iA[o] + w1 * inst.iC[o] + w2 * inst.iB[o];
+    out[1] = w0 * inst.iA[o + 1] + w1 * inst.iC[o + 1] + w2 * inst.iB[o + 1];
+    out[2] = w0 * inst.iA[o + 2] + w1 * inst.iC[o + 2] + w2 * inst.iB[o + 2];
+  }
+
+  // Build a fat-line overlay for the instances in `rows` (the selected node's
+  // incident edges), re-evaluating each one's curve at the same K_CURVE
+  // samples the GPU uses so the bold stroke traces the identical path. Draws
+  // terracotta (selection accent, DS gate G4) at HL_BOLD_PX, normal-blended
+  // (no additive glow, DS gate G6), depth-test off so it floats over the hull
+  // like the base web, at a renderOrder between the web (1) and the node
+  // cloud (2). Replaces any previous overlay.
+  function buildHighlightOverlay(rows) {
     disposeHighlightOverlay();
-    if (!edgeRows.length) return;
-    var idx = BRAIN.edgeIndex;
-    var posArr = BRAIN.edgeLines.geometry.getAttribute('position').array;
+    if (!rows.length) return;
+    var inst = BRAIN.edgeInstances;
+    var steps = K_CURVE - 1;
+    var cur = [0, 0, 0], nxt = [0, 0, 0];
     var flat = [];
-    for (var j = 0; j < edgeRows.length; j++) {
-      var i = edgeRows[j];
-      var from = idx.vStart[i] * 3, to = from + idx.vCount[i] * 3;
-      for (var f = from; f < to; f++) flat.push(posArr[f]);
+    for (var j = 0; j < rows.length; j++) {
+      var i = rows[j];
+      bezierPoint(inst, i, 0, cur);
+      for (var k = 0; k < steps; k++) {
+        bezierPoint(inst, i, (k + 1) / steps, nxt);
+        flat.push(cur[0], cur[1], cur[2], nxt[0], nxt[1], nxt[2]);
+        cur[0] = nxt[0]; cur[1] = nxt[1]; cur[2] = nxt[2];
+      }
     }
     var geo = new THREE.LineSegmentsGeometry();
     geo.setPositions(flat);
@@ -170,50 +231,65 @@ window.BRAIN = window.BRAIN || {};
   // straight. ctx: {atlas, R} — built once per buildEdges call. rt: a
   // per-edge scratch object reused across the whole routing loop — regA/
   // hemiA/regB/hemiB/ax/ay/az/bx/by/bz are set by the caller before each
-  // call; cx/cy/cz are written back here on a curved result. Zero
-  // allocation: rt itself is allocated once in resolveEdgeRouting and its
-  // fields are overwritten every edge (same "context object, mutated per
-  // iteration" pattern #22 applied to ctx/routing one level up).
+  // call; cx/cy/cz are written back here on a curved result. Zero allocation:
+  // rt is allocated once and its fields are overwritten every edge.
   function controlPoint(ctx, rt) {
     var tb = ctx.atlas.tractBow(rt.regA, rt.hemiA, rt.regB, rt.hemiB);
     if (!tb) return false;
     var mx = (rt.ax + rt.bx) / 2, my = (rt.ay + rt.by) / 2, mz = (rt.az + rt.bz) / 2;
-    var len = Math.sqrt((rt.bx - rt.ax) * (rt.bx - rt.ax) + (rt.by - rt.ay) * (rt.by - rt.ay) +
-      (rt.bz - rt.az) * (rt.bz - rt.az));
-    var s = Math.min(Math.max(len / ctx.R, BOW_MIN), BOW_MAX);
+    var s = Math.min(Math.max(rt.len / ctx.R, BOW_MIN), BOW_MAX);
     var w = ctx.atlas.bowToWorld(tb.bow);
-    var cx = mx + w.x * s, cy = my + w.y * s, cz = mz + w.z * s;
-    if (tb.midline) cx = mx * 0.15;  // corpus-callosum arch crosses near midline
-    rt.cx = cx; rt.cy = cy; rt.cz = cz;
+    rt.cx = mx + w.x * s; rt.cy = my + w.y * s; rt.cz = mz + w.z * s;
+    if (tb.midline) rt.cx = mx * 0.15;  // corpus-callosum arch crosses near midline
     return true;
   }
 
   // Per-edge length fade between ctx.shortLen (full strength) and ctx.longLen
-  // (floor). rt.ax..bz hold the current edge's endpoint coords, set by the
-  // caller — same reused-scratch pattern as controlPoint.
+  // (floor). Reads the length rt.len the caller already measured — the single
+  // sqrt per edge is shared with the bow scale in controlPoint.
   function edgeAlpha(ctx, rt) {
-    var len = Math.sqrt((rt.bx - rt.ax) * (rt.bx - rt.ax) + (rt.by - rt.ay) * (rt.by - rt.ay) +
-      (rt.bz - rt.az) * (rt.bz - rt.az));
-    var f = (ctx.longLen - len) / ctx.span;
+    var f = (ctx.longLen - rt.len) / ctx.span;
     if (f > 1) f = 1; else if (f < FLOOR) f = FLOOR;
     return BASE_ALPHA * f;
   }
 
-  // Pass 1: resolve endpoints + control points, size the buffers. Returns the
-  // per-edge routing arrays plus segment-count totals that pass 2 needs to
-  // size its own buffers.
-  function resolveEdgeRouting(ctx) {
+  // Allocate the per-edge instance record. Sized to the edge count; the kept
+  // count (instances actually filled) is returned by fillInstances below.
+  function allocInstances(E) {
+    return {
+      iA: new Float32Array(E * 3), iB: new Float32Array(E * 3),
+      iC: new Float32Array(E * 3),
+      iColorA: new Float32Array(E * 3), iColorB: new Float32Array(E * 3),
+      iAlpha: new Float32Array(E), iHl: new Float32Array(E),
+      srcRow: new Int32Array(E), dstRow: new Int32Array(E),
+      baseAlpha: new Float32Array(E), count: 0,
+    };
+  }
+
+  // Write one resolved edge into instance slot `n`. Straight edges store the
+  // MIDPOINT as their control point, which makes the shader's Bezier collapse
+  // to an exact straight line — no special case, no second draw call.
+  function writeInstance(inst, n, rt, ctx) {
+    var o = n * 3;
+    inst.iA[o] = rt.ax; inst.iA[o + 1] = rt.ay; inst.iA[o + 2] = rt.az;
+    inst.iB[o] = rt.bx; inst.iB[o + 1] = rt.by; inst.iB[o + 2] = rt.bz;
+    inst.iC[o] = rt.cx; inst.iC[o + 1] = rt.cy; inst.iC[o + 2] = rt.cz;
+    var nc = ctx.nodeColors, so = rt.so, to = rt.to;
+    inst.iColorA[o] = nc[so]; inst.iColorA[o + 1] = nc[so + 1]; inst.iColorA[o + 2] = nc[so + 2];
+    inst.iColorB[o] = nc[to]; inst.iColorB[o + 1] = nc[to + 1]; inst.iColorB[o + 2] = nc[to + 2];
+    inst.srcRow[n] = rt.si; inst.dstRow[n] = rt.ti;
+    var a = edgeAlpha(ctx, rt);
+    inst.baseAlpha[n] = a; inst.iAlpha[n] = a; inst.iHl[n] = 0;
+  }
+
+  // Single pass over the edge list: resolve endpoints, route, and write the
+  // instance record. O(E) with no per-segment expansion and no per-edge
+  // allocation — `rt` is one reused scratch object.
+  function fillInstances(ctx, inst) {
     var edges = ctx.edges, positions = ctx.positions, indexOfId = ctx.indexOfId;
-    var regionKey = ctx.regionKey, hemi = ctx.hemi;
-    var E = edges.length;
-    var srcRow = new Int32Array(E), dstRow = new Int32Array(E);
-    var ctrl = new Float32Array(E * 3);
-    var segCnt = new Uint8Array(E);
-    var totalSeg = 0, curved = 0, dropped = 0;
-    // Reusable per-edge scratch for controlPoint (§4.4 PARAM_COUNT fix,
-    // issue #23) — allocated once, fields overwritten every iteration so the
-    // hot loop below allocates nothing per edge.
-    var rt = { regA: 0, hemiA: 0, regB: 0, hemiB: 0, ax: 0, ay: 0, az: 0, bx: 0, by: 0, bz: 0, cx: 0, cy: 0, cz: 0 };
+    var E = edges.length, n = 0, curved = 0, dropped = 0;
+    var rt = { si: 0, ti: 0, so: 0, to: 0, regA: 0, hemiA: 0, regB: 0, hemiB: 0,
+      ax: 0, ay: 0, az: 0, bx: 0, by: 0, bz: 0, cx: 0, cy: 0, cz: 0, len: 0 };
     for (var i = 0; i < E; i++) {
       var si = indexOfId.get(endId(edges[i].source));
       var ti = indexOfId.get(endId(edges[i].target));
@@ -221,83 +297,50 @@ window.BRAIN = window.BRAIN || {};
       // a node the snapshot excluded). Skip it, but COUNT it — a silent drop
       // reads as "every edge drawn" when it is not. source: 22,643 of 5.53M
       // edges (0.41%) dropped, measured 2026-07-01.
-      if (si == null || ti == null) { srcRow[i] = -1; dropped++; continue; }
-      srcRow[i] = si; dstRow[i] = ti;
-      var so = si * 3, to = ti * 3;
-      rt.regA = regionKey[si]; rt.hemiA = hemi[si]; rt.regB = regionKey[ti]; rt.hemiB = hemi[ti];
-      rt.ax = positions[so]; rt.ay = positions[so + 1]; rt.az = positions[so + 2];
-      rt.bx = positions[to]; rt.by = positions[to + 1]; rt.bz = positions[to + 2];
+      if (si == null || ti == null) { dropped++; continue; }
+      rt.si = si; rt.ti = ti; rt.so = si * 3; rt.to = ti * 3;
+      rt.regA = ctx.regionKey[si]; rt.hemiA = ctx.hemi[si];
+      rt.regB = ctx.regionKey[ti]; rt.hemiB = ctx.hemi[ti];
+      rt.ax = positions[rt.so]; rt.ay = positions[rt.so + 1]; rt.az = positions[rt.so + 2];
+      rt.bx = positions[rt.to]; rt.by = positions[rt.to + 1]; rt.bz = positions[rt.to + 2];
+      var dx = rt.bx - rt.ax, dy = rt.by - rt.ay, dz = rt.bz - rt.az;
+      rt.len = Math.sqrt(dx * dx + dy * dy + dz * dz);
       if (controlPoint(ctx, rt)) {
-        ctrl[i * 3] = rt.cx; ctrl[i * 3 + 1] = rt.cy; ctrl[i * 3 + 2] = rt.cz;
-        segCnt[i] = K_CURVE - 1; totalSeg += K_CURVE - 1; curved++;
+        curved++;
       } else {
-        segCnt[i] = 1; totalSeg += 1;
+        rt.cx = (rt.ax + rt.bx) / 2; rt.cy = (rt.ay + rt.by) / 2; rt.cz = (rt.az + rt.bz) / 2;
       }
+      writeInstance(inst, n, rt, ctx);
+      n++;
     }
-    return {
-      E: E, srcRow: srcRow, dstRow: dstRow, ctrl: ctrl, segCnt: segCnt,
-      totalSeg: totalSeg, curved: curved, dropped: dropped,
-    };
+    inst.count = n; inst.curved = curved; inst.dropped = dropped;
+    return inst;
   }
 
-  // Pass 2: fill segment geometry (2 verts/segment). vStart/vCount/baseAlpha
-  // persist per-edge (indexed by the SAME `i` as edges[]) so a later filter
-  // change (repaintEdgeFilter) can re-derive each edge's alpha and splat it
-  // across exactly its own vertex range without rebuilding geometry.
-  // vStart defaults to -1 (untouched = dropped edge, never written below).
-  function fillEdgeBuffers(ctx, routing) {
-    var positions = ctx.positions, nodeColors = ctx.nodeColors;
-    var E = routing.E, srcRow = routing.srcRow, dstRow = routing.dstRow;
-    var ctrl = routing.ctrl, segCnt = routing.segCnt, totalSeg = routing.totalSeg;
-    var seg = new Float32Array(totalSeg * 6);
-    var alpha = new Float32Array(totalSeg * 2);
-    var ecol = new Float32Array(totalSeg * 6);
-    var vStart = new Int32Array(E).fill(-1);
-    var vCount = new Int32Array(E);
-    var baseAlpha = new Float32Array(E);
-    // Buffers every edge this pass writes into — built once, threaded through
-    // writeEdge/pushVert instead of passed as individual params (§4.4 fix,
-    // issue #23).
-    var buf = { positions: positions, nodeColors: nodeColors, ctrl: ctrl, seg: seg, ecol: ecol, alpha: alpha };
-    // Reusable per-edge scratch: so/to/segCount/a/p are set below before each
-    // writeEdge call; ax..cz are cached by writeEdge itself for the duration
-    // of that edge's segment steps. Allocated once — zero per-edge alloc.
-    var es = { i: 0, so: 0, to: 0, segCount: 0, a: 0, p: 0,
-      ax: 0, ay: 0, az: 0, bx: 0, by: 0, bz: 0, cx: 0, cy: 0, cz: 0 };
-    var p = 0;  // vertex pointer (counts vertices, *3 for floats)
-    var pa = bezierBuffers();
-    for (var i = 0; i < E; i++) {
-      if (srcRow[i] < 0 || segCnt[i] === 0) continue;
-      var so = srcRow[i] * 3, to = dstRow[i] * 3;
-      es.ax = positions[so]; es.ay = positions[so + 1]; es.az = positions[so + 2];
-      es.bx = positions[to]; es.by = positions[to + 1]; es.bz = positions[to + 2];
-      var a = edgeAlpha(ctx, es);
-      var vBefore = p;
-      es.i = i; es.so = so; es.to = to; es.segCount = segCnt[i]; es.a = a; es.p = p;
-      writeEdge(buf, es, pa);
-      p = es.p;
-      vStart[i] = vBefore;
-      vCount[i] = p - vBefore;
-      baseAlpha[i] = a;
-    }
-    return { seg: seg, alpha: alpha, ecol: ecol, vStart: vStart, vCount: vCount, baseAlpha: baseAlpha };
+  function instAttr(arr, size, n) {
+    return new THREE.InstancedBufferAttribute(arr.subarray(0, n * size), size);
   }
 
-  // Build the THREE.LineSegments mesh from filled buffers and add it to the
-  // scene. Depth-test off so the synapse web floats OVER the opaque brain
-  // hull — the opaque shell (depthWrite:true) would otherwise occlude every
-  // interior tract, leaving only the front-most edges. renderOrder 1 draws
-  // the web after the hull (0) and under the node cloud (2). source: DS Spec
-  // V-01.
-  function buildEdgeMesh(buffers, totalSeg) {
-    var geom = new THREE.BufferGeometry();
-    geom.setAttribute('position', new THREE.BufferAttribute(buffers.seg, 3));
-    geom.setAttribute('ealpha', new THREE.BufferAttribute(buffers.alpha, 1));
-    geom.setAttribute('ecolor', new THREE.BufferAttribute(buffers.ecol, 3));
-    // Highlight flag per vertex (0 = data colour, 1 = mix to accent). Splatted
-    // by highlightNode over an edge's own vertex range, exactly like ealpha;
-    // starts all-zero so a fresh build shows no selection tint.
-    geom.setAttribute('ehl', new THREE.BufferAttribute(new Float32Array(totalSeg * 2), 1));
+  // Build the instanced LineSegments mesh and add it to the scene. Depth-test
+  // off so the synapse web floats OVER the opaque brain hull — the opaque
+  // shell (depthWrite:true) would otherwise occlude every interior tract,
+  // leaving only the front-most edges. renderOrder 1 draws the web after the
+  // hull (0) and under the node cloud (2). source: DS Spec V-01.
+  // frustumCulled MUST stay false: vertex positions are computed in the
+  // shader, so three.js's bounding sphere (derived from the t-only template)
+  // does not describe where the edges actually are.
+  function buildEdgeMesh(inst) {
+    var n = inst.count;
+    var geom = new THREE.InstancedBufferGeometry();
+    geom.setAttribute('position', new THREE.BufferAttribute(curveTemplate(), 3));
+    geom.setAttribute('iA', instAttr(inst.iA, 3, n));
+    geom.setAttribute('iB', instAttr(inst.iB, 3, n));
+    geom.setAttribute('iC', instAttr(inst.iC, 3, n));
+    geom.setAttribute('iColorA', instAttr(inst.iColorA, 3, n));
+    geom.setAttribute('iColorB', instAttr(inst.iColorB, 3, n));
+    geom.setAttribute('iAlpha', instAttr(inst.iAlpha, 1, n));
+    geom.setAttribute('iHl', instAttr(inst.iHl, 1, n));
+    geom.instanceCount = n;
 
     var mat = new THREE.ShaderMaterial({
       vertexShader: VERT, fragmentShader: FRAG,
@@ -312,12 +355,12 @@ window.BRAIN = window.BRAIN || {};
     return lines;
   }
 
-  function logEdgeStats(E, dropped, curved, totalSeg) {
-    console.log('[brain] edges:', E, '| drawn:', E - dropped, '| tract-routed:', curved,
-      '-> segments:', totalSeg);
-    if (dropped > 0) {
-      console.warn('[brain] dropped', dropped, 'edges (' +
-        (100 * dropped / Math.max(E, 1)).toFixed(2) +
+  function logEdgeStats(E, inst) {
+    console.log('[brain] edges:', E, '| drawn:', inst.count, '| tract-routed:',
+      inst.curved, '-> instanced segments:', inst.count * (K_CURVE - 1));
+    if (inst.dropped > 0) {
+      console.warn('[brain] dropped', inst.dropped, 'edges (' +
+        (100 * inst.dropped / Math.max(E, 1)).toFixed(2) +
         '%) whose endpoint was filtered out of the node set.');
     }
   }
@@ -327,7 +370,7 @@ window.BRAIN = window.BRAIN || {};
   BRAIN.buildEdges = function (edges, positions, indexOfId, nodeColors, regionKey, hemi, atlas) {
     var R = BRAIN.TARGET_RADIUS || 80;
     // Built once per call (never inside the per-edge loop) and threaded through
-    // both passes so each helper stays within the §4.4 4-parameter limit.
+    // the fill pass so each helper stays within the §4.4 4-parameter limit.
     var ctx = {
       edges: edges, positions: positions, indexOfId: indexOfId, nodeColors: nodeColors,
       regionKey: regionKey, hemi: hemi, atlas: atlas, R: R,
@@ -335,103 +378,76 @@ window.BRAIN = window.BRAIN || {};
     };
     ctx.span = Math.max(ctx.longLen - ctx.shortLen, 1e-3);
 
-    var routing = resolveEdgeRouting(ctx);
-    var buffers = fillEdgeBuffers(ctx, routing);
-    var lines = buildEdgeMesh(buffers, routing.totalSeg);
+    var inst = fillInstances(ctx, allocInstances(edges.length));
+    var lines = buildEdgeMesh(inst);
 
     BRAIN.edgeLines = lines;
-    BRAIN.edgeCount = routing.totalSeg;
-    BRAIN.curvedEdgeCount = routing.curved;
-    BRAIN.droppedEdgeCount = routing.dropped;
-    // Persisted for repaintEdgeFilter() (below) — keyed by the same edge
-    // index `i` as the `edges` array passed in.
-    BRAIN.edgeIndex = {
-      srcRow: routing.srcRow, dstRow: routing.dstRow,
-      vStart: buffers.vStart, vCount: buffers.vCount, baseAlpha: buffers.baseAlpha,
-    };
-    logEdgeStats(routing.E, routing.dropped, routing.curved, routing.totalSeg);
+    BRAIN.edgeInstances = inst;
+    BRAIN.edgeCount = inst.count;
+    BRAIN.curvedEdgeCount = inst.curved;
+    BRAIN.droppedEdgeCount = inst.dropped;
+    logEdgeStats(edges.length, inst);
     return lines;
   };
 
-  // Re-derive every edge's alpha from its persisted length-based baseAlpha
-  // and the CURRENT BRAIN.filterKind (null => factor 1.0 for all, matching
-  // the un-filtered build exactly), then splat each edge's factor across
-  // exactly its own vertex range and re-upload — no geometry rebuild, same
-  // cheap repaint shape as points.js's repaintPointFilter. BRAIN.nodeKindByRow
+  // The per-edge alpha factor under the CURRENT BRAIN.filterKind (null => 1.0
+  // for all, matching the un-filtered build exactly). BRAIN.nodeKindByRow
   // (boot.js) supplies each endpoint's kind by row.
+  function filterFactor(inst, i) {
+    var kind = BRAIN.filterKind, kindByRow = BRAIN.nodeKindByRow;
+    if (!kind || !kindByRow) return 1.0;
+    var sk = kindByRow[inst.srcRow[i]], tk = kindByRow[inst.dstRow[i]];
+    return (sk === kind || tk === kind) ? 1.0 : FILTER_EDGE_DIM;
+  }
+
+  // Re-derive every edge's alpha from its persisted length-based baseAlpha and
+  // the current filter, writing ONE float per edge — no geometry rebuild, and
+  // no vertex-range splat (the instance layout made that bookkeeping
+  // unnecessary). Same cheap repaint shape as points.js's repaintPointFilter.
   BRAIN.repaintEdgeFilter = function () {
-    var idx = BRAIN.edgeIndex, lines = BRAIN.edgeLines;
-    if (!idx || !lines) return;
-    var attr = lines.geometry.getAttribute('ealpha');
-    var arr = attr.array;
-    // Clear any selection tint too: back to the plain filter state means no
-    // node is highlighted, so every edge reverts to its data colour (ehl=0).
-    var hlAttr = lines.geometry.getAttribute('ehl');
-    var hlArr = hlAttr.array;
-    var kind = BRAIN.filterKind;
-    var kindByRow = BRAIN.nodeKindByRow;
-    for (var i = 0; i < idx.vCount.length; i++) {
-      var vc = idx.vCount[i];
-      if (vc === 0) continue;
-      var ff = 1.0;
-      if (kind && kindByRow) {
-        var sk = kindByRow[idx.srcRow[i]], tk = kindByRow[idx.dstRow[i]];
-        ff = (sk === kind || tk === kind) ? 1.0 : FILTER_EDGE_DIM;
-      }
-      var a = idx.baseAlpha[i] * ff;
-      var vs = idx.vStart[i];
-      for (var v = 0; v < vc; v++) { arr[vs + v] = a; hlArr[vs + v] = 0; }
+    var inst = BRAIN.edgeInstances, lines = BRAIN.edgeLines;
+    if (!inst || !lines) return;
+    for (var i = 0; i < inst.count; i++) {
+      inst.iAlpha[i] = inst.baseAlpha[i] * filterFactor(inst, i);
+      // Back to the plain filter state means no node is highlighted, so every
+      // edge reverts to its data colour.
+      inst.iHl[i] = 0;
     }
-    attr.needsUpdate = true;
-    hlAttr.needsUpdate = true;
-    // Back to the plain filter state == no selection, so the fat-line overlay
-    // for the previous selection must go too.
+    lines.geometry.getAttribute('iAlpha').needsUpdate = true;
+    lines.geometry.getAttribute('iHl').needsUpdate = true;
+    // Plain filter state == no selection, so the previous fat-line overlay goes.
     disposeHighlightOverlay();
   };
 
   // Highlight node `row` and its associations: edges INCIDENT to it brighten to
   // >= HL_FLOOR while every other edge fades to HL_DIM * base, and — in the same
   // pass — the set of neighbour rows is collected and handed to
-  // BRAIN.highlightPoints so the endpoints those edges lead to swell too. Reuses
-  // the exact per-edge vertex-range splat as repaintEdgeFilter (no geometry
-  // rebuild) and honours BRAIN.filterKind. `row < 0` (or null) restores the
-  // plain filter state for both edges and points. Callers invoke it only when
-  // the highlighted row CHANGES (one buffer re-upload per node, not per tick).
+  // BRAIN.highlightPoints so the endpoints those edges lead to swell too.
+  // Honours BRAIN.filterKind. `row < 0` (or null) restores the plain filter
+  // state for both edges and points. Callers invoke it only when the
+  // highlighted row CHANGES (one buffer re-upload per node, not per tick).
   BRAIN.highlightNode = function (row) {
-    var idx = BRAIN.edgeIndex, lines = BRAIN.edgeLines;
-    if (!idx || !lines) return;
+    var inst = BRAIN.edgeInstances, lines = BRAIN.edgeLines;
+    if (!inst || !lines) return;
     if (row == null || row < 0) {
       BRAIN.repaintEdgeFilter();
       if (BRAIN.highlightPoints) BRAIN.highlightPoints(null);
       return;
     }
-    var attr = lines.geometry.getAttribute('ealpha');
-    var arr = attr.array;
-    var hlAttr = lines.geometry.getAttribute('ehl');
-    var hlArr = hlAttr.array;
-    var kind = BRAIN.filterKind, kindByRow = BRAIN.nodeKindByRow;
     var neighbours = new Set();
     neighbours.add(row);
-    var incidentRows = [];   // edge indices to redraw as the fat-line overlay
-    for (var i = 0; i < idx.vCount.length; i++) {
-      var vc = idx.vCount[i];
-      if (vc === 0) continue;
-      var sr = idx.srcRow[i], dr = idx.dstRow[i];
+    var incidentRows = [];   // instance indices to redraw as the fat-line overlay
+    for (var i = 0; i < inst.count; i++) {
+      var sr = inst.srcRow[i], dr = inst.dstRow[i];
       var incident = sr === row || dr === row;
       if (incident) { neighbours.add(sr === row ? dr : sr); incidentRows.push(i); }
-      var ff = 1.0;
-      if (kind && kindByRow) {
-        var sk = kindByRow[sr], tk = kindByRow[dr];
-        ff = (sk === kind || tk === kind) ? 1.0 : FILTER_EDGE_DIM;
-      }
-      var a = incident ? Math.max(idx.baseAlpha[i], HL_FLOOR) * ff
-                       : idx.baseAlpha[i] * HL_DIM * ff;
-      var hv = incident ? 1 : 0;
-      var vs = idx.vStart[i];
-      for (var v = 0; v < vc; v++) { arr[vs + v] = a; hlArr[vs + v] = hv; }
+      var ff = filterFactor(inst, i);
+      inst.iAlpha[i] = incident ? Math.max(inst.baseAlpha[i], HL_FLOOR) * ff
+                                : inst.baseAlpha[i] * HL_DIM * ff;
+      inst.iHl[i] = incident ? 1 : 0;
     }
-    attr.needsUpdate = true;
-    hlAttr.needsUpdate = true;
+    lines.geometry.getAttribute('iAlpha').needsUpdate = true;
+    lines.geometry.getAttribute('iHl').needsUpdate = true;
     // Redraw just this node's incident edges as true bold strokes on top of the
     // now-recoloured 1px web (the thin terracotta web still shows through where
     // the fat line doesn't cover, keeping the connection visible end to end).
@@ -439,57 +455,10 @@ window.BRAIN = window.BRAIN || {};
     if (BRAIN.highlightPoints) BRAIN.highlightPoints(neighbours);
   };
 
-  // Scratch arrays reused across edges to avoid per-edge allocation.
-  function bezierBuffers() { return { cur: [0, 0, 0], nxt: [0, 0, 0] }; }
-
-  // Write one edge (straight: 1 segment; curved: K_CURVE-1 Bezier segments)
-  // into buf's geometry buffers, starting at vertex pointer es.p; the new
-  // pointer is left in es.p for the caller to read (fillEdgeBuffers). es.a is
-  // the edge's final alpha (already length-scaled by the caller), applied to
-  // every vertex this edge writes. es.ax/ay/az/bx/by/bz are set by the caller;
-  // cx/cy/cz are read here from buf.ctrl at es.i and cached on es for the
-  // duration of this edge's segment steps — same 4-param-or-fewer scratch
-  // pattern as controlPoint/edgeAlpha above (§4.4 fix, issue #23).
-  function writeEdge(buf, es, pa) {
-    es.cx = buf.ctrl[es.i * 3]; es.cy = buf.ctrl[es.i * 3 + 1]; es.cz = buf.ctrl[es.i * 3 + 2];
-    var steps = es.segCount;          // straight => 1, curved => K_CURVE-1
-    var cur = pa.cur, nxt = pa.nxt;
-    pointAt(es, 0, steps, cur);
-    for (var k = 0; k < steps; k++) {
-      pointAt(es, (k + 1) / steps, steps, nxt);
-      var t0 = k / steps, t1 = (k + 1) / steps;
-      pushVert(buf, es, cur, t0);
-      pushVert(buf, es, nxt, t1);
-      cur[0] = nxt[0]; cur[1] = nxt[1]; cur[2] = nxt[2];
-    }
-  }
-
-  // Point at parameter t along the edge cached on `es` (ax/ay/az/bx/by/bz
-  // endpoints, cx/cy/cz control point) — straight lerp when steps==1, Bezier
-  // otherwise. Writes into `out` (the caller's cur/nxt scratch buffer).
-  function pointAt(es, t, steps, out) {
-    if (steps === 1) {
-      out[0] = es.ax + (es.bx - es.ax) * t;
-      out[1] = es.ay + (es.by - es.ay) * t;
-      out[2] = es.az + (es.bz - es.az) * t;
-      return;
-    }
-    var u = 1 - t, w0 = u * u, w1 = 2 * u * t, w2 = t * t;
-    out[0] = w0 * es.ax + w1 * es.cx + w2 * es.bx;
-    out[1] = w0 * es.ay + w1 * es.cy + w2 * es.by;
-    out[2] = w0 * es.az + w1 * es.cz + w2 * es.bz;
-  }
-
-  // Push one vertex: position from `pt`, colour lerped between the endpoint
-  // colours (buf.nodeColors at es.so/es.to) by parameter t, alpha es.a.
-  // Advances es.p (the shared vertex pointer) by one.
-  function pushVert(buf, es, pt, t) {
-    var o = es.p * 3;
-    buf.seg[o] = pt[0]; buf.seg[o + 1] = pt[1]; buf.seg[o + 2] = pt[2];
-    buf.ecol[o] = buf.nodeColors[es.so] + (buf.nodeColors[es.to] - buf.nodeColors[es.so]) * t;
-    buf.ecol[o + 1] = buf.nodeColors[es.so + 1] + (buf.nodeColors[es.to + 1] - buf.nodeColors[es.so + 1]) * t;
-    buf.ecol[o + 2] = buf.nodeColors[es.so + 2] + (buf.nodeColors[es.to + 2] - buf.nodeColors[es.so + 2]) * t;
-    buf.alpha[es.p] = es.a;
-    es.p += 1;
-  }
+  // Exposed for the test harness: the pure geometry pieces, so the Bezier
+  // collapse-to-straight identity and the template layout can be asserted
+  // without a WebGL context.
+  BRAIN._edgeInternals = {
+    curveTemplate: curveTemplate, bezierPoint: bezierPoint, K_CURVE: K_CURVE,
+  };
 })();
