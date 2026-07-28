@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from cortex_viz.server.http_common import get_ui_root
+from cortex_viz.server.http_standalone_static import serve_static
 
 # ── UI Server (methodology constellation map) ─────────────────────────
 
@@ -142,35 +143,20 @@ def _serve_graph_json(handler, server_state: dict) -> None:
 
 
 def _serve_static(handler, base_dir: Path, filename: str, content_type: str) -> None:
-    """Serve a static file from the given directory."""
-    import re
+    """Serve a static file from the given directory.
 
+    Delegates to the single hardened reader rather than keeping a second copy
+    of the guard. This function used to duplicate it byte for byte — including
+    the directory-listing whitelist built from ``iterdir()``/``is_file()``,
+    both of which FOLLOW SYMLINKS, so a symlink planted in the served
+    directory was read and returned from outside the sandbox. The duplicate
+    meant fixing the escape in one reader silently left the other exploitable
+    (found 2026-07-28: the fix to ``http_standalone_static.serve_static``
+    did not reach this copy). One implementation, one guard, one place to
+    fix it next time.
+    """
     try:
-        # Security: strip all path components, keep only the final filename
-        safe_name = Path(filename).name
-        # Reject empty, hidden, null bytes, and non-alphanumeric filenames
-        if (
-            not safe_name
-            or safe_name.startswith(".")
-            or "\x00" in safe_name
-            or not re.match(r"^[\w][\w.\-]*$", safe_name)
-        ):
-            handler.send_response(403)
-            handler.end_headers()
-            return
-        # Whitelist: enumerate actual files and match
-        resolved_base = base_dir.resolve()
-        actual_files = {f.name: f for f in resolved_base.iterdir() if f.is_file()}
-        if safe_name not in actual_files:
-            handler.send_response(404)
-            handler.end_headers()
-            return
-        body = actual_files[safe_name].read_bytes()
-        handler.send_response(200)
-        handler.send_header("Content-Type", content_type)
-        handler.send_header("Cache-Control", "no-cache")
-        handler.end_headers()
-        handler.wfile.write(body)
+        serve_static(handler, base_dir, filename, content_type)
     except FileNotFoundError:
         handler.send_response(404)
         handler.end_headers()
