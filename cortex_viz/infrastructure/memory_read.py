@@ -182,7 +182,9 @@ class MemoryReader:
     # Sizes from cortex_viz.infrastructure.memory_config (Cortex's proven
     # values: interactive 2–8, batch 1–2). Override via CORTEX_MEMORY_POOL_*.
 
-    def _open_pool(self, min_size: int, max_size: int, timeout: float) -> ConnectionPool:
+    def _open_pool(
+        self, min_size: int, max_size: int, timeout: float
+    ) -> ConnectionPool:
         return ConnectionPool(
             conninfo=self._url,
             min_size=min_size,
@@ -197,7 +199,8 @@ class MemoryReader:
         if self._interactive_pool is None:
             s = get_memory_settings()
             self._interactive_pool = self._open_pool(
-                s.POOL_INTERACTIVE_MIN, s.POOL_INTERACTIVE_MAX,
+                s.POOL_INTERACTIVE_MIN,
+                s.POOL_INTERACTIVE_MAX,
                 s.POOL_INTERACTIVE_TIMEOUT_S,
             )
         return self._interactive_pool
@@ -207,7 +210,9 @@ class MemoryReader:
         if self._batch_pool is None:
             s = get_memory_settings()
             self._batch_pool = self._open_pool(
-                s.POOL_BATCH_MIN, s.POOL_BATCH_MAX, s.POOL_BATCH_TIMEOUT_S,
+                s.POOL_BATCH_MIN,
+                s.POOL_BATCH_MAX,
+                s.POOL_BATCH_TIMEOUT_S,
             )
         return self._batch_pool
 
@@ -274,8 +279,12 @@ class MemoryReader:
                 d["tags"] = json.loads(d["tags"])
             except (json.JSONDecodeError, TypeError):
                 d["tags"] = []
-        for field in ("created_at", "ingested_at", "last_accessed",
-                      "last_reconsolidated"):
+        for field in (
+            "created_at",
+            "ingested_at",
+            "last_accessed",
+            "last_reconsolidated",
+        ):
             if isinstance(d.get(field), datetime):
                 d[field] = d[field].isoformat()
         return d
@@ -301,14 +310,16 @@ class MemoryReader:
                 f"SELECT {heat} AS heat, * FROM memories m "
                 f"WHERE {heat} >= %s {bench_filter}"
                 f"ORDER BY {heat} DESC LIMIT %s",
-                (min_heat, limit), batch=batch,
+                (min_heat, limit),
+                batch=batch,
             ).fetchall()
         else:
             rows = self._execute(
                 f"SELECT {heat} AS heat, * FROM memories m "
                 f"WHERE {heat} >= %s {bench_filter}"
                 f"ORDER BY {heat} DESC",
-                (min_heat,), batch=batch,
+                (min_heat,),
+                batch=batch,
             ).fetchall()
         return [self._normalize_memory_row(r) for r in rows]
 
@@ -439,7 +450,8 @@ class MemoryReader:
         else:
             rows = self._execute(
                 "SELECT * FROM entities WHERE heat >= %s AND NOT archived",
-                (min_heat,), batch=True,
+                (min_heat,),
+                batch=True,
             ).fetchall()
         return [dict(r) for r in rows]
 
@@ -468,8 +480,7 @@ class MemoryReader:
 
     def get_last_consolidation(self) -> str | None:
         row = self._execute(
-            "SELECT timestamp FROM consolidation_log "
-            "ORDER BY timestamp DESC LIMIT 1"
+            "SELECT timestamp FROM consolidation_log ORDER BY timestamp DESC LIMIT 1"
         ).fetchone()
         return row["timestamp"].isoformat() if row else None
 
@@ -761,7 +772,12 @@ class MemoryReader:
                 (sample_limit, self._FAMILIARITY_THRESHOLD),
             ).fetchone()
             if not row:
-                return {"sampled": 0, "resolvable": 0, "share": 0.0, "mean_top_sim": 0.0}
+                return {
+                    "sampled": 0,
+                    "resolvable": 0,
+                    "share": 0.0,
+                    "mean_top_sim": 0.0,
+                }
             sampled = int(row["sampled"] or 0)
             resolvable = int(row["resolvable"] or 0)
             share = round(resolvable / sampled, 4) if sampled else 0.0

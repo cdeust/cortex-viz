@@ -128,9 +128,7 @@ def kill_current_build() -> None:
             _proc = None
 
 
-def _worker(
-    q: "mp.Queue", url: str, domain_filter: str | None, epoch: int
-) -> None:
+def _worker(q: "mp.Queue", url: str, domain_filter: str | None, epoch: int) -> None:
     """Child process: run the real build, forwarding progress + full-dict
     deltas over ``q`` (epoch-stamped) and the full final graph via a temp
     file."""

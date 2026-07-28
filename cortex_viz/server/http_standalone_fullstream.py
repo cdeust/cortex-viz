@@ -75,8 +75,11 @@ def _stream_legacy_row(handler, snap: dict) -> bool:
     from cortex_viz.shared.json_stream_split import iter_snapshot_segments
 
     header = (
-        b'{"node_total":' + str(snap["node_count"]).encode()
-        + b',"edge_total":' + str(snap["edge_count"]).encode() + b"}\n"
+        b'{"node_total":'
+        + str(snap["node_count"]).encode()
+        + b',"edge_total":'
+        + str(snap["edge_count"]).encode()
+        + b"}\n"
     )
     if not _write_line(handler, header):
         return False
@@ -98,10 +101,7 @@ def _stream_legacy_row(handler, snap: dict) -> bool:
         nonlocal pending, pending_bytes
         if not pending:
             return True
-        line = (
-            b'{"' + pending_section.encode() + b'":['
-            + b",".join(pending) + b"]}\n"
-        )
+        line = b'{"' + pending_section.encode() + b'":[' + b",".join(pending) + b"]}\n"
         pending, pending_bytes = [], 0
         return _write_line(handler, line)
 
@@ -182,8 +182,11 @@ def serve_full_document_from_ndjson(handler, snap: dict) -> None:
         prefix = b""
         if new_section != section:
             prefix = (
-                b'{"nodes":[' if new_section == "nodes"
-                else (b'],"edges":[' if section == "nodes" else b'{"nodes":[],"edges":[')
+                b'{"nodes":['
+                if new_section == "nodes"
+                else (
+                    b'],"edges":[' if section == "nodes" else b'{"nodes":[],"edges":['
+                )
             )
             section = new_section
         elif body:

@@ -24,6 +24,7 @@ from cortex_viz.errors import McpConnectionError
 if TYPE_CHECKING:
     from cortex_viz.infrastructure.ap_bridge import APBridge
 
+
 def _ap_sync_timeout_s() -> float:
     """Cross-loop wait ceiling for AP reader-thread calls.
 

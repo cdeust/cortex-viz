@@ -34,9 +34,15 @@ _PRD_TOOLS = frozenset({"check_health", "get_config", "read_skill_config"})
 
 # PRD document filenames a run writes (file-export.ts). Index → section label.
 _PRD_SECTIONS = {
-    "01": "PRD", "02": "Data model", "03": "API spec", "04": "Security",
-    "05": "Testing", "06": "Deployment", "07": "JIRA tickets",
-    "08": "Source code", "09": "Test code",
+    "01": "PRD",
+    "02": "Data model",
+    "03": "API spec",
+    "04": "Security",
+    "05": "Testing",
+    "06": "Deployment",
+    "07": "JIRA tickets",
+    "08": "Source code",
+    "09": "Test code",
 }
 
 
@@ -205,16 +211,29 @@ def read_prd_graph() -> dict[str, list]:
     for run_dir in discover_prd_artifacts():
         run = run_dir.name
         doc_id = f"prd:{run}"
-        nodes.append({"id": doc_id, "kind": "prd", "type": "prd",
-                      "label": f"PRD {run}"})
+        nodes.append(
+            {"id": doc_id, "kind": "prd", "type": "prd", "label": f"PRD {run}"}
+        )
         for path in sorted(run_dir.glob("0[1-9]-*.md")):
             idx = path.name[:2]
             sid = f"prd_section:{run}:{idx}"
-            nodes.append({"id": sid, "kind": "prd_section", "type": "prd_section",
-                          "label": _PRD_SECTIONS.get(idx, path.stem)})
-            edges.append({"id": f"{doc_id}->{sid}", "source": doc_id,
-                          "target": sid, "kind": "has_section",
-                          "type": "has_section"})
+            nodes.append(
+                {
+                    "id": sid,
+                    "kind": "prd_section",
+                    "type": "prd_section",
+                    "label": _PRD_SECTIONS.get(idx, path.stem),
+                }
+            )
+            edges.append(
+                {
+                    "id": f"{doc_id}->{sid}",
+                    "source": doc_id,
+                    "target": sid,
+                    "kind": "has_section",
+                    "type": "has_section",
+                }
+            )
     return {"nodes": nodes, "edges": edges}
 
 

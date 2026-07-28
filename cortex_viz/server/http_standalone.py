@@ -344,9 +344,7 @@ def _warm_tile_renderer() -> None:
     try:
         from cortex_viz.core import tile_renderer
 
-        tile_renderer.render_tile_png(
-            [("warm", 0.0, 0.0, "memory")], z=0, x=0, y=0
-        )
+        tile_renderer.render_tile_png([("warm", 0.0, 0.0, "memory")], z=0, x=0, y=0)
     except Exception:  # pragma: no cover - best-effort warmup
         pass
 

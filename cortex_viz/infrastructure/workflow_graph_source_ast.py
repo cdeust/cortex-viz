@@ -47,7 +47,6 @@ from cortex_viz.infrastructure.workflow_graph_source_ast_edges import (  # noqa:
 )
 
 
-
 class WorkflowGraphASTSource:
     """AST-layer loader. Construct once per graph build; the inner
     bridge caches its MCP connection across calls."""
