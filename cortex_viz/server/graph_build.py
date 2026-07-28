@@ -5,8 +5,8 @@ Extracted verbatim from ``http_standalone_graph.py``'s
 ``graph_build_run.run_build``; the per-phase/progress/fingerprint/layout
 helpers live in ``graph_build_helpers`` (shared with ``graph_response``).
 
-The ``_roster_fingerprint`` and ``_set_progress`` re-exports keep
-``graph_response`` and any prior ``graph_build.*`` references resolving.
+``_roster_fingerprint`` and ``_set_progress`` are re-exported for
+``graph_response``, which imports them from here.
 
 Shared cache state lives in ``graph_cache_state`` (the single owner).
 """
@@ -16,11 +16,7 @@ from __future__ import annotations
 import threading
 
 from cortex_viz.server import graph_cache_state as state
-from cortex_viz.server.graph_build_helpers import (  # noqa: F401
-    _mark_phase_ready,
-    _persist_full_layout,
-    _phase_deps_satisfied,
-    _register_phase,
+from cortex_viz.server.graph_build_helpers import (
     _roster_fingerprint,
     _set_progress,
 )

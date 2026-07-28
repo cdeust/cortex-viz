@@ -24,15 +24,11 @@ from cortex_viz.infrastructure.workflow_graph_source_native_ast import (
 )
 
 # Serialization helpers + the interleaved streaming path were split into
-# sibling modules (500-line limit). Re-exported here so historical import
-# paths — chiefly ``from cortex_viz.handlers.workflow_graph import
-# _node_to_dict`` (server/graph_build_run.py) — keep resolving.
-from cortex_viz.handlers.workflow_graph_serialize import (  # noqa: F401
-    _CAMEL_ALIASES,
-    _GLOBAL_DOMAIN_TOKEN,
+# sibling modules (500-line limit). ``_node_to_dict`` is re-exported for
+# ``server/graph_build_run.py``, which imports it from here.
+from cortex_viz.handlers.workflow_graph_serialize import (
     _edge_to_dict,
     _node_to_dict,
-    _plain_domain,
 )
 from cortex_viz.handlers.workflow_graph_streaming import _build_interleaved
 
@@ -344,7 +340,6 @@ def build_workflow_graph(
             ),
         },
     }
-
 
 
 __all__ = ["build_workflow_graph", "GraphValidationError"]

@@ -29,20 +29,10 @@ from __future__ import annotations
 
 # ── Shared state owner (functions that read live globals are safe to
 #    re-export because they execute in the owner's namespace) ──
-from cortex_viz.server.graph_cache_state import (  # noqa: F401
-    get_layout_authority,
-    graph_cache_data,
-    set_build_epoch,
-)
+from cortex_viz.server.graph_cache_state import get_layout_authority  # noqa: F401
 
 # ── Server-process appliers + read accessors ──
 from cortex_viz.server.graph_appliers import (  # noqa: F401
-    apply_delta,
-    apply_done,
-    apply_graph_replace,
-    apply_phase_ready,
-    apply_progress,
-    begin_epoch,
     get_build_progress,
     get_graph_slice,
     get_node_neighbors,
@@ -51,20 +41,13 @@ from cortex_viz.server.graph_appliers import (  # noqa: F401
 )
 
 # ── Background builder ──
-from cortex_viz.server.graph_build import (  # noqa: F401
-    _kick_background_build,
-    ensure_build_started,
-)
+from cortex_viz.server.graph_build import ensure_build_started  # noqa: F401
 
 # ── /api/graph response ──
-from cortex_viz.server.graph_response import (  # noqa: F401
-    get_graph_response,
-    parse_graph_query,
-)
+from cortex_viz.server.graph_response import get_graph_response  # noqa: F401
 
 # ── Discussions ──
 from cortex_viz.server.graph_discussions import (  # noqa: F401
     build_discussion_detail,
     build_discussions_response,
-    parse_discussion_params,
 )

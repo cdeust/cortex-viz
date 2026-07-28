@@ -28,19 +28,14 @@ from cortex_viz.infrastructure.ap_bridge import (
 
 # Sync machinery, symbol constants, and the per-graph symbol/edge async
 # batch loaders live in the sibling ``_async`` / ``_edges`` modules
-# (split to respect the 500-line file limit). Re-exported here so every
-# historical import path (``_SyncLoop``, ``_run``, ``_ap_sync_timeout_s``,
-# ``_as_list``, ``_SYMBOL_LABELS``, ``_NON_QUALIFIED_LABELS``,
-# ``_symbol_type_from_label``) keeps resolving.
-from cortex_viz.infrastructure.workflow_graph_source_ast_async import (  # noqa: F401
-    _NON_QUALIFIED_LABELS,
+# (split to respect the 500-line file limit). Only the names this module
+# uses are imported; the rest are imported from their owning module by
+# whoever needs them.
+from cortex_viz.infrastructure.workflow_graph_source_ast_async import (
     _SYMBOL_LABELS,
     _SyncLoop,
-    _ap_sync_timeout_s,
     _as_list,
-    _run,
     _symbol_batches_async,
-    _symbol_type_from_label,
 )
 from cortex_viz.infrastructure.workflow_graph_source_ast_edges import (  # noqa: F401
     _edge_batches_async,
