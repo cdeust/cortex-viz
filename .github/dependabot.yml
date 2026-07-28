@@ -36,6 +36,20 @@ updates:
     labels: ["dependencies", "javascript"]
     commit-message:
       prefix: "chore(deps-dev)"
+    # Stryker and vitest ship as families whose members peer-depend on each
+    # other at a `~`/exact range, so a per-package bump is unmergeable by
+    # construction: PR #65 raised @stryker-mutator/core to 9.6.1 while
+    # @stryker-mutator/vitest-runner stayed at 8.7.1, whose peer range is
+    # `~8.7.0`, and `npm ci` failed ERESOLVE before a single test ran.
+    # Grouping moves a family in one commit, so the peer graph stays solvable.
+    groups:
+      stryker:
+        patterns:
+          - "@stryker-mutator/*"
+      vitest:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
 
   # SHA-pinned actions are immune to tag re-pointing but also never pick up a
   # security fix on their own. Dependabot rewrites the pin and the trailing
