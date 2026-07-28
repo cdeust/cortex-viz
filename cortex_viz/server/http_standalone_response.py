@@ -57,6 +57,17 @@ def send_json_error(handler, exc: BaseException, status: int = 500) -> None:
 
 
 def send_plain_error(handler, status: int) -> None:
-    """Send a bare status response with no body."""
+    """Send a bare status response with no body.
+
+    ``Content-Length: 0`` is mandatory for the same reason it is in
+    ``send_json_ok`` — an empty body still has to be *framed*. At
+    ``HTTP/1.1`` with keep-alive, a response declaring neither a length
+    nor chunked encoding leaves the client unable to tell that the body
+    already ended, so it holds the connection until its own timeout.
+    Every rejection path in the sandboxed static readers lands here, so
+    omitting the header hung the caller on *every* refused request
+    instead of failing it fast (issue #66).
+    """
     handler.send_response(status)
+    handler.send_header("Content-Length", "0")
     handler.end_headers()
