@@ -15,6 +15,8 @@ pure-ingestion unit test cannot catch.
 
 from __future__ import annotations
 
+import pytest
+
 from cortex_viz.core.workflow_graph_schema import EdgeKind, NodeIdFactory, NodeKind
 from cortex_viz.core.workflow_graph_wiki import (
     ingest_wiki_citation,
@@ -337,10 +339,41 @@ class _FakeWikiSource:
         return [{"page_id": 1, "session_id": "sess-abc", "cited_at": "2026-07-09"}]
 
 
-def _run(memory_limit: int) -> dict:
+class _FakeAssociatedSource(_FakeWikiSource):
+    """Two memories joined by one association AND one supersede edge.
+
+    ``_FakeWikiSource`` returns empty lists for both channels, so Phase
+    3b/3c run their prologue and emit path over ZERO rows — enough to
+    prove no crash, not enough to prove an edge survives. This subclass
+    seeds the smallest input that makes both channels produce a real
+    edge, so the delta-baseline locals those phases keep (``_assoc_prev_*``
+    / ``_sup_prev_*``) are read against a list that actually grew.
+    """
+
+    def iter_memories_chunked(self, store, min_heat=0.0, chunk_size=1000, limit=0):
+        yield [
+            {"id": 100, "domain": None, "content": "older memory"},
+            {"id": 101, "domain": None, "content": "newer memory"},
+        ]
+
+    def load_memory_associations(self, store):
+        return [
+            {
+                "source_memory_id": 100,
+                "target_memory_id": 101,
+                "weight": 0.75,
+                "shared_count": 2,
+            }
+        ]
+
+    def load_supersede_edges(self, store):
+        return [{"source_memory_id": 101, "target_memory_id": 100}]
+
+
+def _run(memory_limit: int, source=None) -> dict:
     return _build_interleaved(
         store=object(),
-        source=_FakeWikiSource(),
+        source=source if source is not None else _FakeWikiSource(),
         domain_filter=None,
         min_memory_heat=0.0,
         memory_limit=memory_limit,
@@ -350,6 +383,43 @@ def _run(memory_limit: int) -> dict:
         on_batch=None,
         notify_loaded=lambda *_a: None,
     )
+
+
+def _run_collecting(memory_limit: int, source=None):
+    """``_run`` with the two progress callbacks wired to collectors.
+
+    ``_run`` passes ``on_batch=None`` and ``on_source_loaded=None``, which
+    makes ``_emit_delta`` return immediately — so nothing it computes is
+    observable and no test can pin it. These are the phases' only
+    outward signals (the SSE delta frame and the /api/graph/progress
+    counter), so asserting them requires actually subscribing.
+
+    Returns ``(result, batches, loaded)`` where ``batches`` maps a phase
+    label to the list of ``(new_nodes, new_edges)`` it emitted and
+    ``loaded`` maps a phase label to its reported item count.
+    """
+    batches: dict[str, list] = {}
+    loaded: dict[str, int] = {}
+
+    def _on_batch(label, new_nodes, new_edges):
+        batches.setdefault(label, []).append((new_nodes, new_edges))
+
+    def _on_source_loaded(label, count):
+        loaded[label] = count
+
+    result = _build_interleaved(
+        store=object(),
+        source=source if source is not None else _FakeWikiSource(),
+        domain_filter=None,
+        min_memory_heat=0.0,
+        memory_limit=memory_limit,
+        stage="full",
+        defer_native_ast=True,
+        on_source_loaded=_on_source_loaded,
+        on_batch=_on_batch,
+        notify_loaded=lambda *_a: None,
+    )
+    return result, batches, loaded
 
 
 def test_wiki_node_and_edges_emitted_in_bounded_cap_mode():
@@ -402,3 +472,69 @@ def test_wiki_memory_edge_survives_uncapped_mode_regression_guard():
     # and not merely untested.
     assert edge_kinds.count("cited_in") > 0
     assert result["meta"]["counts"]["wiki"] == 1
+
+
+@pytest.mark.parametrize("memory_limit", [10, 0])
+def test_association_and_supersede_edges_emitted_in_both_cap_modes(memory_limit):
+    """Phase 3b/3c produce their edges under BOTH cap modes.
+
+    The two phases take different routes to the same result:
+    ``memory_limit > 0`` ingests into the real builder and reports the
+    edges through the ``_emit_delta`` baseline; ``memory_limit == 0``
+    ingests into the ``_RetainedNodesView`` adapter and copies its edge
+    list into ``retained_memory_edges``. Both routes read baseline
+    locals captured before the ingest loop, so this pins the property
+    that survives either route — the edge reaches the output — rather
+    than the branch that produced it.
+    """
+    result = _run(memory_limit=memory_limit, source=_FakeAssociatedSource())
+    edge_kinds = [e["kind"] for e in result["edges"]]
+    assert edge_kinds.count("associates_with") == 1
+    assert edge_kinds.count("supersedes") == 1
+    # The supersede edge is DIRECTIONAL (newer -> older); asserting the
+    # orientation catches a swapped baseline that a bare count would not.
+    sup = next(e for e in result["edges"] if e["kind"] == "supersedes")
+    assert (sup["source"], sup["target"]) == (
+        NodeIdFactory.memory_id(101),
+        NodeIdFactory.memory_id(100),
+    )
+
+
+@pytest.mark.parametrize("memory_limit", [10, 0])
+def test_association_and_supersede_report_their_own_counts(memory_limit):
+    """Each phase reports exactly the rows IT contributed.
+
+    The counts are derived by subtracting a baseline captured before the
+    ingest loop from the size after it. A baseline that is too low makes
+    a phase claim its predecessor's edges as well, which is invisible in
+    the final graph (the edges are all there either way) and only shows
+    up on this counter.
+    """
+    _, _, loaded = _run_collecting(memory_limit, source=_FakeAssociatedSource())
+    assert loaded["associations"] == 1
+    assert loaded["supersede"] == 1
+
+
+def test_association_delta_frame_carries_only_its_own_edge():
+    """Bounded mode streams each phase as an incremental delta frame.
+
+    Phase 3b adds no NODES (both memories were created during the memory
+    chunks) and exactly one edge, so its frame must carry an empty node
+    list and a single edge. A stale node baseline re-sends nodes already
+    streamed — the browser then re-renders the whole graph on what should
+    be a one-edge update — and a stale edge baseline re-sends earlier
+    phases' edges. Neither is visible in the final graph, so the frame is
+    the only place either can be caught.
+    """
+    _, batches, _ = _run_collecting(10, source=_FakeAssociatedSource())
+    assoc_frames = batches["associations"]
+    assert len(assoc_frames) == 1
+    new_nodes, new_edges = assoc_frames[0]
+    assert list(new_nodes) == []
+    assert [e.kind for e in new_edges] == [EdgeKind.ASSOCIATES_WITH]
+
+    sup_frames = batches["supersede"]
+    assert len(sup_frames) == 1
+    sup_nodes, sup_edges = sup_frames[0]
+    assert list(sup_nodes) == []
+    assert [e.kind for e in sup_edges] == [EdgeKind.SUPERSEDES]

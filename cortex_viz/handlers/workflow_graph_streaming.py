@@ -420,18 +420,23 @@ def _build_interleaved(
             {NodeIdFactory.memory_id(pid) for pid in _retained_memory_pg_ids}
         )
     _associations = source.load_memory_associations(store)
-    if _mem_cap > 0:
-        _assoc_prev_n = len(builder._nodes)  # noqa: SLF001
-        _assoc_prev_e = len(builder._edges)  # noqa: SLF001
+    # Baselined unconditionally, not under ``_mem_cap > 0``: the guard that
+    # READS these sits on the far side of the ingest loop, so a split
+    # assignment forces the reader (and any static analyser) to prove
+    # ``_mem_cap`` is unchanged across the loop before the read is safe
+    # (CodeQL py/uninitialized-local-variable). ``_assoc_target`` IS
+    # ``builder`` in bounded mode, so ``_assoc_target._edges`` is the same
+    # baseline the emit path expects; in full-corpus mode the adapter's
+    # edge list starts empty and these locals are simply never read.
+    _assoc_prev_n = len(builder._nodes)  # noqa: SLF001
+    _assoc_prev_e = len(_assoc_target._edges)  # noqa: SLF001
     for _assoc in _associations:
         ingest_association(_assoc_target, _assoc)
     if _mem_cap > 0:
         _emit_delta("associations", _assoc_prev_n, _assoc_prev_e)
         _assoc_count = len(builder._edges) - _assoc_prev_e
     else:
-        retained_memory_edges.extend(
-            _edge_to_dict(_e) for _e in _assoc_target._edges
-        )
+        retained_memory_edges.extend(_edge_to_dict(_e) for _e in _assoc_target._edges)
         _assoc_count = len(_assoc_target._edges)
     if on_source_loaded is not None:
         on_source_loaded("associations", _assoc_count)
@@ -446,11 +451,13 @@ def _build_interleaved(
     # substrate entirely (force_layout/communities filter to
     # ``associates_with``).
     _supersede_rows = source.load_supersede_edges(store)
-    if _mem_cap > 0:
-        _sup_prev_n = len(builder._nodes)  # noqa: SLF001
-        _sup_prev_e = len(builder._edges)  # noqa: SLF001
-    else:
-        _sup_prev_e = len(_assoc_target._edges)
+    # Unconditional for the same reason as Phase 3b's baseline above, and
+    # collapsing the two arms is safe because ``_assoc_target is builder``
+    # whenever ``_mem_cap > 0`` — the bounded arm's ``len(builder._edges)``
+    # and the full-corpus arm's ``len(_assoc_target._edges)`` were already
+    # the same expression written twice.
+    _sup_prev_n = len(builder._nodes)  # noqa: SLF001
+    _sup_prev_e = len(_assoc_target._edges)  # noqa: SLF001
     for _sup in _supersede_rows:
         ingest_supersede(_assoc_target, _sup)
     if _mem_cap > 0:
