@@ -25,7 +25,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: "20"
+          # Node 20 is end-of-life and deprecated on GitHub runners, and the
+          # test harness has now outgrown it: jsdom >=30 declares
+          # `^22.22.2 || ^24.15.0 || >=26.0.0` and pulls undici >=8
+          # (`>=22.19.0`), whose webidl layer does
+          # `require('node:worker_threads').markAsUncloneable` at import time.
+          # That export does not exist on Node 20, so it binds to undefined and
+          # every vitest worker dies at startup with
+          # `webidl.util.markAsUncloneable is not a function` — measured
+          # 2026-07-28 on Node v20.20.2 (fails) vs v24.13.0 (192/192 pass).
+          node-version: "24"
           cache: "npm"
       - name: Install JS test dependencies
         run: npm ci
