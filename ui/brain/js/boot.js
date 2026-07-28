@@ -54,9 +54,17 @@ window.BRAIN = window.BRAIN || {};
   var KIND_ORDER = ['domain', 'skill', 'command', 'hook', 'agent', 'mcp', 'tool_hub',
     'file', 'discussion', 'memory', 'entity', 'symbol', 'wiki'];
 
+  // Full HTML escape INCLUDING quotes, so the result is safe in element text
+  // AND in quoted-attribute contexts (data-kind="…", data-color-cat="…" in
+  // legendRowHtml below). Escaping only &<> lets a value containing `"` close
+  // the attribute early and open a new one — `a" onmouseover="…` becomes a
+  // live handler (CodeQL js/incomplete-html-attribute-sanitization). Matches
+  // ui/unified/js/trace.js's _esc and ui/brain/js/search.js's esc.
   function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>]/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c];
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return {
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      }[c];
     });
   }
 
@@ -509,6 +517,11 @@ window.BRAIN = window.BRAIN || {};
         fail((err && err.message) || String(err));
       });
   }
+
+  // Read-only test seam — same pattern as JUG._rendererTest and
+  // TraceView._resolveNodeId. Published BEFORE the bootstrap below so it
+  // exists even when start() runs synchronously.
+  BRAIN._legendTest = { esc: esc, legendRowHtml: legendRowHtml };
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', start);
