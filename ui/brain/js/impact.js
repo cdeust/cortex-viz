@@ -13,9 +13,16 @@ window.TraceView = window.TraceView || {};
 (function () {
   'use strict';
 
+  // Full HTML escape INCLUDING quotes, so the result is safe in element text
+  // AND in quoted-attribute contexts (data-file="…" in group() below).
+  // Escaping only &<> lets a value containing `"` close the attribute early
+  // and open a new one — `a" onmouseover="…` becomes a live handler (CodeQL
+  // js/incomplete-html-attribute-sanitization). Matches the same fix in
+  // ui/unified/js/trace.js's _esc, which builds the identical impact-box row.
   function esc(s) {
     return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
   function shortName(s, n) {
     s = String(s || ''); n = n || 32;
@@ -178,4 +185,6 @@ window.TraceView = window.TraceView || {};
 
   // Exposed for tests: repo-relative impact file → brain node id.
   TraceView._resolveNodeId = resolveNodeId;
+  // Read-only test seam for the HTML builders (same pattern as above).
+  TraceView._impactTest = { esc: esc, group: group };
 })();

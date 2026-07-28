@@ -134,3 +134,31 @@ were genuine test gaps, closed by tests rather than reasoned away:
 Unlike the `|| []` fallbacks triaged as equivalent above, this one is
 observable: the mutated value flows into `splitCamel`, which splits it into
 real indexed words.
+
+---
+
+## Run — brain-view HTML escapers (js/incomplete-html-attribute-sanitization #148–#151)
+
+Scope (§12.1 per-commit narrow gate — only the changed lines):
+
+| File | Range | Meaning | Score |
+|---|---|---|---|
+| `ui/brain/js/boot.js` | 63–69 | `esc` (legend rows; character class grew to cover `"` and `'`) | 100% — 13 killed / 0 survived |
+| `ui/brain/js/impact.js` | 22–26 | `esc` (impact panel; same widening) | 100% — 10 killed / 0 survived |
+
+Non-equivalent survivors: 0 (§12.4 satisfied). Both escapers reach 100% on the
+first pass except for one gap, closed by a test rather than reasoned away:
+
+- **`impact.js:23`'s null-coercion arm** (`s == null ? '' : s`) survived
+  `ConditionalExpression` and had **no coverage at all** for its `''` literal.
+  The boot.js describe block asserted the coercion; the impact.js one did not,
+  so `String(null)` → the literal text `"null"` would have rendered in the panel
+  unnoticed. Closed by "leaves ordinary text untouched and coerces
+  null/undefined to empty" in the impact block. This is the common path, not an
+  edge case — an impact row's `label`/`kind`/`confidence` are usually absent.
+
+Each escaped character is its own mutant here (the class `[&<>"']` and the five
+replacement entities), so the property that actually closes the alerts — that
+`"` is escaped — cannot regress silently: dropping it from either the class or
+the entity table is killed by both the direct `esc('"')` assertion and the
+parsed-DOM attribute-breakout tests in `brain_escape.test.mjs`.
