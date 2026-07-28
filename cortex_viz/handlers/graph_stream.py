@@ -16,7 +16,7 @@ This handler:
 * unsubscribes its queue under any termination path.
 
 Composition root: ``http_standalone._route_unified_get`` wires this in.
-The handler depends only on ``server.http_standalone_graph`` (for the
+The handler depends only on ``server.graph_cache_state`` (for the
 lazy authority singleton) and the ``layout_authority_log`` / ``_wire``
 modules (for stats and the keepalive bytes).
 """
@@ -62,7 +62,7 @@ def serve(handler, store) -> None:
       - subscriber queue is unsubscribed regardless of termination path.
     """
     # Lazy import — avoids a circular at module load.
-    from cortex_viz.server.http_standalone_graph import get_layout_authority
+    from cortex_viz.server.graph_cache_state import get_layout_authority
 
     authority = get_layout_authority()
 
@@ -105,7 +105,7 @@ def serve_stats(handler, store) -> None:
     so dashboards can verify the producer is making progress and no
     subscriber backlog is growing.
     """
-    from cortex_viz.server.http_standalone_graph import get_layout_authority
+    from cortex_viz.server.graph_cache_state import get_layout_authority
 
     authority = get_layout_authority()
     payload = {

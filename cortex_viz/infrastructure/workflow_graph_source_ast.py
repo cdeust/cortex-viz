@@ -175,7 +175,7 @@ class WorkflowGraphASTSource:
     ) -> list[dict[str, Any]]:
         """Full-set per-graph drain of ``_symbol_batches_async``.
 
-        Kept list-returning because ``http_standalone_graph`` caches the
+        Kept list-returning because ``graph_build_l6`` caches the
         per-project symbol list and reports ``len(syms)`` — a genuine
         full-set consumer (reported as needing-full-set in the C3 RCA).
         """
@@ -295,7 +295,7 @@ class WorkflowGraphASTSource:
     ) -> list[dict[str, Any]]:
         """Full-set per-graph drain of ``_edge_batches_async``.
 
-        Kept list-returning for ``http_standalone_graph`` (caches the
+        Kept list-returning for ``graph_build_l6`` (caches the
         per-project edge list, reports ``len(edgs)``) — a genuine full-set
         consumer (reported as needing-full-set in the C3 RCA).
         """

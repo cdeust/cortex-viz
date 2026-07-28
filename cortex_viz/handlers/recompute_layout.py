@@ -79,9 +79,10 @@ def run_recompute(store) -> dict[str, Any]:
     # Pull the cached graph from the in-memory builder. Avoiding a
     # core→server import: we reach into ``graph_cache_state`` directly
     # because that module is the single OWNER of the cache lifecycle.
-    # (Reading via the http_standalone_graph re-export shim would bind a
-    # stale ``_graph_cache`` value — the shim does not re-export the live
-    # mutable global; see graph_cache_state's module docstring.)
+    # Import the OWNER module, never a name bound from it: ``from
+    # graph_cache_state import _graph_cache`` would freeze the value at
+    # import time (``None``) and never see reassignment. See
+    # graph_cache_state's module docstring.
     from cortex_viz.server import graph_cache_state as _gb
 
     if not _gb._graph_cache or not _gb._graph_cache.get("data"):

@@ -9,9 +9,10 @@ inside the 300-line ceiling.
 Sibling modules:
 
 * ``http_standalone_state`` — shared caches + touch() watchdog state.
-* ``http_standalone_graph`` — workflow-graph cache + discussions.
-* ``http_standalone_endpoints`` — /api/sankey, /api/graph, static, diff,
-  methodology handler factory.
+* ``graph_cache_state`` / ``graph_build`` / ``graph_appliers`` /
+  ``graph_response`` / ``graph_discussions`` — workflow-graph cache,
+  background build and read paths.
+* ``http_standalone_endpoints`` — /api/graph, /api/prd, discussions.
 * ``http_standalone_response`` — JSON response boilerplate.
 """
 
@@ -161,7 +162,7 @@ def _build_unified_handler(ui_root: Path, store) -> type:
             # on 127.0.0.1), NOT a browser — host-guarded above, but exempt
             # from the same-origin check that browser writes must pass.
             if path == "/api/activity":
-                from cortex_viz.server.http_standalone_endpoints import (
+                from cortex_viz.server.http_standalone_activity import (
                     serve_activity_ingest,
                 )
 
@@ -200,6 +201,10 @@ def _bind_server(handler_cls: type, preferred_port: int) -> HTTPServer:
             if port != 0:
                 continue
             raise
+    # Unreachable: the port list ends with 0 (OS-assigned), whose OSError
+    # re-raises above. Stated so the ``-> HTTPServer`` contract has no
+    # silent ``None`` exit if that list is ever edited.
+    raise RuntimeError(f"no port in {[preferred_port, 0]} could bind")
 
 
 def _announce(url: str) -> None:
@@ -392,7 +397,7 @@ def main() -> None:
     # No-DB mode: no store → no graph to build; the Graph tab is greyed
     # out client-side (capabilities.js) and its routes answer 503.
     if store is not None:
-        from cortex_viz.server.http_standalone_graph import ensure_build_started
+        from cortex_viz.server.graph_build import ensure_build_started
 
         ensure_build_started(store)
 

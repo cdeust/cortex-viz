@@ -11,13 +11,13 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from cortex_viz.server.http_file_diff import (
+from cortex_viz.server.git_diff_engine import (
     _MAX_LINES,
     _full_content_as_adds,
     _parse_unified,
-    _resolve_by_relative_fragment,
     _resolve_diff,
 )
+from cortex_viz.server.http_file_diff import _resolve_by_relative_fragment
 
 _SAMPLE = """diff --git a/f.txt b/f.txt
 index 1234567..89abcde 100644

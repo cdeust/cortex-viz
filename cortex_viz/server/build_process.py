@@ -24,7 +24,7 @@ nothing live crosses the boundary.
 Lamport protocol (2026-06-14):
   * Every build is an integer EPOCH. The server stamps the epoch via
     begin_epoch() before spawning; the child stamps it onto every queue
-    message via http_standalone_graph._forward. The drain epoch-gates every
+    message via graph_cache_state._forward. The drain epoch-gates every
     message and the appliers drop stale-epoch ones — a child that outlived
     its build (roster re-kick) cannot corrupt the new build.
   * No one-shot _spawned latch: a re-kick (roster change) is allowed once the

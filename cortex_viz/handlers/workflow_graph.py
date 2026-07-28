@@ -62,7 +62,7 @@ def build_workflow_graph(
       * ``full``     — everything including AST symbols + edges from
         every indexed AP graph. Used for the final steady-state cache.
 
-    The background enricher in ``http_standalone_graph`` drives this
+    The background enricher in ``graph_build`` drives this
     sequence: it publishes a skeleton within ~500ms, then republishes
     files, then republishes with AST. The client polls every 4s and
     renders the deltas so projects / files / symbols fade in instead of
@@ -216,7 +216,7 @@ def build_workflow_graph(
         # DEFERRED when defer_native_ast=True: tree-sitter parsing every
         # file in known_paths is the dominant baseline cost — measured
         # 58.6 s of a 99 s build on 2026-05-27, blocking first paint with
-        # no progress feedback. The http_standalone_graph baseline build
+        # no progress feedback. The graph_build baseline build
         # passes defer_native_ast=True so the structural graph
         # (domains/files/memories/entities) lands fast; AST symbols still
         # arrive via the L6 AP loop in _run, which streams per-project.

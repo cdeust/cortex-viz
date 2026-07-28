@@ -234,7 +234,7 @@ def edge_provenance_defaults(
     absence of confidence is itself information.
 
     An empty-string reason is normalised to ``None`` so the builder
-    path and the parallel inline path in ``http_standalone_graph``
+    path and the parallel inline path in ``graph_build``
     never disagree on its shape.
     """
     kind_str = str(edge_kind)
