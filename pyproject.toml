@@ -93,6 +93,8 @@ dev = [
     "pytest-cov>=5.0.0",
     "pytest-asyncio>=0.23.0",
     "pytest-timeout>=2.3.0",
+    # scripts/mutation_check.sh — rules/coding-standards.md §12.
+    "mutmut>=3.6.0",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -115,3 +117,20 @@ source = ["cortex_viz"]
 
 [tool.coverage.report]
 show_missing = true
+
+[tool.mutmut]
+# Mutation testing (mutmut 3.x) — rules/coding-standards.md §12. Line/branch
+# coverage proves a line RAN; only a killed mutant proves a test would FAIL if
+# the code were wrong. The committed scope is the containment primitive, the
+# smallest module on which every path guard in this repository depends; a
+# per-change run repoints `only_mutate` and the test selection at the files the
+# change touched (see scripts/mutation_check.sh).
+#
+# `source_paths` must contain the root the sources live under — mutmut only
+# copies those into `mutants/`, and a source outside them is silently never
+# mutated, which reports "0 survivors" for a run that mutated nothing.
+# `use_setproctitle` is off because the macOS default segfaults the runner.
+source_paths = ["cortex_viz"]
+only_mutate = ["cortex_viz/shared/path_containment.py"]
+pytest_add_cli_args_test_selection = ["tests/test_path_containment.py"]
+use_setproctitle = false
