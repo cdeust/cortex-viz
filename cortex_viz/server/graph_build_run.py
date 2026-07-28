@@ -544,5 +544,7 @@ def run_build(store, domain_filter: str | None) -> None:
 
             _ev.close()
         except Exception:
+            # close() is idempotent and the buffer survives for late-subscriber replay;
+            # a failure here must not mask the build outcome being unwound.
             pass
         state._graph_build_lock.release()

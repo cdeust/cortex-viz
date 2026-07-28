@@ -33,6 +33,8 @@ def _run_coroutine_on_thread(
         try:
             loop.close()
         except Exception:
+            # Teardown inside `finally`: the handler's result (or its exception) is
+            # already determined, and a loop that will not close must not replace it.
             pass
 
 

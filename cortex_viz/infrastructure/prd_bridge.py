@@ -83,6 +83,8 @@ def _resolve_command() -> dict | None:
                 },
             }
     except (OSError, ValueError, KeyError, IndexError, TypeError, AttributeError):
+        # A malformed manifest entry only means this candidate is not the prd-gen
+        # server; the caller falls through to None.
         pass
     return None
 
@@ -156,6 +158,7 @@ class PRDBridge:
             try:
                 self._client.close()
             except Exception:
+                # Teardown: the client is dropped either way.
                 pass
             self._client = None
         self._connected = False

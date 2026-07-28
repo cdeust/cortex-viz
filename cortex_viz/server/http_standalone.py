@@ -300,6 +300,8 @@ def _auto_enable_ap() -> None:
                                     {"graph_path": str(graph_file)},
                                 )
                             except Exception:
+                                # resolve_graph is an idempotent optimisation. A failure leaves the graph
+                                # unresolved but still servable, and the roster loop continues.
                                 pass
                             continue
                         outdir.mkdir(parents=True, exist_ok=True)
@@ -323,6 +325,8 @@ def _auto_enable_ap() -> None:
 
             _asyncio.run(_run())
         except Exception:
+            # The whole roster warm-up is best-effort: it exists to make the first
+            # request fast, and every project it touches is servable without it.
             pass
 
     threading.Thread(target=_bg_index, name="ap-bg-index", daemon=True).start()

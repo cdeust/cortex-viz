@@ -351,6 +351,8 @@ def _impact_for_graph(graph_path: str, rel_path: str) -> dict | None:
                     communities_affected = imp.get("communities_affected")
                     processes_affected = imp.get("processes_affected")
         except Exception:
+            # The AP impact enrichment is additive: the direction view renders without
+            # communities_affected / processes_affected.
             pass
 
         # LEGITIMATE query_graph use: entry-point processes (causal
@@ -488,6 +490,7 @@ def _to_repo_relative(path: str) -> str:
         try:
             roots.append(os.path.realpath(base))
         except (OSError, ValueError):
+            # A base path that will not resolve is simply not a containment candidate.
             pass
     if not any(real == r or real.startswith(r + os.sep) for r in roots):
         return p.lstrip("/")
@@ -506,8 +509,11 @@ def _to_repo_relative(path: str) -> str:
             try:
                 return str(Path(real).relative_to(root))
             except ValueError:
+                # The file is not under the git root; fall through to the leading-slash
+                # strip below.
                 pass
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        # No git available, or rev-parse timed out; same fallback.
         pass
     return p.lstrip("/")
 

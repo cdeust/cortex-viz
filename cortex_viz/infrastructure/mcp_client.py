@@ -320,10 +320,12 @@ class MCPClient:
             try:
                 self._proc.stdin.close()  # type: ignore
             except Exception:
+                # Teardown: the child may have exited already and closed stdin with it.
                 pass
             try:
                 self._proc.terminate()
             except Exception:
+                # Teardown: the process may have exited between the stdin close and here.
                 pass
             self._proc = None
 
@@ -384,6 +386,8 @@ class MCPClient:
         try:
             self._last_activity = asyncio.get_running_loop().time()
         except Exception:
+            # Called from both loop and non-loop contexts. Outside a running loop there
+            # is no clock to sample, so the idle timer simply does not advance.
             pass
 
     async def _read_loop(self) -> None:
@@ -489,4 +493,6 @@ class MCPClient:
                     self.close()
                     break
         except asyncio.CancelledError:
+            # Cooperative cancellation of the idle watchdog — the task was asked to
+            # stop, which is the normal path, not a failure.
             pass

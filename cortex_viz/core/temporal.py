@@ -109,6 +109,9 @@ def _try_parse_named_date(date_str: str) -> datetime | None:
                 int(m.group(3)), _MONTH_NAMES[m.group(2).lower()], int(m.group(1))
             )
         except (ValueError, KeyError):
+            # Not a DD Month YYYY date (or an unknown month name) — fall through to
+            # the next format below. This chain tries formats in order; a miss is
+            # how it advances, and the final `return None` is the real failure.
             pass
     m = _MONTH_DD_YYYY_RE.match(date_str)
     if m:
@@ -117,12 +120,15 @@ def _try_parse_named_date(date_str: str) -> datetime | None:
                 int(m.group(3)), _MONTH_NAMES[m.group(1).lower()], int(m.group(2))
             )
         except (ValueError, KeyError):
+            # Not a Month DD, YYYY date; fall through to the embedded-ISO attempt.
             pass
     m = _EMBEDDED_ISO_RE.search(date_str)
     if m:
         try:
             return datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)))
         except ValueError:
+            # The digits matched the ISO shape but are not a real calendar date
+            # (e.g. month 13); no format is left, so the caller gets None.
             pass
     return None
 
@@ -135,6 +141,7 @@ def parse_date(date_str: str) -> datetime | None:
     try:
         return datetime.fromisoformat(date_str.replace("Z", "+00:00").split("T")[0])
     except (ValueError, AttributeError):
+        # Not a bare ISO date; fall through to the named-month parsers.
         pass
     return _try_parse_named_date(date_str)
 

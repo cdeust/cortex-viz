@@ -192,6 +192,7 @@ def _kill_stale(src: Path, vi) -> None:
         try:
             vi.kill_and_wait(pid)
         except Exception:
+            # One PID that is already gone must not stop the sweep from freeing the port.
             pass
 
 
@@ -270,6 +271,8 @@ def _drive_prepare_then_render(base: str, timeout_s: int = 600) -> str | None:
         try:
             _ur.urlopen(f"{base}/api/graph", timeout=5).read(1024)
         except Exception:
+            # Priming request — its only job is to trigger the build. The readiness
+            # poll below is what actually waits for it.
             pass
         deadline = _time.monotonic() + timeout_s
         while _time.monotonic() < deadline:
@@ -279,15 +282,19 @@ def _drive_prepare_then_render(base: str, timeout_s: int = 600) -> str | None:
                 if p.get("baseline_ready") or p.get("full_ready"):
                     break
             except Exception:
+                # A failed progress poll just means not-ready-yet; the loop retries until
+                # the deadline.
                 pass
             _time.sleep(2)
         try:
             _ur.urlopen(f"{base}/api/recompute_layout", timeout=timeout_s).read()
         except Exception:
+            # Layout recompute is an optimisation; the raw graph still renders.
             pass
         try:
             _wb.open(f"{base}/?viz=force")
         except Exception:
+            # Opening the browser is a convenience; the URL has already been printed.
             pass
 
     _thr.Thread(target=_run, name="cortex-prepare", daemon=True).start()

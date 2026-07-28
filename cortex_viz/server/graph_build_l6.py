@@ -162,6 +162,8 @@ def run_l6(
                 )
             )
         except Exception:
+            # Pure cache write. A failure costs the next run a recomputation, and
+            # _cache_load independently rejects anything it cannot read back.
             pass
 
     async def _load_with_timeout(gp_):

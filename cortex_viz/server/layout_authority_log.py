@@ -76,6 +76,8 @@ def _clear_misses(q: _queue_mod.Queue) -> None:
     try:
         q._cortex_misses = 0  # type: ignore[attr-defined]
     except Exception:
+        # Clearing the counter on a queue that rejects attribute assignment loses a
+        # diagnostic count, nothing the caller depends on.
         pass
 
 
@@ -110,6 +112,7 @@ def _reap(dead: List[_queue_mod.Queue]) -> None:
             try:
                 _subscribers.remove(q)
             except ValueError:
+                # Already removed by a concurrent unsubscribe; removal is idempotent here.
                 pass
 
 
@@ -159,6 +162,7 @@ def unsubscribe(q: _queue_mod.Queue) -> None:
         try:
             _subscribers.remove(q)
         except ValueError:
+            # Already unsubscribed — this function is documented idempotent.
             pass
 
 

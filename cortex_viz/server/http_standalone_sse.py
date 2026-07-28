@@ -35,6 +35,8 @@ def _resolve_sse_since(handler) -> int:
         try:
             since = max(since, int(qs["since"][0]))
         except (ValueError, IndexError):
+            # A non-integer ?since is ignored; the Last-Event-ID value parsed above,
+            # or 0, stands.
             pass
     return since
 
@@ -72,6 +74,7 @@ def _write_sse_done(handler) -> None:
         )
         handler.wfile.flush()
     except (BrokenPipeError, ConnectionResetError):
+        # The client hung up before the done frame flushed.
         pass
 
 
@@ -129,6 +132,8 @@ def _write_sse_error(handler, exc: Exception) -> None:
         )
         handler.wfile.flush()
     except Exception:
+        # Reporting an error to a client whose pipe is already broken — this is the
+        # log-and-close path named in the docstring.
         pass
 
 

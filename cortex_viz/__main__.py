@@ -38,6 +38,8 @@ def _shutdown(sig=None, frame=None) -> None:
     try:
         shutdown_server()
     except Exception:
+        # Shutdown is already underway and sys.exit(0) runs regardless; a server
+        # that is already down must not turn the signal handler into a traceback.
         pass
     sys.exit(0)
 

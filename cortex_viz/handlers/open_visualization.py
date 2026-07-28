@@ -232,6 +232,8 @@ def _kill_port(port: int) -> None:
             pid = int(pid_s.strip())
             os.kill(pid, 15)
         except Exception:
+            # One PID that is already gone, or is not ours to signal, must not stop the
+            # sweep from killing the remaining stale servers.
             pass
 
 

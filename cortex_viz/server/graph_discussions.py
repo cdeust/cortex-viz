@@ -63,11 +63,14 @@ def parse_discussion_params(path: str) -> dict:
             try:
                 result["batch"] = int(p[6:])
             except ValueError:
+                # A non-integer batch is ignored so the documented default stands —
+                # pagination params are advisory on this endpoint.
                 pass
         elif p.startswith("batch_size="):
             try:
                 result["batch_size"] = int(p[11:])
             except ValueError:
+                # Likewise for batch_size.
                 pass
     return result
 

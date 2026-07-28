@@ -14,7 +14,10 @@ was unbounded.
 
 from __future__ import annotations
 
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 # Default ceiling (seconds) on one tools/call response wait. 600s = 10x the
 # measured 32s success latency of an analyze/ingest run on the Cortex repo
@@ -37,8 +40,27 @@ def default_call_timeout_s() -> float:
     if raw:
         try:
             val = float(raw)
+        except (TypeError, ValueError):
+            _warn_ignored(raw, "not a number")
+        else:
             if val > 0:
                 return val
-        except (TypeError, ValueError):
-            pass
+            _warn_ignored(raw, "not positive")
     return _DEFAULT_CALL_TIMEOUT_S
+
+
+def _warn_ignored(raw: str, why: str) -> None:
+    """Report an override that was set but could not be honoured.
+
+    Silence here is the wrong default: the operator deliberately set the
+    variable, so a typo (``6OO``, ``600s``, ``-1``) that lands back on the
+    600s default is a configuration error they cannot see from any output.
+    The value is echoed so the typo is visible in the log line itself.
+    """
+    logger.warning(
+        "%s=%r ignored (%s); using the %.0fs default",
+        _ENV_VAR,
+        raw,
+        why,
+        _DEFAULT_CALL_TIMEOUT_S,
+    )

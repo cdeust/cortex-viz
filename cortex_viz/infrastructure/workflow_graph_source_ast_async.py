@@ -60,6 +60,8 @@ def _run(coro):
                     f"{_ap_sync_timeout_s():.0f}s — subprocess presumed wedged"
                 ) from exc
     except RuntimeError:
+        # No loop is running in this thread. Falling through to asyncio.run below
+        # is the intended path here, not a failure.
         pass
     return asyncio.run(coro)
 
@@ -170,15 +172,18 @@ class _SyncLoop:
             try:
                 self._loop.call_soon_threadsafe(self._loop.stop)
             except Exception:
+                # Teardown: the loop may already be stopping or closed.
                 pass
             try:
                 if self._thread is not None:
                     self._thread.join(timeout=2.0)
             except Exception:
+                # Teardown: the worker thread may already have exited.
                 pass
             try:
                 self._loop.close()
             except Exception:
+                # Teardown: the loop may already be closed.
                 pass
         self._loop = None
         self._thread = None

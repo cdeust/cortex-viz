@@ -64,6 +64,8 @@ class WorkflowGraphASTSource:
         try:
             self._loop_owner.run(self._bridge.close())
         except Exception:
+            # Teardown: the pinned loop is closed on the next line regardless of
+            # whether the bridge shut down cleanly.
             pass
         self._loop_owner.close()
 

@@ -242,6 +242,8 @@ class MemoryReader:
                 try:
                     pool.close()
                 except Exception:
+                    # Teardown: a pool already closed, or whose connection died, raises here —
+                    # and both mean the resource this call wanted released is gone.
                     pass
 
     # A memory's CURRENT heat is derived at READ TIME by Cortex's effective_heat

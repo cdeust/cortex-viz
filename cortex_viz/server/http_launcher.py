@@ -373,6 +373,8 @@ def open_in_browser(url: str) -> None:
         try:
             os.startfile(url)  # noqa: S606 — localhost URL validated above
         except OSError:
+            # Opening a browser tab is a convenience; the URL has been printed and the
+            # server is already serving it.
             pass
         return
 
