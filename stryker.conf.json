@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
-  "_comment": "Scoped per-commit mutation gate (coding-standards §12.1/§12.5): mutate ONLY the load-bearing logic THIS change touched, not pre-existing code or DOM writers. Ranges: the two brain-view HTML escapers (boot.js esc, impact.js esc) whose character class grew to cover quotes, closing js/incomplete-html-attribute-sanitization #148-#151. Each escaped character is a separate mutant here, so a class that silently drops one cannot pass. Earlier scopes (trigram.js indexWords/uniqueWords for #153/#154; workflow_graph_lod.js wfgEdgeCoverage, coverage_model.js verdict logic, coverage_indicator.js gatherSources + fmtAge, renderer computeNeighborSet/linkTier, filters buildPredicate, wfgLodTier for issues #35/#36/#41) are unchanged by this diff; their mutation state is recorded in tests/js/MUTATION_NOTES.md.",
+  "_comment": "Scoped per-commit mutation gate (coding-standards §12.1/§12.5): mutate ONLY the load-bearing logic THIS change touched, not pre-existing code or DOM writers. Ranges: the four renderings this change implemented after CodeQL found them computed-and-discarded — knowledge.js stageMeta + the feel-dot ink + codeBlock's lang class (#164/#165/#155), interaction.js connItemHtml (#160), polling.js's offline degradation (#163), wiki.js buildEditorSetup (#174/#175). Earlier scopes (brain esc for #148-#151; trigram.js indexWords/uniqueWords for #153/#154; workflow_graph_lod.js wfgEdgeCoverage, coverage_model.js verdict logic, coverage_indicator.js gatherSources + fmtAge, renderer computeNeighborSet/linkTier, filters buildPredicate, wfgLodTier for issues #35/#36/#41) are unchanged by this diff; their mutation state is recorded in tests/js/MUTATION_NOTES.md.",
   "testRunner": "vitest",
   "reporters": [
     "clear-text",
@@ -8,8 +8,15 @@
   ],
   "coverageAnalysis": "perTest",
   "mutate": [
-    "ui/brain/js/boot.js:63-69",
-    "ui/brain/js/impact.js:22-26"
+    "ui/unified/js/knowledge.js:52-56",
+    "ui/unified/js/knowledge.js:695-703",
+    "ui/unified/js/knowledge.js:737-743",
+    "ui/unified/js/knowledge.js:1109-1112",
+    "ui/unified/js/knowledge.js:1130-1145",
+    "ui/dashboard/js/interaction.js:135-152",
+    "ui/unified/js/polling.js:22-33",
+    "ui/unified/js/polling.js:90-99",
+    "ui/unified/js/wiki.js:2075-2089"
   ],
   "vitest": {
     "related": false

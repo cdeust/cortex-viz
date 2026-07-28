@@ -1488,8 +1488,9 @@
         continue;
       }
 
-      // Detect bare JSON/code blocks — lines starting with { or [ that aren't in a fence
-      if (/^\s*[\{\[]/.test(line) && !inCode) {
+      // Detect bare JSON/code blocks — lines starting with { or [. Not in a
+      // fence by construction: the `if (inCode)` arm above `continue`s.
+      if (/^\s*[\{\[]/.test(line)) {
         closeList();
         closeTable();
         // Accumulate consecutive JSON-like lines
@@ -1932,7 +1933,6 @@
       if (text.nodeValue.indexOf('{@') < 0) return;
       var frag = document.createDocumentFragment();
       var re = /\{@([a-zA-Z0-9:_-]+)\}/g;
-      var remaining = text.nodeValue;
       var lastIdx = 0;
       var m;
       while ((m = re.exec(text.nodeValue)) !== null) {
@@ -1953,7 +1953,6 @@
       if (lastIdx < text.nodeValue.length) {
         frag.appendChild(document.createTextNode(text.nodeValue.slice(lastIdx)));
       }
-      remaining = frag;
       text.parentNode.replaceChild(frag, text);
     });
   }
@@ -2063,6 +2062,32 @@
     return _cmModulesPromise;
   }
 
+  // Editing behaviour CodeMirror 6 does NOT ship by default and this file
+  // was loading but never installing: an undo stack (`history`), the standard
+  // command bindings (`defaultKeymap` — Enter, Tab, word/line motion), their
+  // key bindings, and bracket/quote auto-closing from the autocomplete
+  // module already in the import map. Without them the editor accepted text
+  // but Ctrl-Z did nothing.
+  //
+  // Every piece is probed, never assumed: the modules arrive from a CDN at
+  // runtime, so a partial payload must degrade to a plainer editor rather
+  // than throw on `undefined`.
+  function buildEditorSetup(mods) {
+    var cmds = (mods && mods.commands) || {};
+    var autoClose = (mods && mods.autoClose) || {};
+    var keymap = mods && mods.view && mods.view.keymap;
+    var setup = [];
+    if (cmds.history) setup.push(cmds.history());
+    if (autoClose.closeBrackets) setup.push(autoClose.closeBrackets());
+    // Order matters: bracket handling first, history last, so a binding
+    // earlier in the list wins the key.
+    var bindings = (autoClose.closeBracketsKeymap || [])
+      .concat(cmds.defaultKeymap || [])
+      .concat(cmds.historyKeymap || []);
+    if (bindings.length && keymap) setup.push(keymap.of(bindings));
+    return setup;
+  }
+
   async function openEditor(main, data, pmeta) {
     var original = main.innerHTML;
     main.innerHTML = '<div class="wiki-loading"><div class="wiki-loading-spinner"></div>Loading editor\u2026</div>';
@@ -2134,10 +2159,9 @@
     // Build CM6 state + view
     var EditorState = mods.state.EditorState;
     var EditorView  = mods.view.EditorView;
-    var keymap      = mods.view.keymap;
-    var basicSetup  = mods.commands.history ? [mods.commands.history()] : [];
     var markdownLang = mods.lang.markdown();
     var oneDark = mods.oneDark.oneDark;
+    var editorSetup = buildEditorSetup(mods);
     var updateListener = EditorView.updateListener.of(function(upd) {
       if (upd.docChanged) rerender(upd.state.doc.toString());
     });
@@ -2149,7 +2173,7 @@
           oneDark,
           updateListener,
           EditorView.lineWrapping
-        ]
+        ].concat(editorSetup)
       }),
       parent: leftCol
     });
@@ -2216,6 +2240,12 @@
     lines.push('---', '', body || '');
     return lines.join('\n');
   }
+
+  // Read-only test seam — same pattern as JUG._rendererTest. openEditor
+  // builds the live editor from THIS function, so what is asserted is what
+  // the editor gets.
+  window.JUG = window.JUG || {};
+  window.JUG._wikiTest = { buildEditorSetup: buildEditorSetup };
 
   // ── Init ──
   document.addEventListener('DOMContentLoaded', init);

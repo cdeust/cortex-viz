@@ -211,8 +211,9 @@
     filterSeps.forEach(function(s) { s.style.display = showFilters ? '' : 'none'; });
   }
 
-  // Extend the graph filter logic to respect domain and emotion filters
-  var origFilter = JUG.state.activeFilter;
+  // Extend the graph filter logic to respect domain and emotion filters.
+  // The base `state.activeFilter` pass is graph.js's (it filters, then calls
+  // this hook on what survives) — nothing to capture here.
   JUG._applyExtraFilters = function(nodes) {
     var domain = JUG.state.domainFilter || '';
     var emotion = JUG.state.emotionFilter || '';

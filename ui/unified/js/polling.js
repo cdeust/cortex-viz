@@ -13,6 +13,25 @@
   // headline Memories number is the in-galaxy rendered count.
   var _lastServerMeta = null;
 
+  // Consecutive /api/graph/progress failures. The poll keeps retrying (the
+  // server may simply still be starting), but an unreachable server used to
+  // leave the loading overlay up forever with no message: hideLoading() is
+  // only on the success path. After OFFLINE_AFTER straight failures with
+  // nothing on canvas we enter the named offline mode instead — once, and
+  // never on top of a graph that already loaded.
+  var OFFLINE_AFTER = 3;   // ~12 s at the 4 s retry cadence below
+  var _pollFailures = 0;
+  var _offlineApplied = false;
+
+  // True while the galaxy has never rendered a node — the only state in
+  // which replacing the canvas with the offline sample is safe. JUG.state is
+  // a hard dependency of this module (useFallback writes through it), so it
+  // is read unguarded rather than pretending a missing bus is survivable.
+  function _canvasEmpty() {
+    var d = JUG.state.lastData;
+    return !(d && d.nodes && d.nodes.length);
+  }
+
   function fetchGraph() {
     // Lazy-load: only poll while the user is actually on the Graph
     // tab. The poll is now a tiny /api/graph/progress hit (not the
@@ -32,6 +51,9 @@
         return res.json();
       })
       .then(function(p) {
+        // A reachable server ends the failure streak, so transient blips
+        // never accumulate into the offline degradation.
+        _pollFailures = 0;
         // Publish build progress for the coverage indicator (issue #36):
         // full_ready / baseline_ready / phase drive the staleness + "build in
         // progress" degraded mode. Reuses this existing poll — no extra fetch.
@@ -68,6 +90,11 @@
       })
       .catch(function(err) {
         console.warn('[cortex] progress poll error:', err.message);
+        _pollFailures++;
+        if (_pollFailures >= OFFLINE_AFTER && !_offlineApplied && _canvasEmpty()) {
+          _offlineApplied = true;
+          useFallback();
+        }
         setTimeout(fetchGraph, 4000);
       });
   }
@@ -450,6 +477,20 @@
       .catch(function(err) {
         console.warn('[cortex] Discussion batch error:', err.message);
       });
+  }
+
+  // Read-only test seam — same pattern as JUG._rendererTest. Exposes the
+  // poll entry point plus the offline-degradation counters, so the failure
+  // path (N straight failures on an empty canvas → the named offline mode)
+  // is assertable without a server.
+  if (window.JUG) {
+    window.JUG._pollTest = {
+      fetchGraph: fetchGraph,
+      useFallback: useFallback,
+      offlineAfter: OFFLINE_AFTER,
+      failures: function() { return _pollFailures; },
+      offlineApplied: function() { return _offlineApplied; },
+    };
   }
 
   // No auto-refresh — user triggers manually via Reset button or page reload

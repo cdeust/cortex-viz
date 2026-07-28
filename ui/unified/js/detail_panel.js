@@ -328,7 +328,7 @@
     // measurements panels (same components used in Knowledge cards) so
     // Board ticket details match Knowledge card details information
     // parity with plain-language explanations for every number.
-    if (data && data.type === 'memory' && window.JUG && JUG._memSci) {
+    if (data.type === 'memory' && window.JUG && JUG._memSci) {
       if (typeof JUG._memSci.buildEmotionChip === 'function') {
         var emo = JUG._memSci.buildEmotionChip(data);
         if (emo) {

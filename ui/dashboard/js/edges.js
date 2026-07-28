@@ -96,9 +96,10 @@
 
   // ─── Build edges from data ────────────────────────────────────────
   function buildEdges(data) {
+    // Only `relationships` is read off the payload here: graph.js owns the
+    // node build (it turns data.entities + data.hot_memories into
+    // JMD.allNodes), and every edge below indexes into THAT array.
     var rels = data.relationships || [];
-    var entities = data.entities || [];
-    var memories = data.hot_memories || [];
     var allNodes = JMD.allNodes || [];
 
     activeEdges = [];

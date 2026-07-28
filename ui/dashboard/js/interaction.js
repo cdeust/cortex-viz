@@ -127,6 +127,29 @@
     return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
   }
 
+  // One row of the connections list. Carries the relationship's KIND
+  // (`causal` when the edge is causal, else its type) in the .conn-type span
+  // panels.css styles — without it two rows that differ only in how the
+  // memories relate render identically. Every interpolated value is escaped:
+  // label, type and storeType all come off server payload.
+  function connItemHtml(c) {
+    var d = c.node.data;
+    var label = c.node.isEntity ? (d.name || 'Entity') : (d.content || '').slice(0, 60);
+    var typeTag = c.isCausal ? 'causal' : c.type;
+    var colorMap = JMD.TYPE_COLORS_HEX || {};
+    // Own-property lookup: a storeType of "constructor"/"toString" would
+    // otherwise resolve up the prototype chain and interpolate a function
+    // body into the style attribute (escHtml leaves quotes alone).
+    var dotColor = Object.prototype.hasOwnProperty.call(colorMap, c.node.storeType)
+      ? colorMap[c.node.storeType] : colorMap.entity;
+    return '<div class="conn-item" data-idx="' + c.idx + '">'
+         + '<span class="conn-dot" style="background:' + dotColor + '"></span>'
+         + '<span class="conn-label">' + JMD.escHtml(label) + '</span>'
+         + '<span class="conn-type">' + JMD.escHtml(typeTag) + '</span>'
+         + '<span class="conn-weight">W: ' + c.weight.toFixed(2) + '</span>'
+         + '</div>';
+  }
+
   function buildConnectionsList(nd) {
     var connEl = document.getElementById('panel-connections');
     if (!connEl) return;
@@ -163,18 +186,7 @@
     connections.sort(function(a, b) { return b.weight - a.weight; });
 
     var html = '';
-    connections.forEach(function(c) {
-      var d = c.node.data;
-      var label = c.node.isEntity ? (d.name || 'Entity') : (d.content || '').slice(0, 60);
-      var typeTag = c.isCausal ? 'causal' : c.type;
-      var colorMap = JMD.TYPE_COLORS_HEX;
-      var dotColor = colorMap[c.node.storeType] || colorMap.entity;
-      html += '<div class="conn-item" data-idx="' + c.idx + '">'
-            + '<span class="conn-dot" style="background:' + dotColor + '"></span>'
-            + '<span class="conn-label">' + JMD.escHtml(label) + '</span>'
-            + '<span class="conn-weight">W: ' + c.weight.toFixed(2) + '</span>'
-            + '</div>';
-    });
+    connections.forEach(function(c) { html += connItemHtml(c); });
     connEl.innerHTML = html;
 
     connEl.querySelectorAll('.conn-item').forEach(function(el) {
@@ -204,6 +216,11 @@
     JMD.emit('graph:closePanel');
     if (JMD.resetCamera) JMD.resetCamera();
   });
+
+  // Read-only test seam — same pattern as BRAIN._legendTest /
+  // JUG._rendererTest. buildConnectionsList routes every row through THIS
+  // function, so the rendered markup cannot diverge from what is asserted.
+  JMD._connTest = { connItemHtml: connItemHtml };
 
   // ─── Keyboard shortcuts ─────────────────────────────────────
   document.addEventListener('keydown', function(e) {
