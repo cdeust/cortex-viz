@@ -77,6 +77,102 @@ describe('trigram pg_trgm conformance', () => {
   }
 });
 
+// The indexing tokenizer's contract, as stated by trigram.js's own comments
+// but previously unasserted: mutating either split loop, or widening the
+// alnum-run class, left the suite green (Stryker survivors on the #153/#154
+// change). These pin what those comments claim.
+describe('trigram indexing tokenizer', () => {
+  it('treats every non-alphanumeric character as a separator', () => {
+    expect(TRGM.indexWords('a/b-c_d')).toEqual(['a', 'b', 'c', 'd']);
+    expect(TRGM.indexWords('a/b/file.py::handle')).toEqual([
+      'a',
+      'b',
+      'file',
+      'py',
+      'handle',
+    ]);
+  });
+
+  it('yields no words when the string holds no alphanumeric run', () => {
+    expect(TRGM.indexWords('')).toEqual([]);
+    expect(TRGM.indexWords('---')).toEqual([]);
+    expect(TRGM.indexWords('   ')).toEqual([]);
+  });
+
+  it('unions both camelCase splits so an acronym stays findable whole', () => {
+    // Full split (with the acronym rule) then boundary-only split, deduped in
+    // that order. 'userIDs' is the case the union exists for: the acronym rule
+    // alone yields 'i'+'ds', which loses 'ids' as a searchable word.
+    expect(TRGM.indexWords('userIDs')).toEqual(['user', 'i', 'ds', 'ids']);
+    expect(TRGM.indexWords('HTTPServer')).toEqual(['http', 'server', 'httpserver']);
+    // Where the two splits agree, dedup collapses them back to one split.
+    expect(TRGM.indexWords('fooBar')).toEqual(['foo', 'bar']);
+  });
+});
+
+// Corpus text is arbitrary: a node can be labelled "constructor" or a path
+// segment can be "__proto__". Both dedup maps in the index path (indexWords'
+// internal `seen`, and uniqueWords over label+path words) are therefore keyed
+// by attacker-or-corpus-controlled strings. Backed by an object they would
+// resolve inherited names — `{}['constructor']` is truthy before anything is
+// written — and silently drop the word, making the node unfindable. These
+// tests fail if either map is ever changed back to an object.
+// Origin: CodeQL js/remote-property-injection alerts #153/#154.
+describe('trigram dedup does not collide with inherited property names', () => {
+  // Names that exist on Object.prototype (or are special to it) AND survive
+  // indexWords' alnum-run tokenizer, so they can reach the map as-is.
+  const INHERITED = ['constructor', 'valueof', 'tostring', 'hasownproperty', 'isprototypeof'];
+
+  it('indexWords keeps a word that names an inherited property', () => {
+    for (const name of INHERITED) {
+      expect(TRGM.indexWords(name)).toContain(name);
+    }
+    // Repeating the word must dedup it, not drop it.
+    expect(TRGM.indexWords('constructor constructor')).toEqual(['constructor']);
+  });
+
+  it('uniqueWords keeps inherited and dunder names, deduped and in order', () => {
+    expect(TRGM.uniqueWords(['constructor', 'constructor', 'node'])).toEqual([
+      'constructor',
+      'node',
+    ]);
+    expect(TRGM.uniqueWords(['__proto__', '__proto__'])).toEqual(['__proto__']);
+    expect(TRGM.uniqueWords(['prototype', '__proto__', 'constructor', 'tostring'])).toEqual([
+      'prototype',
+      '__proto__',
+      'constructor',
+      'tostring',
+    ]);
+  });
+
+  it('uniqueWords preserves first-occurrence order and is idempotent', () => {
+    const input = ['b', 'a', 'b', 'c', 'a', ''];
+    const once = TRGM.uniqueWords(input);
+    expect(once).toEqual(['b', 'a', 'c', '']);
+    expect(TRGM.uniqueWords(once)).toEqual(once);
+    expect(TRGM.uniqueWords([])).toEqual([]);
+  });
+
+  it('indexing a node labelled "constructor" leaves it findable by search', () => {
+    // End-to-end over the same path search_worker.js walks: label -> words ->
+    // trigrams -> scoreNode against the query's trigrams.
+    const words = TRGM.uniqueWords(TRGM.indexWords('constructor'));
+    const nodeTri = words.map(TRGM.wordTrigrams);
+    const queryTri = TRGM.indexWords('constructor').map(TRGM.wordTrigrams);
+    expect(nodeTri.length).toBeGreaterThan(0);
+    expect(TRGM.scoreNode(queryTri, nodeTri)).toBeGreaterThanOrEqual(TRGM.SIMILARITY_THRESHOLD);
+  });
+
+  it('does not pollute Object.prototype while deduping hostile keys', () => {
+    const before = Object.getOwnPropertyNames(Object.prototype).sort().join(',');
+    TRGM.uniqueWords(['__proto__', 'constructor', 'prototype', 'polluted']);
+    TRGM.indexWords('__proto__ constructor prototype polluted');
+    expect(Object.getOwnPropertyNames(Object.prototype).sort().join(',')).toBe(before);
+    expect({}.polluted).toBeUndefined();
+    expect(Object.getPrototypeOf({})).toBe(Object.prototype);
+  });
+});
+
 describe('trigram scale benchmark', () => {
   const PARTS = [
     'get', 'set', 'build', 'parse', 'render', 'fetch', 'graph', 'node', 'edge',

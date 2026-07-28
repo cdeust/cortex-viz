@@ -8,9 +8,9 @@
 //      extension on the cortex DB, PostgreSQL 17.9, 2026-07-13). pg_trgm does
 //      NOT split camelCase — this tokenizer must not either, or conformance
 //      breaks.
-//   2. Indexing tokenizer (indexWords/wordTrigrams/scoreNode) — used to build
-//      the brain-view node search index. Same alnum-run word splitting as
-//      pg_trgm, PLUS a camelCase split, because node labels/paths are code
+//   2. Indexing tokenizer (indexWords/uniqueWords/wordTrigrams/scoreNode) —
+//      used to build the brain-view node search index. Same alnum-run word
+//      splitting as pg_trgm, PLUS a camelCase split, because labels/paths are
 //      identifiers (precedent: automatised-pipeline src/search/vector.rs
 //      tokenizes symbols on `_`, `::`, camelCase).
 //
@@ -105,11 +105,11 @@
   function indexWords(s) {
     var runs = String(s).match(/[\p{L}\p{N}]+/gu) || [];
     var out = [];
-    var seen = Object.create(null);
+    var seen = new Set();
     function pushWord(w) {
       var lw = w.toLowerCase();
-      if (!seen[lw]) {
-        seen[lw] = true;
+      if (!seen.has(lw)) {
+        seen.add(lw);
         out.push(lw);
       }
     }
@@ -118,6 +118,29 @@
       var boundaryParts = splitLowerUpperOnly(runs[i]);
       for (var j = 0; j < camelParts.length; j++) pushWord(camelParts[j]);
       for (var k = 0; k < boundaryParts.length; k++) pushWord(boundaryParts[k]);
+    }
+    return out;
+  }
+
+  // Order-preserving dedup of an already-split, already-lowercased word list —
+  // the union of a node's label words and its path words (search_worker.js).
+  //
+  // Set, not an object keyed by the word: a word is corpus text, so it can BE
+  // an inherited property name. `{}['constructor']` is truthy before anything
+  // is written, so an object-backed `seen` reports the word as already-present
+  // and drops it — a node labelled "constructor" becomes unfindable. Deduping
+  // through a Set has no name space to collide with, which is also what
+  // CodeQL js/remote-property-injection asks for (use an ES2015 collection
+  // rather than an object as a map). Pinned by tests/js/trigram.test.mjs
+  // "trigram dedup does not collide with inherited property names".
+  function uniqueWords(words) {
+    var seen = new Set();
+    var out = [];
+    for (var i = 0; i < words.length; i++) {
+      if (!seen.has(words[i])) {
+        seen.add(words[i]);
+        out.push(words[i]);
+      }
     }
     return out;
   }
@@ -231,6 +254,7 @@
     trigramSet: trigramSet,
     similarity: similarity,
     indexWords: indexWords,
+    uniqueWords: uniqueWords,
     wordTrigrams: wordTrigrams,
     trigramSimilarityPacked: trigramSimilarityPacked,
     scoreNode: scoreNode,

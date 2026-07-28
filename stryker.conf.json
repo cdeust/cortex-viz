@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
-  "_comment": "Scoped per-commit mutation gate (coding-standards §12.1/§12.5): mutate ONLY the load-bearing logic THIS change touched — the pure seams issue #36 added — not pre-existing code or DOM writers. Ranges: workflow_graph_lod.js wfgEdgeCoverage (moved out of workflow_graph.js by the issue #41 split, behaviour-preserving), coverage_model.js verdict logic, coverage_indicator.js gatherSources + fmtAge. The prior seams (renderer computeNeighborSet/linkTier, filters buildPredicate, wfgLodTier) were unchanged here; their mutation state is recorded in tests/js/MUTATION_NOTES.md from issue #35.",
+  "_comment": "Scoped per-commit mutation gate (coding-standards §12.1/§12.5): mutate ONLY the load-bearing logic THIS change touched, not pre-existing code or DOM writers. Ranges: trigram.js indexWords (its dedup map moved Object.create(null) -> Set) and uniqueWords (moved here from search_worker.js, same move), closing js/remote-property-injection #153/#154. The seams the earlier issue #35/#36/#41 commits scoped this file to (workflow_graph_lod.js wfgEdgeCoverage, coverage_model.js verdict logic, coverage_indicator.js gatherSources + fmtAge, renderer computeNeighborSet/linkTier, filters buildPredicate, wfgLodTier) are unchanged by this diff; their mutation state is recorded in tests/js/MUTATION_NOTES.md.",
   "testRunner": "vitest",
   "reporters": [
     "clear-text",
@@ -8,10 +8,8 @@
   ],
   "coverageAnalysis": "perTest",
   "mutate": [
-    "ui/unified/js/workflow_graph_lod.js:41-56",
-    "ui/unified/js/coverage_model.js:30-253",
-    "ui/unified/js/coverage_indicator.js:55-73",
-    "ui/unified/js/coverage_indicator.js:84-101"
+    "ui/brain/js/trigram.js:105-123",
+    "ui/brain/js/trigram.js:136-146"
   ],
   "vitest": {
     "related": false

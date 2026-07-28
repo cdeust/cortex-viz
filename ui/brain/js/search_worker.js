@@ -38,24 +38,12 @@ importScripts('/brain/js/trigram.js');
     return words;
   }
 
-  function uniqueWords(words) {
-    var seen = Object.create(null);
-    var out = [];
-    for (var i = 0; i < words.length; i++) {
-      if (!seen[words[i]]) {
-        seen[words[i]] = true;
-        out.push(words[i]);
-      }
-    }
-    return out;
-  }
-
   function buildIndex(nodes) {
     var out = new Array(nodes.length);
     for (var i = 0; i < nodes.length; i++) {
       var n = nodes[i];
       var haystack = TRGM.indexWords(n.label || n.id || '');
-      var words = uniqueWords(haystack.concat(pathWords(n.path)));
+      var words = TRGM.uniqueWords(haystack.concat(pathWords(n.path)));
       var tri = new Array(words.length);
       for (var w = 0; w < words.length; w++) tri[w] = TRGM.wordTrigrams(words[w]);
       out[i] = {

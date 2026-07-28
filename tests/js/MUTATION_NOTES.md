@@ -98,3 +98,39 @@ the identical value on both sides, so no test can distinguish them:
   at equality, `present - indexed === 0 === the else`.
 
 Non-equivalent survivors: 0 (§12.4 satisfied).
+
+---
+
+## Run — `ui/brain/js/trigram.js` (js/remote-property-injection #153/#154)
+
+Scope (§12.1 per-commit narrow gate — only the changed lines):
+
+| File | Range | Meaning | Score |
+|---|---|---|---|
+| `ui/brain/js/trigram.js` | 105–123 | `indexWords` (dedup map `Object.create(null)` → `Set`) | 100% — 39 killed + 1 timeout / 0 survived |
+| `ui/brain/js/trigram.js` | 136–146 | `uniqueWords` (moved here from `search_worker.js`, same map change) | (same run) |
+
+Non-equivalent survivors: 0 (§12.4 satisfied). No mutant needed an equivalence
+argument — the first pass left 5 survivors + 1 uncovered mutant, and all six
+were genuine test gaps, closed by tests rather than reasoned away:
+
+- **The security change itself is pinned, not merely current.** Reverting either
+  map to a plain object (the exact defect the alerts named) is killed by 3 tests
+  in "trigram dedup does not collide with inherited property names". Verified by
+  injecting that mutant by hand before trusting the suite.
+- **Both camelCase split loops (`:119`, `:120`) survived** disabling *and*
+  boundary inversion. The union of the two splits is the reason
+  `splitLowerUpperOnly` exists — trigram.js:84–95 explains it with `userIDs` as
+  the worked example — but nothing asserted it, so either loop could be deleted
+  silently. Closed by "unions both camelCase splits so an acronym stays findable
+  whole" (`userIDs`, `HTTPServer`, `fooBar`).
+- **The alnum-run class (`:106`) survived widening** `\p{N}` → `\P{N}`, which
+  makes `/`, `-`, `_` word characters. Nothing asserted that a separator
+  separates. Closed by "treats every non-alphanumeric character as a separator".
+- **The `|| []` fallback (`:106`) had no coverage at all** — no test passed a
+  string with no alphanumeric run. Closed by "yields no words when the string
+  holds no alphanumeric run" (`''`, `'---'`, `'   '`).
+
+Unlike the `|| []` fallbacks triaged as equivalent above, this one is
+observable: the mutated value flows into `splitCamel`, which splits it into
+real indexed words.
