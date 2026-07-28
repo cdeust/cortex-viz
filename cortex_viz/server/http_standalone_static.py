@@ -19,6 +19,7 @@ import re
 from pathlib import Path
 
 from cortex_viz.server.http_standalone_response import send_plain_error
+from cortex_viz.shared.path_containment import resolve_under
 
 # Content types for the shared design-system foundation (ui/shared/*). Kept
 # small and explicit — the foundation ships only these kinds.
@@ -91,6 +92,13 @@ def serve_shared_asset(handler, shared_dir: Path, rel_path: str) -> None:
     depth is the reason for a distinct reader; the traversal guard is the price:
     the resolved path MUST stay inside ``shared_dir`` and be an existing file,
     so a crafted ``../`` can never escape the foundation directory.
+
+    Containment goes through ``shared.path_containment.resolve_under``. The
+    previous form (``base not in target.parents``) enforced the same
+    property, but ``pathlib``'s parent chain is not a containment check any
+    static analyser models, so ``py/path-injection`` reported all three
+    filesystem operations below on every scan. See that module's docstring
+    for why the prefix form is the provable one.
     """
     # Reject the obvious attacks before touching the filesystem.
     if (
@@ -102,12 +110,11 @@ def serve_shared_asset(handler, shared_dir: Path, rel_path: str) -> None:
     ):
         send_plain_error(handler, 403)
         return
-    base = shared_dir.resolve()
-    target = (base / rel_path).resolve()
-    # Containment check — the resolved path must be within the foundation dir.
-    if base != target and base not in target.parents:
+    contained = resolve_under(str(shared_dir), str(Path(shared_dir) / rel_path))
+    if contained is None:
         send_plain_error(handler, 403)
         return
+    target = Path(contained)
     if not target.is_file():
         send_plain_error(handler, 404)
         return

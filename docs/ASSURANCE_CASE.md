@@ -43,7 +43,7 @@ authentication, and no network listener beyond loopback.
 | # | Adversary | Reach | STRIDE | Countered by |
 |---|---|---|---|---|
 | A1 | **A web page the user visits** | Can issue cross-origin requests to `127.0.0.1:<port>` from the user's browser, including via DNS rebinding | Information disclosure, Tampering | §3.1 |
-| A2 | **A crafted request path** (from A1, or any local process) | Reaches static serving, wiki reads, git diff paths | Information disclosure (arbitrary file read) | §3.2, **open findings** |
+| A2 | **A crafted request path** (from A1, or any local process) | Reaches static serving, wiki reads, git diff paths | Information disclosure (arbitrary file read) | §3.2 |
 | A3 | **Untrusted content rendered in a view** | Memory text, session transcripts, wiki pages, file paths, all rendered into the DOM | Elevation (XSS in the page's context) | §3.3, **open findings** |
 | A4 | **A tampered release artifact or dependency** | Substituted wheel, altered `ui/` asset, malicious transitive package | Tampering | §3.4 |
 | A5 | **Another local process on the machine** | Can connect to the loopback port | Information disclosure | §3.5, accepted |
@@ -77,25 +77,52 @@ if origin comparison is wrong, control 3 if the write path skips the check.
 A defeat of one does not imply a defeat of the others, and controls 1 and 3
 must **both** fail for a cross-site write to land.
 
-### 3.2 Request-derived filesystem paths (A2): guarded, not yet fully verified
+### 3.2 Request-derived filesystem paths (A2): contained
 
-Where a path is built from a request, the intended pattern is: reject NUL,
-empty, `..`, and dot-prefixed components before touching the filesystem;
-`resolve()` the target; require the resolved path to be contained in the base
-directory; require it to be an existing file. `serve_shared_asset` in
-`cortex_viz/server/http_standalone_static.py` implements exactly this.
+Every path built from a request crosses one guard,
+`cortex_viz/shared/path_containment.resolve_under`: `~`-expand, resolve
+symlinks, then require the RESOLVED path to sit under a separator-terminated
+prefix of the resolved base. It returns the proven path or `None`, never a
+boolean, so a caller cannot use a value the guard did not sanction. Two
+properties are deliberate — resolving before comparing (a symlink planted
+inside the base otherwise passes a textual check and dereferences outside
+it), and the trailing separator (`/srv/wiki-backup` is not inside
+`/srv/wiki`). Both are pinned by tests in `tests/test_path_containment.py`,
+and the module carries 0 surviving mutants.
 
-**This is where the assurance case is currently incomplete.** CodeQL reports
-**10 open `py/path-injection` alerts** (high) across `http_standalone_static.py`,
-`git_diff_engine.py`, `http_file_diff.py`, and `wiki_read.py`, first raised
-2026-07-25 when CodeQL was introduced. A spot check of the static-serving sites
-shows the containment guard described above is present, and CodeQL does not
-model `base in target.parents` as a sanitizer, which makes those alerts
-**candidate** false positives. Candidate is not confirmed. The full triage,
-site by site, with each alert either fixed or dismissed with a written reason,
-is tracked in [#46](https://github.com/cdeust/cortex-viz/issues/46) and is a
-prerequisite for claiming this section complete. Until it closes, treat
-arbitrary local file read as **not yet excluded by evidence**.
+The four readers on top of it:
+
+| Reader | Base |
+|---|---|
+| `serve_static` (`/js/`, `/css/`) | directory-listing whitelist, then the served directory |
+| `serve_shared_asset` (`/shared/`) | the design-system foundation directory |
+| `wiki_read._safe_path` | `WIKI_ROOT`, plus a `.md`/`.bib` suffix gate |
+| `git_diff_engine._sandboxed_abs_path` | `infrastructure.file_sandbox.readable_roots` |
+
+**The last one closed a real defect, not a false positive.** `/api/file-diff`
+and `/api/trace/file` take a filesystem path from the request; the
+absolute-path branch passed it to the diff engine with no boundary at all, so
+any file inside any git repository anywhere on the machine came back in full
+as a `diff_type: "untracked"` patch. Reproduced 2026-07-28 against a throwaway
+repository outside every configured root, and pinned by a paired regression
+test (same repo, same file, sandbox root listed vs unlisted) in
+`tests/test_file_sandbox.py`. Exposure was bounded by §3.1 — a page on the
+public internet cannot read the response, because CORS reflects only loopback
+origins — but a page served from any other loopback port could.
+
+The readable roots are the places the graph's file nodes actually come from:
+the configured development roots, `~/.claude`, and the temp roots agent
+scratchpads use. Measured against the live activity spine on 2026-07-28, all
+1069 graphed absolute paths fall inside them and none outside, so the boundary
+costs no reachable functionality.
+
+The 10 `py/path-injection` alerts (high) first raised 2026-07-25 are all
+resolved: one root-cause fix plus three guards rewritten from correct-but-
+unmodelled forms (`os.path.commonpath`, `base in target.parents`) into the
+`str.startswith` form CodeQL models as a `Path::SafeAccessCheck`. Verified by
+running the query locally on the tree before and after — 10 alerts to 0, with
+a paired full `python-security-and-quality` run confirming no other rule
+changed count (147 to 137).
 
 ### 3.3 Untrusted content rendered into the DOM (A3, A6)
 
@@ -185,7 +212,7 @@ respect to the Cortex store. Documented for the user in
 |---|---|
 | **Injection (SQL)** | Countered. All store access is parameterised read-only queries through `psycopg`; no string-built SQL. |
 | **Injection (command)** | git is invoked with argument lists, never a shell string. |
-| **Path traversal (CWE-22)** | Guard pattern implemented, **triage open**, see §3.2 and [#46](https://github.com/cdeust/cortex-viz/issues/46). |
+| **Path traversal (CWE-22)** | Countered. One containment guard behind every request-derived path (§3.2); the unbounded diff-endpoint read it uncovered is fixed and regression-tested; 10 `py/path-injection` alerts closed. |
 | **XSS (CWE-79)** | **Open findings**, see §3.3 and [#46](https://github.com/cdeust/cortex-viz/issues/46). |
 | **CSRF (CWE-352)** | Countered, `enforce_same_origin_write`. |
 | **DNS rebinding (CWE-346/350)** | Countered, `validate_host_header`. |
@@ -245,12 +272,14 @@ server, A1) carries three independent controls with distinct failure modes, and
 the supply-chain boundary (A4) carries provenance, fingerprinting, an SBOM, and
 pinned actions. Those two arguments stand.
 
-The boundaries that handle **untrusted data** (A2 request-derived paths, A3
-rendered content) are implemented with the right pattern at the sites reviewed,
-but their static-analysis findings are **untriaged**, so the argument for them
-is incomplete by this document's own standard. cortex-viz should be read as a
-**local, single-user developer tool with a credible but unfinished data-handling
-argument**, not as a hardened service.
+Of the two boundaries that handle **untrusted data**, A2 (request-derived
+paths) now stands as well: every site goes through one containment guard, the
+findings are triaged to zero, and the one that was a real defect rather than an
+analyser artifact is fixed and regression-tested (§3.2). A3 (rendered content)
+does not: its static-analysis findings are still **untriaged**, so the argument
+for it is incomplete by this document's own standard. cortex-viz should be read
+as a **local, single-user developer tool with a credible but unfinished
+data-handling argument**, not as a hardened service.
 
 This case is revisited when a trust boundary moves, when a finding is triaged,
 or at each release, whichever comes first.

@@ -260,7 +260,7 @@ class DomainRegistry:
         self.path_to_repo = {r.fs_path: r for r in self.repos}
 
 
-def _candidate_dev_roots() -> list[Path]:
+def candidate_dev_roots() -> list[Path]:
     """Plausible parent directories for the user's git repos.
 
     Probed in order:
@@ -295,13 +295,13 @@ def _candidate_dev_roots() -> list[Path]:
 def _build_registry() -> DomainRegistry:
     """Build the complete domain registry from git repos. Cached at startup.
 
-    Scans every candidate dev root (see ``_candidate_dev_roots``) so the
+    Scans every candidate dev root (see ``candidate_dev_roots``) so the
     registry works regardless of whether the user keeps repos at
     ``~/Developments`` or ``~/Documents/Developments``.
     """
     repos: list[RepoInfo] = []
     seen_paths: set[str] = set()
-    for dev_root in _candidate_dev_roots():
+    for dev_root in candidate_dev_roots():
         for r in _discover_repos(dev_root):
             if r.fs_path in seen_paths:
                 continue

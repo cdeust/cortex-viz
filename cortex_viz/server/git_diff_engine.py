@@ -21,12 +21,18 @@ Ladder (strict order, contract A.2):
 
 Read-only: only ``git diff`` / ``git log`` / ``git show`` / ``git
 ls-files`` / ``git rev-parse``, never anything that mutates the tree.
+
+Sandboxed: every caller-supplied path passes ``_sandboxed_abs_path``
+before any filesystem or git call, so the engine can only ever read
+inside ``infrastructure.file_sandbox.readable_roots``.
 """
 
 from __future__ import annotations
 
 import os
 import subprocess
+
+from cortex_viz.infrastructure.file_sandbox import resolve_readable_path
 
 # Cap the rendered diff so a huge file (or a full-content new file) can't
 # ship a multi-MB payload the modal would choke on.
@@ -63,47 +69,45 @@ def _expand_user(path: str) -> str:
     return os.path.expanduser(path or "")
 
 
-def _expand_and_realpath(path: str) -> str:
-    """Expand ``~`` and canonicalize symlinks in ``path``.
+def _sandboxed_abs_path(path: str) -> tuple[str | None, str | None]:
+    """``(canonical_path, reason)`` — the gate every caller-supplied path passes.
 
-    ``git rev-parse --show-toplevel`` always returns a symlink-resolved
-    root. Any path we later ``os.path.relpath`` against that root must be
-    canonicalized the same way, or a symlinked ancestor (e.g. macOS's
-    ``/tmp`` -> ``/private/tmp``) turns the relpath into a bogus
-    ``../../..`` walk back out to the original absolute path — which then
-    fails to match the tracked file in every downstream ``git`` call and
-    falls through the ladder to the wrong ``diff_type``. ``os.path.realpath``
-    is safe to call even when the path (or its parent) does not exist: it
-    resolves every symlink it can and leaves the rest of the path literal.
+    Two checks, in this order, and the order is load-bearing:
 
-    Callers that need the absoluteness gate (contract A.1) MUST check it
-    against ``_expand_user`` first — see ``resolve_repo_root``. This
-    function is only safe to call once that gate has already passed.
-    """
-    return os.path.realpath(_expand_user(path))
+    1. **Absoluteness** (contract A.1), on the ``~``-expanded string only
+       (see ``_expand_user``). It must happen BEFORE any canonicalization:
+       ``os.path.realpath`` silently absolutizes a relative path against
+       the process CWD, so a bare hash or a repo-relative fragment like
+       ``src/main.py`` would pass an absoluteness check made afterwards
+       and get resolved against the server's working directory.
+    2. **Sandbox containment** (``infrastructure.file_sandbox``), which
+       resolves symlinks and proves the result lies under a root the
+       visualizer is allowed to read. Everything downstream — the ancestor
+       walk, ``git rev-parse``, the repo-relative path, the untracked-file
+       read — uses the value returned HERE, never the caller's string.
 
-
-def resolve_repo_root(path: str) -> tuple[str | None, str | None]:
-    """``(git_root, reason)`` for an absolute filesystem path (contract A.1).
-
-    ``reason`` is set only when ``git_root`` is ``None``. Expands ``~``
-    first and checks absoluteness on THAT (see ``_expand_user``) — the
-    check must happen before ``realpath``, not after, or a relative input
-    gets silently absolutized against the server's CWD and wrongly passes
-    (contract A.1). If the path is still not absolute, resolution stops
-    here (the caller is responsible for name resolution — see
-    ``http_file_diff._resolve_name`` for the basename/relative ladder used
-    by ``/api/file-diff``). Once absoluteness is confirmed, symlinks are
-    canonicalized (see ``_expand_and_realpath``). If the immediate parent
-    directory no longer exists (a deleted file/dir whose repo is still
-    alive), walks up to the nearest existing ancestor and resolves the
-    repo from there — a deleted file's history still lives in a repo
-    rooted above it.
+    Canonicalizing is also what keeps the diff correct, independent of
+    security: ``git rev-parse --show-toplevel`` always returns a
+    symlink-resolved root, so a path with a symlinked ancestor (macOS's
+    ``/tmp`` -> ``/private/tmp``) that is not resolved the same way turns
+    the later ``os.path.relpath`` into a bogus ``../../..`` walk back out,
+    misses the tracked file in every downstream ``git`` call, and falls
+    through the ladder to the wrong ``diff_type``.
     """
     if not _expand_user(path).startswith("/"):
         return None, "path is not absolute"
-    expanded = _expand_and_realpath(path)
-    ancestor = os.path.dirname(expanded) or "/"
+    return resolve_readable_path(path)
+
+
+def _repo_root_of(canonical: str) -> tuple[str | None, str | None]:
+    """``(git_root, reason)`` for an already-gated canonical path.
+
+    If the immediate parent directory no longer exists (a deleted file or
+    directory whose repo is still alive), walks up to the nearest existing
+    ancestor and resolves the repo from there — a deleted file's history
+    still lives in a repo rooted above it.
+    """
+    ancestor = os.path.dirname(canonical) or "/"
     while ancestor != "/" and not os.path.isdir(ancestor):
         ancestor = os.path.dirname(ancestor)
     if not os.path.isdir(ancestor):
@@ -115,9 +119,23 @@ def resolve_repo_root(path: str) -> tuple[str | None, str | None]:
     return root, None
 
 
+def resolve_repo_root(path: str) -> tuple[str | None, str | None]:
+    """``(git_root, reason)`` for an absolute filesystem path (contract A.1).
+
+    ``reason`` is set only when ``git_root`` is ``None``. The caller is
+    responsible for name resolution when the path is not absolute — see
+    ``http_file_diff._resolve_name`` for the basename/relative ladder used
+    by ``/api/file-diff``.
+    """
+    canonical, reason = _sandboxed_abs_path(path)
+    if canonical is None:
+        return None, reason
+    return _repo_root_of(canonical)
+
+
 def repo_root_and_relpath(path: str) -> tuple[str | None, str | None, str | None]:
     """``(root, rel, reason)`` — the single place that resolves a repo root
-    AND the path relative to it, both derived from the same
+    AND the path relative to it, both derived from the same gated,
     symlink-canonicalized input.
 
     This exists because the relpath computation was previously duplicated
@@ -127,11 +145,13 @@ def repo_root_and_relpath(path: str) -> tuple[str | None, str | None, str | None
     got introduced twice. Every caller that needs a repo-relative path
     must go through here.
     """
-    root, reason = resolve_repo_root(path)
+    canonical, reason = _sandboxed_abs_path(path)
+    if canonical is None:
+        return None, None, reason
+    root, reason = _repo_root_of(canonical)
     if root is None:
         return None, None, reason
-    rel = os.path.relpath(_expand_and_realpath(path), root)
-    return root, rel, None
+    return root, os.path.relpath(canonical, root), None
 
 
 def _is_untracked(root: str, rel: str) -> bool:
@@ -282,8 +302,10 @@ def diff_for_path(path: str) -> dict:
 
     Returns ``{available, diff_type, lines, truncated, reason?, commit?}`` —
     the shared shape both ``/api/file-diff`` and ``/api/trace/file`` expose.
-    ``available:false`` means no repo could be resolved at all; a resolved
-    repo with no diff to show is ``available:true, diff_type:'none'``.
+    ``available:false`` means the path was refused (not absolute, outside
+    the readable roots) or no repo could be resolved at all — ``reason``
+    says which; a resolved repo with no diff to show is ``available:true,
+    diff_type:'none'``.
     """
     root, rel, reason = repo_root_and_relpath(path)
     if root is None:
@@ -302,6 +324,8 @@ def diff_for_path(path: str) -> dict:
 __all__ = [
     "resolve_repo_root",
     "repo_root_and_relpath",
+    "_sandboxed_abs_path",
+    "_repo_root_of",
     "diff_for_path",
     "_MAX_LINES",
     "_git",
