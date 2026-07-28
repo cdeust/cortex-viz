@@ -88,10 +88,16 @@ def _build_where(params: dict[str, Any]) -> tuple[list[str], list[Any]]:
         args.append(params["search"])
     if params.get("min_heat"):
         try:
-            clauses.append("COALESCE(heat_base, 0) >= %s")
-            args.append(float(params["min_heat"]))
+            min_heat = float(params["min_heat"])
         except (TypeError, ValueError):
+            # Unparseable min_heat drops the filter. Converting BEFORE the
+            # appends is load-bearing: the clause used to be appended first,
+            # so a bad value left a %s in the WHERE with no matching arg and
+            # failed the entire query instead of ignoring one filter.
             pass
+        else:
+            clauses.append("COALESCE(heat_base, 0) >= %s")
+            args.append(min_heat)
     emo = _emotion_clause(params.get("emotion") or "")
     if emo:
         clauses.append(emo)
