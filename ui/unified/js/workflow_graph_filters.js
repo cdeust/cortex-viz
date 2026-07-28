@@ -9,7 +9,8 @@
     query: '',                  // free-text search (path, label, content)
   };
 
-  var SETUP_KINDS = { skill: 1, hook: 1, command: 1, agent: 1 };
+  // Every selectable filter is a LAYER_KINDS row (or a kind:/file:/edge:
+  // prefix) — the setup kinds are L1's, not a separate vocabulary.
   var LAYER_KINDS = {
     L1: { skill: 1, hook: 1, command: 1, agent: 1, mcp: 1, domain: 1 },
     L2: { tool_hub: 1, domain: 1 },

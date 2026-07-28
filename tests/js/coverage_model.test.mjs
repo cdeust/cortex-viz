@@ -186,6 +186,10 @@ describe('computeCoverage — verdict + criteria', () => {
   });
 
   it('is COMPLETE and quiet when the render matches the store (criterion 5)', () => {
+    // First: the store reports NO revision (the AP#55 "not wired yet"
+    // fallback). Staleness must fall back to growth comparison and find
+    // none — a missing store revision may not fabricate staleness, and the
+    // verdict must be identical to the revision-matched run below.
     const r = C.computeCoverage('graph', {
       rendered: { nodes: 100, edges: 50 },
       store: storeComplete,
@@ -193,6 +197,13 @@ describe('computeCoverage — verdict + criteria', () => {
       progress: { full_ready: true },
       engine: { available: true, files_present: 10, files_indexed: 10 },
     });
+    expect(r.status).toBe('complete');
+    expect(r.omissions).toEqual([]);
+    expect(r.degraded).toEqual([]);
+    expect(r.staleness.stale).toBe(false);
+    expect(r.staleness.storeRevision).toBeNull();
+    expect(r.staleness.snapshotRevision).toBe('r1');
+
     // Provide a matching store revision so staleness is clean.
     storeComplete.revision = 'r1';
     const r2 = C.computeCoverage('graph', {

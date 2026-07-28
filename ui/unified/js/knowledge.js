@@ -34,6 +34,11 @@
   var filterMinHeat = null;       // 0.5 when "Hot" toggle on
   var filterProtected = false;    // true when "Protected" toggle on
 
+  // Consolidation vocabulary → the label the user reads + the ink class
+  // knowledge.css defines (.kv-badge-new/-growing/-strong/-stable/-updating).
+  // The filter chips, the card badge and the inspector's Stage row all read
+  // THIS map, so the raw DB key (`early_ltp`) never reaches the screen and
+  // the three sites cannot drift apart.
   var STAGE_MAP = {
     labile:          { label: 'New',      cls: 'kv-badge-new' },
     early_ltp:       { label: 'Growing',  cls: 'kv-badge-growing' },
@@ -42,12 +47,25 @@
     reconsolidating: { label: 'Updating', cls: 'kv-badge-updating' },
   };
 
+  // A stage outside the map still renders — capitalized, uninked — rather
+  // than blanking the badge on an unknown server value.
+  function stageMeta(stage) {
+    if (!stage) return { label: '', cls: '' };
+    return STAGE_MAP[stage]
+      || { label: stage.charAt(0).toUpperCase() + stage.slice(1), cls: '' };
+  }
+
   // Emotion inks — DS data tokens (tokens/colors.css --emo-*); the paper
   // surface remaps them to deep re-inked variants via tokens/surfaces.css.
+  // Keyed by BOTH vocabularies a memory can carry: the API facet values the
+  // filter sends back (urgent/positive/negative) and Cortex's raw affect
+  // labels (urgency/frustration/…). `neutral` is deliberately absent — no
+  // ink, so the dot keeps its --text-faint default.
   var EMO_COLORS = {
-    urgency: 'var(--emo-urgent)', frustration: 'var(--emo-frustr)',
-    satisfaction: 'var(--emo-satisf)', discovery: 'var(--emo-discov)',
-    confusion: 'var(--emo-conflct)',
+    urgent: 'var(--emo-urgent)',       urgency: 'var(--emo-urgent)',
+    positive: 'var(--emo-satisf)',     satisfaction: 'var(--emo-satisf)',
+    negative: 'var(--emo-frustr)',     frustration: 'var(--emo-frustr)',
+    discovery: 'var(--emo-discov)',    confusion: 'var(--emo-conflct)',
   };
 
   // ── Title extraction ──
@@ -352,14 +370,10 @@
     row.appendChild(label);
 
     // Stage chips (consolidation pipeline).
-    var stageOpts = [
-      { v: null,              t: 'Any stage' },
-      { v: 'labile',          t: 'New' },
-      { v: 'early_ltp',       t: 'Growing' },
-      { v: 'late_ltp',        t: 'Strong' },
-      { v: 'consolidated',    t: 'Stable' },
-      { v: 'reconsolidating', t: 'Updating' },
-    ];
+    var stageOpts = [{ v: null, t: 'Any stage' }].concat(
+      Object.keys(STAGE_MAP).map(function(k) {
+        return { v: k, t: STAGE_MAP[k].label };
+      }));
     stageOpts.forEach(function(opt) {
       var c = facets && opt.v ? facets.stages[opt.v] : (opt.v == null ? (facets ? facets.total : '') : '');
       row.appendChild(_chip(opt.t,
@@ -374,9 +388,9 @@
     // deep re-inked on paper via tokens/surfaces.css.
     var emoOpts = [
       { v: null,       t: 'Any feel' },
-      { v: 'urgent',   t: 'Urgent', color: 'var(--emo-urgent)' },
-      { v: 'positive', t: 'Positive', color: 'var(--emo-satisf)' },
-      { v: 'negative', t: 'Negative', color: 'var(--emo-frustr)' },
+      { v: 'urgent',   t: 'Urgent',   color: EMO_COLORS.urgent },
+      { v: 'positive', t: 'Positive', color: EMO_COLORS.positive },
+      { v: 'negative', t: 'Negative', color: EMO_COLORS.negative },
       { v: 'neutral',  t: 'Neutral' },
     ];
     emoOpts.forEach(function(opt) {
@@ -460,8 +474,10 @@
   }
 
   function _renderPagedGrid() {
+    // The sentinel is a SIBLING of the grid (both appended to container in
+    // show()), so emptying the grid below never detaches it and the observer
+    // attached at build time stays live — nothing to re-observe here.
     var grid = document.getElementById('kv-grid');
-    var sentinel = document.getElementById('kv-load-sentinel');
     if (!grid) return;
 
     // Group into globals + by-domain on the cumulative accumulated set.
@@ -676,7 +692,16 @@
     // Feeling — dot + emotion word + signed valence (the arrow carries the
     // sign, magnitude verbatim) + arousal; mono, never colour-only.
     var feel = el('div', 'kv-mc-feel');
-    feel.appendChild(el('span', 'kv-mc-feel-dot'));
+    var feelDot = el('span', 'kv-mc-feel-dot');
+    // Ink the dot with the emotion's data token — redundant with the word
+    // beside it (colour is never the only carrier), and the same token the
+    // matching filter chip uses. Own-property lookup: an emotion of
+    // "constructor"/"toString" would otherwise resolve up the prototype
+    // chain to a function.
+    if (Object.prototype.hasOwnProperty.call(EMO_COLORS, emotion)) {
+      feelDot.style.background = EMO_COLORS[emotion];
+    }
+    feel.appendChild(feelDot);
     var feelText = emotion.charAt(0).toUpperCase() + emotion.slice(1);
     if (valence !== null) feelText += ' · ' + (valence < 0 ? '↓' : '↑') + ' ' + Math.abs(valence).toFixed(2);
     if (arousal !== null) feelText += ' · ↑ ' + arousal.toFixed(2);
@@ -711,8 +736,9 @@
     // Badges — stage · domain · Hot in amber; relative time right-aligned.
     var brow = el('div', 'kv-mc-brow');
     if (stage) {
-      var stBadge = el('span', 'aia-badge aia-badge--info');
-      stBadge.textContent = stage.charAt(0).toUpperCase() + stage.slice(1);
+      var sm = stageMeta(stage);
+      var stBadge = el('span', 'aia-badge kv-badge' + (sm.cls ? ' ' + sm.cls : ''));
+      stBadge.textContent = sm.label;
       brow.appendChild(stBadge);
     }
     if (mem.domain) {
@@ -850,7 +876,7 @@
     [
       ['Heat', heat.toFixed(3)],
       ['Type', storeType.charAt(0).toUpperCase() + storeType.slice(1)],
-      ['Stage', mem.consolidationStage || '--'],
+      ['Stage', stageMeta(mem.consolidationStage).label || '--'],
       ['Domain', mem.domain ? shortDomain(mem.domain) : '--'],
       ['Emotion', mem.emotion || '--'],
       ['Source', mem.isGlobal ? 'global' : (mem.isProtected ? 'protected' : 'user')],
@@ -1077,6 +1103,14 @@
     return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
+  // A fenced block carries its language as a `lang-*` class, the same
+  // contract the wiki renderer emits (wiki.js `_renderMarkdown`), so one
+  // highlighter rule covers both surfaces.
+  function codeBlock(lines, lang) {
+    var cls = lang ? ' class="lang-' + esc(lang) + '"' : '';
+    return '<pre class="kv-code"><code' + cls + '>' + lines.join('\n') + '</code></pre>';
+  }
+
   function renderMemoryContent(raw) {
     if (!raw) return '';
     var text = raw;
@@ -1097,8 +1131,10 @@
       var fence = line.match(/^```(\w*)/);
       if (fence) {
         if (inCode) {
-          html.push('<pre class="kv-code"><code>' + codeLines.join('\n') + '</code></pre>');
+          html.push(codeBlock(codeLines, codeLang));
           codeLines = [];
+          // No `codeLang` reset: the opening arm below assigns it on every
+          // fence, so it can never carry into the next block.
           inCode = false;
         } else {
           codeLang = fence[1] || '';
@@ -1108,8 +1144,9 @@
       }
       if (inCode) { codeLines.push(esc(line)); continue; }
 
-      // Detect JSON blocks — accumulate, then parse and pretty-print
-      if (/^\s*[\{\[]/.test(line) && !inCode) {
+      // Detect JSON blocks — accumulate, then parse and pretty-print.
+      // `inCode` is necessarily false here: the guard above `continue`s.
+      if (/^\s*[\{\[]/.test(line)) {
         var jsonLines = [line];
         var depth = 0;
         for (var c = 0; c < line.length; c++) {
@@ -1172,7 +1209,7 @@
 
     // Close unclosed code
     if (inCode && codeLines.length) {
-      html.push('<pre class="kv-code"><code>' + codeLines.join('\n') + '</code></pre>');
+      html.push(codeBlock(codeLines, codeLang));
     }
 
     return html.join('');
@@ -1196,6 +1233,16 @@
     });
     return pill;
   }
+
+  // Read-only test seam — same pattern as JUG._rendererTest. The card
+  // renderer and the markdown renderer are the LIVE ones (buildCard is what
+  // _renderPagedGrid appends), so an assertion here pins what the user sees.
+  window.JUG._kvTest = {
+    stageMeta: stageMeta,
+    EMO_COLORS: EMO_COLORS,
+    buildCard: buildCard,
+    renderMemoryContent: renderMemoryContent,
+  };
 
   // ── Initialize ──
   document.addEventListener('DOMContentLoaded', init);

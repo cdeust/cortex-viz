@@ -32,8 +32,10 @@ CMV.filterData = function (raw) {
     .filter(function (n) { return n.type === 'domain'; })
     .sort(function (a, b) { return (b.sessionCount || 0) - (a.sessionCount || 0); })
     .slice(0, MAX_DOMAINS);
+  // Kept domains are matched by `domain`, not id: children carry the label,
+  // and `keepIds` below (built from filteredNodes, which starts as
+  // domainNodes) already covers the domain nodes' ids for edge filtering.
   var keepDomains = new Set(domainNodes.map(function (n) { return n.domain; }));
-  var keepDomainIds = new Set(domainNodes.map(function (n) { return n.id; }));
 
   var MAX_ENTRIES = 3, MAX_PATTERNS = 5, MAX_TOOLS = 4;
   var countPerDomain = {};

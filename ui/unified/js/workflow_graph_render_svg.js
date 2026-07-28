@@ -134,9 +134,10 @@
 
   // Draw five shell bands per domain: L1/L2/L3 full circles, L4/L5 arcs.
   function drawShells(g, ctx) {
-    var d3 = window.d3;
+    // No `d3` / `TAU` locals: both existed for the explicit L4/L5 `path`
+    // arcs removed below (Safari fill-inheritance quirk). Everything drawn
+    // now goes through the passed-in selection `g`.
     var anchors = ctx.anchors;
-    var TAU = Math.PI * 2;
     ctx.domains.forEach(function (d) {
       var a = anchors[d.id];
       if (!a) return;

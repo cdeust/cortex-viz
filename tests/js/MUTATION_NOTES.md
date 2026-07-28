@@ -162,3 +162,63 @@ replacement entities), so the property that actually closes the alerts — that
 `"` is escaped — cannot regress silently: dropping it from either the class or
 the entity table is killed by both the direct `esc('"')` assertion and the
 parsed-DOM attribute-breakout tests in `brain_escape.test.mjs`.
+
+---
+
+## Run — renderings that were computed and discarded (js/unused-local-variable #155/#160/#163/#164/#165/#174/#175)
+
+Scope (§12.1 per-commit narrow gate — only the changed lines):
+
+| File | Range | Meaning | Score |
+|---|---|---|---|
+| `ui/unified/js/knowledge.js` | 52–56, 695–703, 737–743, 1109–1112, 1130–1145 | `stageMeta`, the feel-dot emotion ink, the badge row, `codeBlock`, the fence loop | 98.28% — 57 killed / 1 survived (equivalent) |
+| `ui/dashboard/js/interaction.js` | 135–152 | `connItemHtml` (the relationship-kind row) | 96.00% — 24 killed / 1 survived (equivalent) |
+| `ui/unified/js/polling.js` | 22–33, 88–97 | offline degradation (threshold, empty-canvas test, catch arm) | 100% — 22 killed / 0 survived |
+| `ui/unified/js/wiki.js` | 2075–2089 | `buildEditorSetup` (CM6 history + keymap assembly) | 100% — 36 killed / 0 survived |
+
+Total 139 killed / 2 survived, both equivalent (§12.4 satisfied: 0 non-equivalent
+survivors). The first pass scored 85.62% with 16 survivors + 5 uncovered; every
+one was triaged rather than reasoned away, and the gaps it exposed were real:
+
+- **`connItemHtml`'s label arms had no coverage at all** — neither `d.name ||
+  'Entity'` (a nameless entity) nor `(d.content || '')` (a contentless memory)
+  nor the `.slice(0, 60)` truncation was exercised. Three tests added.
+- **The row's closing `</div>` survived deletion.** The suite rendered one row
+  at a time, so the parser auto-closed it; the live path concatenates rows into
+  a single `innerHTML` write, where an unclosed row makes every later row its
+  *child*. Closed by "closes the row so concatenated rows are siblings".
+- **`stageMeta`'s empty-stage arm had no coverage** — `buildCard` guards with
+  `if (stage)` and never reaches it, but the inspector's Stage row calls it
+  unguarded. Closed by a direct `stageMeta('' | undefined | null)` assertion.
+- **Four mutants in the fence loop survived together** (`inCode = true`, the
+  close-branch block, `if (inCode)` → `true`, and the `</code></pre>` suffix)
+  because every test held a *single* fenced block: with only one block, an
+  unclosed one is flushed identically by the trailing "close unclosed code" arm.
+  Closed by asserting that prose after a fence is a sibling of the block, that
+  a second block does not inherit the first's lines, and that the fence must be
+  line-anchored (which also killed the `/^```/` → `/```/` regex mutant).
+- **`lines.join('\n')` survived** — every code body was one line. Closed by a
+  two-line block asserting the break survives.
+
+Two survivors were **dead code, not missing tests**, and were removed (§12.1:
+mutation surfaces dead code — delete it, don't test it):
+
+- **`codeLang = ''` on the closing fence.** Every opening fence assigns
+  `codeLang` unconditionally, so the reset can never be observed. Deleted; the
+  invariant is now a comment at the site.
+- **`window.JUG &&` inside `_canvasEmpty`.** `useFallback` writes through
+  `JUG.state` unconditionally two lines later, so a missing bus was never
+  survivable — the guard only hid that. Simplified to a direct read.
+
+### Equivalent mutants (documented, not ignored)
+
+- **`interaction.js:149` — dropping `</span>` before `'</div>'`.** HTML5 parsing
+  closes the open `<span>` at the `</div>`, so the built DOM is byte-identical;
+  only a source-text assertion could tell the difference, and that would pin the
+  implementation rather than the behaviour.
+- **`knowledge.js:701` — `hasOwnProperty` guard → `if (true)`.** Without the
+  guard the assignment is `style.background = undefined` (unknown/neutral
+  feeling) or a stringified function (`emotion === 'constructor'`). Neither is a
+  valid `<color>`, so CSSOM drops the declaration and the rendered dot is
+  unchanged. The guard states the intent and keeps the prototype chain out of a
+  style attribute; it is not observable through the DOM.

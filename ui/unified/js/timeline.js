@@ -521,8 +521,9 @@
     var heat = Math.max(0, Math.min(1, mem.heat || 0));
     var stability = mem.stability;
     var interference = mem.interferenceScore || 0;
-    var plasticity = Math.max(0, Math.min(1, mem.plasticity || 0));
-    var replayCount = mem.accessCount || 0;
+    // Plasticity and access count are NOT dropped — the minimal card carries
+    // heat only (DD-01, below); both render in the inspector this card opens:
+    // the Plasticity meter and the "Accessed … ×N" row (knowledge.js).
 
     // No heat tint / opacity fade on the sheet — DD-01 cards are plain
     // cream; heat lives in the HeatBar footer (stageColor stays used by
@@ -530,9 +531,9 @@
 
     // Integrity class (null-safe stability check) — rendered by CSS as a
     // small status dot in the sheet's corner (the DS forbids
-    // coloured-left-border cards).
+    // coloured-left-border cards). `== null` matches both null and undefined.
     var integrityClass;
-    if (stability == null || stability === undefined) {
+    if (stability == null) {
       integrityClass = 'kb-card--neutral';
     } else if (stability > 0.7 && interference < 0.3) {
       integrityClass = 'kb-card--healthy';
