@@ -106,3 +106,25 @@ release and build workflows, and the plugin packaging. Out of scope: Cortex
 itself, the Claude Code host, the plugin marketplace, and anything requiring
 prior code execution as the user running the server (see
 `docs/ASSURANCE_CASE.md`, section 2).
+
+## OpenSSF Scorecard: checks a single-maintainer repo cannot max out
+
+Scorecard alerts close only when a check reaches its **maximum** score, not
+when it improves. Four checks are bounded below maximum by facts about this
+repository rather than by anything in the code, so they are dismissed in code
+scanning with a pointer to this section rather than left open as if they were
+actionable. Each entry states what the checker actually requires — read from
+`ossf/scorecard` source, not from the summary text — and what would close it.
+
+| Check | Why it cannot reach maximum here | What would close it |
+|---|---|---|
+| **Code-Review** | Scores approved changesets. GitHub forbids approving your own pull request, and cortex-viz has one maintainer (`GOVERNANCE.md`), so the approved-changeset count is structurally 0/N. | A second maintainer with review rights. |
+| **Branch-Protection** | The top tiers (`checks/evaluation/branch_protection.go`, Tier 4–5) require a non-zero required-reviewer count and CODEOWNERS review. Setting `required_approving_review_count >= 1` solo would deadlock every merge — no one can approve. Protection IS enabled at the tiers that do not deadlock: no force-push, no deletion, PRs required. | Same as Code-Review: a second reviewer. |
+| **CII-Best-Practices** | `checks/evaluation/cii_best_practices.go` scores gold=10, silver=7, passing=5, in_progress=2; only **gold** is maximum. Gold requires `contributors_unassociated` — at least two significant contributors not associated with each other. | Two unassociated contributors. |
+| **Maintained** | Scores 0 while the repository is younger than 90 days. Purely a function of creation date; no change to the repository affects it. | Time. |
+
+The remaining Scorecard checks are treated as ordinary defects and fixed:
+Token-Permissions (top-level `permissions:` in every workflow),
+Pinned-Dependencies (no unpinned installer — the workflows use `uv` against the
+committed `uv.lock`), Vulnerabilities (dependency advisories tracked and
+patched), and Fuzzing (property-based tests, `tests/js/*.property.test.js`).
