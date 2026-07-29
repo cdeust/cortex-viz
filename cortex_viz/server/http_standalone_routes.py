@@ -15,10 +15,14 @@ from pathlib import Path
 from cortex_viz.server.http_standalone_endpoints import (
     serve_discussion_detail,
     serve_discussions,
-    serve_file_diff,
+)
+from cortex_viz.server.http_standalone_endpoints_sankey import (
     serve_sankey,
-    serve_static,
     serve_stats,
+)
+from cortex_viz.server.http_standalone_static import (
+    serve_file_diff,
+    serve_static,
 )
 from cortex_viz.server.http_standalone_nodb import (
     requires_store,
@@ -128,7 +132,7 @@ def _route_unified_get(
         serve_graph_coverage(handler, store)
         return
     if path_no_qs == "/api/graph/events":
-        from cortex_viz.server.http_standalone_endpoints import serve_graph_events
+        from cortex_viz.server.http_standalone_sse import serve_graph_events
 
         serve_graph_events(handler, store)
         return
@@ -150,7 +154,7 @@ def _route_unified_get(
         return
     if path_no_qs == "/api/activity/stream":
         # Live SSE of session-activity nodes/edges (replay-then-tail).
-        from cortex_viz.server.http_standalone_endpoints import serve_activity_stream
+        from cortex_viz.server.http_standalone_activity import serve_activity_stream
 
         serve_activity_stream(handler, store)
         return
@@ -173,7 +177,7 @@ def _route_unified_get(
         return
     if path_no_qs == "/api/graph":
         # Lazy-kicks the background build on first hit with an empty
-        # cache (see http_standalone_graph.py). Must stay AFTER the more
+        # cache (see graph_build.py). Must stay AFTER the more
         # specific ``/api/graph/*`` branches above.
         from cortex_viz.server.http_standalone_endpoints import serve_graph
 
@@ -266,7 +270,7 @@ def _route_unified_get(
         # token contract, surface toggle, and data palette shared by every
         # viz surface. Nested subpaths (tokens/, components/) are served with a
         # traversal guard — see serve_shared_asset.
-        from cortex_viz.server.http_standalone_endpoints import serve_shared_asset
+        from cortex_viz.server.http_standalone_static import serve_shared_asset
 
         serve_shared_asset(handler, ui_root / "shared", path_no_qs[len("/shared/") :])
     elif path.startswith("/js/") and path_no_qs.endswith(".js"):

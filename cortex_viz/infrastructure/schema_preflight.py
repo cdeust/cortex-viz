@@ -62,7 +62,8 @@ class PgStore(Protocol):
 
     def query(
         self, sql: str, params: Any = None, *, batch: bool = False
-    ) -> list[dict[str, Any]]: ...
+    ) -> list[dict[str, Any]]:
+        """Run one read-only SELECT, returning its rows as dicts."""
 
 
 # One row, one round trip: every check is a pure catalog lookup

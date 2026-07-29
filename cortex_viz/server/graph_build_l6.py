@@ -356,8 +356,8 @@ def run_l6(
             # later symbol → file lookup still works when AP
             # and L3 disagree on absolute vs relative paths.
             parts = fp_.split("/")
-            for i in range(1, len(parts)):
-                file_id_by_path.setdefault("/".join(parts[i:]), fid)
+            for tail_start in range(1, len(parts)):
+                file_id_by_path.setdefault("/".join(parts[tail_start:]), fid)
             _fnode = {
                 "id": fid,
                 "kind": "file",

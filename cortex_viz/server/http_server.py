@@ -113,7 +113,7 @@ def _build_handler_class(server_state: dict) -> type:
                 # Vendored AI Architect design-system foundation (ui/shared/) —
                 # same token contract the unified server exposes, so the
                 # methodology map reads as part of the ecosystem.
-                from cortex_viz.server.http_standalone_endpoints import (
+                from cortex_viz.server.http_standalone_static import (
                     serve_shared_asset,
                 )
 
@@ -202,6 +202,10 @@ def _bind_and_start_ui(handler_cls, server_state: dict) -> str:
             if port != 0:
                 continue
             raise
+    # Unreachable: the port list ends with 0 (OS-assigned), whose OSError
+    # re-raises above. Stated so the ``-> str`` contract has no silent
+    # ``None`` exit if that list is ever edited.
+    raise RuntimeError("methodology UI: no port in [3456, 0] could bind")
 
 
 def shutdown_server() -> None:

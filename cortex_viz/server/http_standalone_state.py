@@ -1,6 +1,6 @@
 """Shared module-level state for the standalone HTTP server.
 
-Two modules (``http_standalone`` and ``http_standalone_graph``) need to
+Two modules (``http_standalone`` and ``graph_discussions``) need to
 read and update the conversations cache; keeping the mutable state here
 lets them cooperate without a circular import.
 

@@ -5,9 +5,14 @@ Owns:
 * ``serve_sankey`` — /api/sankey dashboard query
 * ``serve_graph`` / ``serve_discussions`` / ``serve_discussion_detail``
 
-Static-file endpoints (``serve_static``, ``serve_shared_asset``,
-``serve_file_diff``) live in ``http_standalone_static``; re-exported
-below for backward-compatible imports.
+Sibling modules own the other endpoint families and are imported directly
+by their callers — ``http_standalone_static`` (``serve_static``,
+``serve_shared_asset``, ``serve_file_diff``),
+``http_standalone_endpoints_sankey`` (``serve_sankey``, ``serve_stats``),
+``http_standalone_activity`` (``serve_activity_ingest``,
+``serve_activity_stream``) and ``http_standalone_sse``
+(``serve_graph_events``). This module re-exports none of them: a name
+resolves from the module that defines it.
 
 All response shaping flows through ``http_standalone_response`` so the
 HTTP boilerplate lives in one place.
@@ -15,58 +20,15 @@ HTTP boilerplate lives in one place.
 
 from __future__ import annotations
 
-from cortex_viz.server.http_standalone_graph import (
+from cortex_viz.server.graph_discussions import (
     build_discussion_detail,
     build_discussions_response,
-    get_graph_response,
 )
+from cortex_viz.server.graph_response import get_graph_response
 from cortex_viz.server.http_standalone_response import (
     send_json_error,
     send_json_ok,
 )
-
-# Sankey + HUD-stats endpoints were split into
-# ``http_standalone_endpoints_sankey`` (500-line limit). Re-exported so
-# ``from cortex_viz.server.http_standalone_endpoints import serve_sankey``
-# / ``serve_stats`` (routes module) keep resolving.
-from cortex_viz.server.http_standalone_endpoints_sankey import (  # noqa: F401
-    serve_sankey,
-    serve_stats,
-)
-
-# P0/P3 live session-activity endpoints (serve_activity_ingest,
-# serve_activity_stream, the P3 blast-radius trigger) were split into
-# ``http_standalone_activity`` (500-line limit — P4 node-unification's
-# real-path/detail.path plumbing grew this pair past the threshold).
-# Re-exported so ``from cortex_viz.server.http_standalone_endpoints import
-# serve_activity_ingest`` (routes module) keeps resolving — same precedent
-# as the ``http_standalone_endpoints_sankey`` re-export above.
-from cortex_viz.server.http_standalone_activity import (  # noqa: F401
-    serve_activity_ingest,
-    serve_activity_stream,
-)
-
-# Sandboxed static-file endpoints (serve_static, serve_shared_asset,
-# serve_file_diff) were split into ``http_standalone_static`` (500-line
-# limit, §4.1) — a distinct concern (disk reads under a traversal guard)
-# from the graph/discussion JSON endpoints in this module. Re-exported
-# so ``from cortex_viz.server.http_standalone_endpoints import
-# serve_static`` (routes module) keeps resolving — same precedent as the
-# re-exports above.
-from cortex_viz.server.http_standalone_static import (  # noqa: F401
-    serve_file_diff,
-    serve_shared_asset,
-    serve_static,
-)
-
-# /api/graph/events (SSE) was split into ``http_standalone_sse``
-# (500-line limit, §4.1) — cursor resolution, replay-then-tail write
-# loop, and 7 cohesive helpers all belonging to one concern. Re-exported
-# so ``from cortex_viz.server.http_standalone_endpoints import
-# serve_graph_events`` (routes module) keeps resolving — same precedent
-# as the ``http_standalone_endpoints_sankey`` / ``http_standalone_activity``
-# re-exports above.
-from cortex_viz.server.http_standalone_sse import serve_graph_events  # noqa: F401
 
 
 def serve_graph(handler, store) -> None:
@@ -210,7 +172,7 @@ def serve_graph_slice(handler) -> None:
     """
     from urllib.parse import parse_qs, urlparse
 
-    from cortex_viz.server.http_standalone_graph import get_graph_slice
+    from cortex_viz.server.graph_appliers import get_graph_slice
 
     try:
         qs = parse_qs(urlparse(handler.path).query)
@@ -233,10 +195,8 @@ def serve_graph_progress(handler, store=None) -> None:
     ``ensure_build_started``): the graph-tab poller hits this endpoint,
     so this is what starts the build when the user opens the Graph view.
     """
-    from cortex_viz.server.http_standalone_graph import (
-        ensure_build_started,
-        get_build_progress,
-    )
+    from cortex_viz.server.graph_appliers import get_build_progress
+    from cortex_viz.server.graph_build import ensure_build_started
 
     try:
         ensure_build_started(store)
@@ -301,7 +261,7 @@ def serve_graph_phase(handler) -> None:
     url-encodes that as ``L6%3ACortex``, so we MUST percent-decode
     before lookup or every L6:<proj> fetch returns an empty payload.
     """
-    from cortex_viz.server.http_standalone_graph import get_phase_payload
+    from cortex_viz.server.graph_appliers import get_phase_payload
 
     try:
         name, offset, limit = _parse_phase_query_params(handler)
@@ -379,7 +339,7 @@ def _resolve_node_record(store, kind: str, raw: str, node_id: str) -> dict | Non
     fallback, only memory:/entity: ids ever resolved and the detail panel
     stayed empty for the rest of the galaxy (observed 2026-06-12).
     """
-    from cortex_viz.server.http_standalone_graph import get_node_record
+    from cortex_viz.server.graph_appliers import get_node_record
 
     record: dict | None = None
     if kind == "memory" and raw.isdigit() and hasattr(store, "get_memory"):
@@ -402,7 +362,7 @@ def _fetch_node_neighbors(handler, node_id: str) -> dict:
     """
     from urllib.parse import parse_qs, urlparse
 
-    from cortex_viz.server.http_standalone_graph import get_node_neighbors
+    from cortex_viz.server.graph_appliers import get_node_neighbors
 
     qs = parse_qs(urlparse(handler.path).query)
 

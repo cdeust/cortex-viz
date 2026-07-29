@@ -194,16 +194,25 @@ class LayoutAuthority(Protocol):
           (idempotent on a graph that's still being built).
     """
 
-    def add_node(self, delta: NodeDelta) -> None: ...
-    def add_edge(self, delta: EdgeDelta) -> None: ...
-    def request_subtree(self, domain_id: str) -> None: ...
+    def add_node(self, delta: NodeDelta) -> None:
+        """Feed one node in. Raises ValueError when ``delta.kind`` is not
+        in NODE_KINDS or a per-kind precondition (see NodeDelta) fails."""
+
+    def add_edge(self, delta: EdgeDelta) -> None:
+        """Feed one edge in. Raises ValueError when ``delta.kind`` is not
+        in EDGE_KINDS; an edge whose endpoints are not both known yet is
+        held in the bounded pending-edges buffer (see I5)."""
+
+    def request_subtree(self, domain_id: str) -> None:
+        """Re-emit the slots under ``domain_id``. Returns silently on an
+        unknown domain — idempotent against a still-building graph."""
 
     def subscribe(self) -> EventQueue:
         """Returns a queue-like object. Caller drains slot/edge events
         and unsubscribes when done."""
-        ...
 
-    def unsubscribe(self, q: EventQueue) -> None: ...
+    def unsubscribe(self, q: EventQueue) -> None:
+        """Detach ``q`` so it stops receiving events. Any thread."""
 
 
 # ── Invariants the reference implementation must check ────────────
@@ -244,17 +253,9 @@ I7. domain_id on every NodeDelta and SlotAssignment is non-empty and
     are FINAL (no retroactive reseat — same rule as I4).
 """
 
-
-# ── Convenience factory ───────────────────────────────────────────
-
-
-def authority_from_geometry(
-    width: float = 1000.0,
-    height: float = 1000.0,
-) -> LayoutAuthority:
-    """Build the reference implementation. Wired in
-    ``layout_authority.py`` — this stub forward-declares only and
-    defers the import to call time to keep this module pure."""
-    from cortex_viz.server.layout_authority import build_authority
-
-    return build_authority(width=width, height=height)
+# No factory lives here. This module is the ABSTRACTION: it declares the
+# LayoutAuthority contract and the invariants an implementation must hold,
+# and imports nothing from the package (§1.5 — abstractions must not depend
+# on details). The reference implementation and its factory are
+# ``layout_authority.build_authority``; the singleton that wires it is
+# ``graph_cache_state.get_layout_authority``.

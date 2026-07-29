@@ -7,7 +7,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'jsdom',
-    include: ['tests/js/**/*.test.mjs'],
+    include: ['tests/js/**/*.test.mjs', 'tests/js/**/*.test.js'],
     // Each file loads global browser IIFEs into a shared jsdom global, so
     // files must not share a global — vitest isolates per file by default;
     // keep it explicit so a future parallelism change cannot leak state.

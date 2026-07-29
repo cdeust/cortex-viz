@@ -143,6 +143,10 @@ class ServerManager:
                 if port != 0:
                     continue
                 raise
+        # Unreachable: the port list ends with 0 (OS-assigned), whose
+        # OSError re-raises above. Stated so the ``-> str`` contract has no
+        # silent ``None`` exit if that list is ever edited.
+        raise RuntimeError(f"{self.label}: no port in {[preferred_port, 0]} could bind")
 
 
 def get_ui_root() -> Path:

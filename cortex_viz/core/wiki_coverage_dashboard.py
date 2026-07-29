@@ -22,10 +22,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-from cortex_viz.core.wiki_coverage import (
-    audit_domain,
-    audit_files,
-)
+from cortex_viz.core.wiki_coverage import audit_files
+from cortex_viz.core.wiki_coverage_score import audit_domain
 
 
 @dataclass(frozen=True)

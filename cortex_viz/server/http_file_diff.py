@@ -32,14 +32,6 @@ from urllib.parse import parse_qs, urlparse
 from cortex_viz.server.git_diff_engine import diff_for_path
 from cortex_viz.server.http_standalone_response import send_json_error, send_json_ok
 
-# Re-exported for tests/test_file_diff.py and any historical import path.
-from cortex_viz.server.git_diff_engine import (  # noqa: F401
-    _MAX_LINES,
-    _full_content_as_adds,
-    _parse_unified,
-    _resolve_diff,
-)
-
 
 def _resolve_by_basename(store, name: str) -> tuple[str | None, str | None]:
     """Bare basename (no ``/``) → absolute path via the activity spine.

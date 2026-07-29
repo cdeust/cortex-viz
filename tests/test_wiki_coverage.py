@@ -7,12 +7,14 @@ import os
 import pytest
 
 from cortex_viz.core.wiki_coverage import (
-    SCOPES,
+    audit_files,
+    list_source_files,
+)
+from cortex_viz.core.wiki_coverage_scopes import SCOPES
+from cortex_viz.core.wiki_coverage_score import (
     audit_all_domains,
     audit_domain,
-    audit_files,
     list_domains,
-    list_source_files,
 )
 
 

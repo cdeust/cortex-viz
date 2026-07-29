@@ -8,23 +8,24 @@ from __future__ import annotations
 
 import json
 
-import cortex_viz.infrastructure.ap_graph_root as mod
-from cortex_viz.infrastructure.ap_graph_root import absolutize, graph_source_root
+from cortex_viz.infrastructure import ap_graph_root
 
 
 # ── absolutize ──────────────────────────────────────────────────────
 
 
 def test_absolutize_none_root_returns_relative_unchanged():
-    assert absolutize(None, "cortex_viz/core/x.py") == "cortex_viz/core/x.py"
+    assert (
+        ap_graph_root.absolutize(None, "cortex_viz/core/x.py") == "cortex_viz/core/x.py"
+    )
 
 
 def test_absolutize_joins_posix():
-    assert absolutize("/repo", "a/b.py") == "/repo/a/b.py"
+    assert ap_graph_root.absolutize("/repo", "a/b.py") == "/repo/a/b.py"
 
 
 def test_absolutize_strips_trailing_slash():
-    assert absolutize("/repo/", "a/b.py") == "/repo/a/b.py"
+    assert ap_graph_root.absolutize("/repo/", "a/b.py") == "/repo/a/b.py"
 
 
 def test_absolutize_matches_resolve_file_node_id(monkeypatch):
@@ -40,7 +41,7 @@ def test_absolutize_matches_resolve_file_node_id(monkeypatch):
         resolve_mod, "source_roots_for_domain", lambda canonical: [root]
     )
     via_resolver = resolve_mod.resolve_file_node_id("domain:cortex", rel)
-    via_absolutize = NodeIdFactory.file_id(absolutize(root, rel))
+    via_absolutize = NodeIdFactory.file_id(ap_graph_root.absolutize(root, rel))
     assert via_resolver == via_absolutize
 
 
@@ -52,15 +53,15 @@ def test_sidecar_root_read(tmp_path):
     graph_dir.mkdir(parents=True)
     (graph_dir / "meta.json").write_text(json.dumps({"root": str(tmp_path)}))
     graph_path = str(graph_dir / "graph")
-    assert graph_source_root(graph_path, "cortex-viz") == str(tmp_path)
+    assert ap_graph_root.graph_source_root(graph_path, "cortex-viz") == str(tmp_path)
 
 
 def test_sidecar_missing_falls_through(tmp_path, monkeypatch):
     graph_dir = tmp_path / "code-graphs" / "noproj"
     graph_dir.mkdir(parents=True)
     graph_path = str(graph_dir / "graph")
-    monkeypatch.setattr(mod, "_root_from_registry", lambda proj_name: None)
-    assert graph_source_root(graph_path, "noproj") is None
+    monkeypatch.setattr(ap_graph_root, "_root_from_registry", lambda proj_name: None)
+    assert ap_graph_root.graph_source_root(graph_path, "noproj") is None
 
 
 def test_sidecar_stale_root_not_on_disk_ignored(tmp_path, monkeypatch):
@@ -70,8 +71,8 @@ def test_sidecar_stale_root_not_on_disk_ignored(tmp_path, monkeypatch):
         json.dumps({"root": "/does/not/exist/anywhere"})
     )
     graph_path = str(graph_dir / "graph")
-    monkeypatch.setattr(mod, "_root_from_registry", lambda proj_name: None)
-    assert graph_source_root(graph_path, "cortex-viz") is None
+    monkeypatch.setattr(ap_graph_root, "_root_from_registry", lambda proj_name: None)
+    assert ap_graph_root.graph_source_root(graph_path, "cortex-viz") is None
 
 
 def test_sidecar_malformed_json_ignored(tmp_path, monkeypatch):
@@ -79,8 +80,8 @@ def test_sidecar_malformed_json_ignored(tmp_path, monkeypatch):
     graph_dir.mkdir(parents=True)
     (graph_dir / "meta.json").write_text("{ this is not json")
     graph_path = str(graph_dir / "graph")
-    monkeypatch.setattr(mod, "_root_from_registry", lambda proj_name: None)
-    assert graph_source_root(graph_path, "cortex-viz") is None
+    monkeypatch.setattr(ap_graph_root, "_root_from_registry", lambda proj_name: None)
+    assert ap_graph_root.graph_source_root(graph_path, "cortex-viz") is None
 
 
 # ── registry fallback ───────────────────────────────────────────────
@@ -108,7 +109,7 @@ def test_registry_fallback_matches_basename(tmp_path, monkeypatch):
     monkeypatch.setattr(
         dm, "_build_registry", lambda: _FakeRegistry([_FakeRepo(repo_root)])
     )
-    assert graph_source_root(graph_path, "cortex-viz") == repo_root
+    assert ap_graph_root.graph_source_root(graph_path, "cortex-viz") == repo_root
 
 
 def test_registry_no_match_returns_none(tmp_path, monkeypatch):
@@ -122,7 +123,7 @@ def test_registry_no_match_returns_none(tmp_path, monkeypatch):
         "_build_registry",
         lambda: _FakeRegistry([_FakeRepo("/Users/x/cortex-viz")]),
     )
-    assert graph_source_root(graph_path, "unknown-proj") is None
+    assert ap_graph_root.graph_source_root(graph_path, "unknown-proj") is None
 
 
 def test_sidecar_precedence_over_registry(tmp_path, monkeypatch):
@@ -138,4 +139,4 @@ def test_sidecar_precedence_over_registry(tmp_path, monkeypatch):
         lambda: _FakeRegistry([_FakeRepo("/some/other/cortex-viz")]),
     )
     # Sidecar wins.
-    assert graph_source_root(graph_path, "cortex-viz") == str(tmp_path)
+    assert ap_graph_root.graph_source_root(graph_path, "cortex-viz") == str(tmp_path)

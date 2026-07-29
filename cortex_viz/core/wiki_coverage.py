@@ -28,17 +28,6 @@ import re
 from dataclasses import dataclass, field
 from typing import Final
 
-# ── Public surface ─────────────────────────────────────────────────────
-# The audit entry points and the SCOPES table are re-exported because
-# callers outside this package import them from here; each name below has
-# a live importer.
-from cortex_viz.core.wiki_coverage_score import (  # noqa: F401
-    audit_all_domains,
-    audit_domain,
-    list_domains,
-)
-from cortex_viz.core.wiki_coverage_scopes import SCOPES  # noqa: F401
-
 
 # ── File-level coverage ────────────────────────────────────────────────
 #
@@ -291,16 +280,3 @@ def audit_files(wiki_root: str, domain: str) -> FileCoverage:
         covered_file_count=covered,
         uncovered_files=uncovered[:50],
     )
-
-
-def audit_all_file_coverage(wiki_root: str) -> list[FileCoverage]:
-    """Audit file-level coverage for every discovered domain that has a
-    resolvable source root. Sorted by uncovered count desc.
-    """
-    out: list[FileCoverage] = []
-    for domain in list_domains(wiki_root):
-        roll = audit_files(wiki_root, domain)
-        if roll.source_root is not None:
-            out.append(roll)
-    out.sort(key=lambda r: r.source_file_count - r.covered_file_count, reverse=True)
-    return out
