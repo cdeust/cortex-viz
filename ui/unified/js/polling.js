@@ -77,12 +77,22 @@
         }
         var phase = p.phase || '';
         var pct = Math.round((p.pct || 0) * 100);
+        // A phase that declares itself indeterminate has no measurable
+        // percentage — its pct is a position in the sequence, set before
+        // one opaque blocking call (the DrL bake). Rendering it as a
+        // percentage produced a bar frozen at 29% for ~13 min, which
+        // reads as a crash. Show the phase's own elapsed clock instead:
+        // it changes on every poll, which is the signal that says
+        // "working" (#90).
+        var detail = p.indeterminate
+          ? Math.round((p.phase_elapsed || 0) / 60) + ' min elapsed'
+          : pct + '%';
         if (p.full_ready) {
           updateStatus('Ready · ' + (localCount || p.node_count) + ' nodes');
         } else if (p.baseline_ready) {
-          updateStatus('Baseline ready · loading L6 (' + pct + '%)');
+          updateStatus('Baseline ready · loading L6 (' + detail + ')');
         } else {
-          updateStatus('Building · ' + phase + ' (' + pct + '%)');
+          updateStatus('Building · ' + phase + ' (' + detail + ')');
         }
         hideLoading();
         // Keep polling progress while the build is still active.

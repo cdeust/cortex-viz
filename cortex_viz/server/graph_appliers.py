@@ -253,10 +253,22 @@ def apply_graph_replace(epoch: int, data: dict) -> None:
 
 
 def get_build_progress() -> dict:
+    """Progress snapshot with both elapsed clocks derived at READ time.
+
+    ``elapsed`` covers the whole build; ``phase_elapsed`` covers the
+    current phase only (stamped by ``_set_progress`` on each transition).
+    Deriving them here rather than storing them means a poll during a
+    long blocking phase still returns a CHANGING number — the signal a
+    client needs to tell "working" from "hung" when the phase cannot
+    report a real percentage (``indeterminate``, issue #90).
+    """
     with state._build_progress_lock:
         snap = dict(state._build_progress)
+        now = time.monotonic()
         if snap.get("started_at"):
-            snap["elapsed"] = time.monotonic() - snap["started_at"]
+            snap["elapsed"] = now - snap["started_at"]
+        if snap.get("phase_started_at"):
+            snap["phase_elapsed"] = now - snap.pop("phase_started_at")
     return snap
 
 

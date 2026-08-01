@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 
 from cortex_viz.server import graph_cache_state as state
 
@@ -35,7 +36,23 @@ def _roster_fingerprint() -> tuple:
 
 
 def _set_progress(**kw) -> None:
+    """Merge ``kw`` into the shared progress snapshot and forward it.
+
+    Stamps ``phase_started_at`` on every phase TRANSITION so
+    ``get_build_progress`` can derive a per-phase ``phase_elapsed`` at
+    read time. Without it the only time signal was ``elapsed`` (whole
+    build), and a phase whose ``pct`` is a literal set before a blocking
+    call — the DrL bake sets 0.29 then blocks for minutes — was
+    indistinguishable from a hung server (issue #90).
+
+    ``indeterminate`` is reset to False on each transition unless the
+    caller passes it explicitly, so a phase that cannot measure itself
+    declares that once and the flag does not leak into the next phase.
+    """
     with state._build_progress_lock:
+        if "phase" in kw and kw["phase"] != state._build_progress.get("phase"):
+            kw.setdefault("indeterminate", False)
+            state._build_progress["phase_started_at"] = time.monotonic()
         state._build_progress.update(kw)
     state._forward(("progress", dict(kw)))
 

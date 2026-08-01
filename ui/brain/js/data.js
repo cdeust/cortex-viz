@@ -49,7 +49,7 @@ window.BRAIN = window.BRAIN || {};
   function fetchLegacy() {
     return fetch('/api/graph/full', { headers: { Accept: 'application/json' } })
       .then(function (r) {
-        if (r.status === 503) {
+        if (r.status === 202) {
           throw new Error('graph snapshot still warming up (no build has finished yet)');
         }
         if (!r.ok) throw new Error('graph fetch failed: HTTP ' + r.status);

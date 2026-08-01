@@ -216,12 +216,17 @@ def serve_graph_full_stream(handler, store) -> None:
         send_json_error(handler, e)
         return
     if snap is None:
-        body = b'{"status":"warming","reason":"no_snapshot"}'
-        handler.send_response(503)
-        handler.send_header("Content-Type", "application/json")
-        handler.send_header("Content-Length", str(len(body)))
-        handler.end_headers()
-        handler.wfile.write(body)
+        # 202, not 503: the first build has simply not written a snapshot
+        # yet. Carries the live phase so the client can announce what it
+        # is waiting on instead of showing an empty canvas (#90).
+        from cortex_viz.server.graph_appliers import get_build_progress
+        from cortex_viz.server.http_standalone_response import send_json_warming
+
+        try:
+            progress = get_build_progress()
+        except Exception:  # pragma: no cover - progress is advisory only
+            progress = None
+        send_json_warming(handler, "no_snapshot", progress)
         return
 
     handler.send_response(200)

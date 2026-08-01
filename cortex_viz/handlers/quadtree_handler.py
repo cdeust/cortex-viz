@@ -44,8 +44,12 @@ from __future__ import annotations
 
 import gzip
 import io
-import json
+import sys
 
+from cortex_viz.server.http_standalone_response import (
+    send_json_capability_unavailable,
+    send_json_warming,
+)
 from cortex_viz.server.layout_authority_wire import chunk_wrap, format_terminator
 
 # gzip compression level. Pre-existing (not retuned) — the original
@@ -85,16 +89,6 @@ class _ChunkWriter(io.RawIOBase):
             self._wfile.write(chunk_wrap(bytes(b)))
             self._wfile.flush()
         return n
-
-
-def _send_503(handler, reason: str, *, content_type: str = "application/json") -> None:
-    """Send a 503 with a Content-Length body. Used before any streaming."""
-    body = json.dumps({"status": "error", "reason": reason}).encode("utf-8")
-    handler.send_response(503)
-    handler.send_header("Content-Type", content_type)
-    handler.send_header("Content-Length", str(len(body)))
-    handler.end_headers()
-    handler.wfile.write(body)
 
 
 def _stream_chunks(handler, schema, first_chunk, rest, pa, ipc) -> None:
@@ -156,7 +150,9 @@ def serve(handler, store) -> None:
       - ``handler`` is a BaseHTTPRequestHandler with HTTP/1.1 protocol.
       - ``store`` exposes the workflow_graph_layout table.
     Post:
-      - 503 ``viz_tile_extra_missing`` if pyarrow is unavailable, OR
+      - 200 ``{"status":"unavailable","capability":"viz-tile"}`` when the
+        optional extra is not installed — a supported configuration, so
+        the client degrades to ``fallback`` instead of failing (#90), OR
       - 503 ``no_layout`` if the layout table is empty (decided before
         any 200 headers are sent), OR
       - 200 chunked gzipped Arrow stream of every (id, x, y, kind) row.
@@ -166,14 +162,16 @@ def serve(handler, store) -> None:
         import pyarrow.ipc as ipc
         from cortex_viz.infrastructure import layout_pg_store
     except ImportError as exc:
-        body = (
-            f'{{"status":"error","reason":"viz_tile_extra_missing","detail":"{exc}"}}'
-        ).encode("utf-8")
-        handler.send_response(503)
-        handler.send_header("Content-Type", "application/json")
-        handler.send_header("Content-Length", str(len(body)))
-        handler.end_headers()
-        handler.wfile.write(body)
+        print(
+            f"[cortex] /api/quadtree unavailable — viz-tile extra absent: {exc}",
+            file=sys.stderr,
+        )
+        send_json_capability_unavailable(
+            handler,
+            capability="viz-tile",
+            reason="extra_not_installed",
+            fallback="/api/graph",
+        )
         return
 
     schema = pa.schema(
@@ -187,12 +185,17 @@ def serve(handler, store) -> None:
 
     # Peek the first chunk so emptiness is decided BEFORE headers go out.
     # Once we send 200 + Transfer-Encoding:chunked we can no longer switch
-    # to a 503 — the response line is already committed.
+    # to a not-ready response — the response line is already committed.
+    #
+    # An empty layout table means the first build has not persisted
+    # positions yet, so this is a "not ready" state (202), not a fault:
+    # the client's self-healing path reads ``reason`` and drives
+    # /api/recompute_layout (#90).
     chunks = layout_pg_store.iter_positions_chunked(store)
     try:
         first_chunk = next(chunks)
     except StopIteration:
-        _send_503(handler, "no_layout")
+        send_json_warming(handler, "no_layout")
         return
 
     handler.send_response(200)

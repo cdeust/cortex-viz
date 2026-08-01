@@ -17,6 +17,11 @@ The renderer is UNCHANGED — it takes ``(id, x, y, kind)`` either way.
 from __future__ import annotations
 
 import re
+import sys
+
+from cortex_viz.server.http_standalone_response import (
+    send_json_capability_unavailable,
+)
 
 # Refinement K (DECISION 1b): cells/tile = 4^K = 64. source: cortex-viz-scaling.md.
 _LOD_REFINEMENT = 3
@@ -110,15 +115,19 @@ def serve(handler, store) -> None:
         from cortex_viz.core import tile_renderer
         from cortex_viz.infrastructure import layout_pg_store, lod_pg_store
     except ImportError as exc:
-        # ``viz-tile`` extra not installed.
-        body = (
-            f'{{"status":"error","reason":"viz_tile_extra_missing","detail":"{exc}"}}'
-        ).encode("utf-8")
-        handler.send_response(503)
-        handler.send_header("Content-Type", "application/json")
-        handler.send_header("Content-Length", str(len(body)))
-        handler.end_headers()
-        handler.wfile.write(body)
+        # ``viz-tile`` extra not installed — a supported configuration
+        # (~200 MB of datashader/numba, opt-in by design), so the answer
+        # is "this install cannot do that", not an error (#90).
+        print(
+            f"[cortex] /api/tile unavailable — viz-tile extra absent: {exc}",
+            file=sys.stderr,
+        )
+        send_json_capability_unavailable(
+            handler,
+            capability="viz-tile",
+            reason="extra_not_installed",
+            fallback="/api/graph",
+        )
         return
 
     min_x, min_y, max_x, max_y = tile_renderer.tile_world_bbox(z, x, y)

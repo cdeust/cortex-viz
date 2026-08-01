@@ -60,6 +60,10 @@ window.JUG = window.JUG || {};
     var onProgress = opts.onProgress || function () {};
 
     return fetch('/api/graph/full/stream').then(function (r) {
+      // 202 (snapshot still warming) is ok-by-fetch and HAS a body — a
+      // JSON warming envelope, not NDJSON frames. Reject it explicitly
+      // or the line parser is fed the wrong wire format (#90).
+      if (r.status === 202) return { ok: false, status: 202, warming: true };
       if (!r.ok || !r.body) return { ok: false, status: r.status };
 
       var reader = r.body.getReader();

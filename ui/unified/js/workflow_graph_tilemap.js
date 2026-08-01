@@ -73,17 +73,41 @@
   // declares Content-Encoding: gzip — fetch returns the inflated
   // bytes already.
   //
-  // ``no_layout`` (HTTP 503 with reason="no_layout") surfaces as a
-  // distinct error class so the caller can drive the auto-recompute
-  // path without re-parsing the body.
+  // Three non-payload answers, three different meanings — the caller
+  // must not treat them alike (#90):
+  //   202 {reason:"no_layout"}        → not ready yet; drive the
+  //                                     auto-recompute path and retry.
+  //   200 {status:"unavailable"}      → this install lacks the viz-tile
+  //                                     extra; degrade to `fallback`,
+  //                                     never retry, never show red.
+  //   any other non-ok               → a genuine fault.
+  // ``err.kind`` carries which one, so the caller branches without
+  // re-parsing the body.
   async function fetchQuadtree() {
     var resp = await fetch('/api/quadtree');
-    if (resp.status === 503) {
-      var detail = await resp.json().catch(function () { return {}; });
-      var err = new Error('quadtree 503: ' + (detail.reason || 'unknown'));
-      err.reason = detail.reason || 'unknown';
-      err.detail = detail.detail || null;
-      throw err;
+    if (resp.status === 202) {
+      var warming = await resp.json().catch(function () { return {}; });
+      var werr = new Error('quadtree warming: ' + (warming.reason || 'unknown'));
+      werr.kind = 'warming';
+      werr.reason = warming.reason || 'unknown';
+      werr.progress = warming.progress || null;
+      throw werr;
+    }
+    if (resp.ok) {
+      // A capability answer is JSON, not Arrow — detect it before
+      // handing the body to the Arrow decoder.
+      var ctype = resp.headers.get('Content-Type') || '';
+      if (ctype.indexOf('application/json') === 0) {
+        var info = await resp.json().catch(function () { return {}; });
+        if (info.status === 'unavailable') {
+          var uerr = new Error('quadtree unavailable: ' + (info.capability || '?'));
+          uerr.kind = 'unavailable';
+          uerr.capability = info.capability || null;
+          uerr.reason = info.reason || 'unknown';
+          uerr.fallback = info.fallback || null;
+          throw uerr;
+        }
+      }
     }
     if (!resp.ok) throw new Error('quadtree fetch failed: ' + resp.status);
     var buf = await resp.arrayBuffer();
@@ -134,7 +158,7 @@
       return;
     }
 
-    // Self-healing layout pass: if /api/quadtree returns 503 with
+    // Self-healing layout pass: if /api/quadtree answers 202
     // ``no_layout``, the page itself triggers /api/recompute_layout
     // and retries. Covers direct-URL access where the MCP entry point
     // didn't pre-prepare the layout.
@@ -143,6 +167,20 @@
     try {
       qt = await fetchQuadtree();
     } catch (err) {
+      if (err && err.kind === 'unavailable') {
+        // Not a failure: the optional extra was never installed. Say so
+        // in the same amber "needs a step" register as the recompute
+        // hint below, and point at the path that does work (#90).
+        status.innerHTML =
+          '<div style="margin-bottom:6px;color:#ffb86b">'
+          + '<b>Tilemap needs the viz-tile extra</b></div>'
+          + '<div style="color:#9aa4b2;font:11px JetBrains Mono,monospace">'
+          + 'Install with one of:<br>'
+          + '&nbsp;&nbsp;pip install -e \'.[viz-tile]\'<br>'
+          + '&nbsp;&nbsp;uv pip install \'.[viz-tile]\'<br><br>'
+          + 'The Graph view works without it.</div>';
+        return;
+      }
       if (err && err.reason === 'no_layout') {
         status.textContent = 'No layout in PG. Computing now (≈90 s for 1M nodes)…';
         status.style.color = '#ffb86b';
