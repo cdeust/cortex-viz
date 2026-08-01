@@ -21,6 +21,7 @@ near-decomposability split; the cache globals are the thin interface).
 from __future__ import annotations
 
 import threading
+import time
 
 _cached_domain_hub_ids: dict[str, str] = {}
 
@@ -106,6 +107,24 @@ def set_build_epoch(epoch: int) -> None:
     """
     global _BUILD_EPOCH
     _BUILD_EPOCH = int(epoch)
+
+
+def stamp_phase_change(target: dict, incoming: dict) -> None:
+    """Stamp ``phase_started_at`` on ``target`` when the phase changes.
+
+    Caller-LOCAL monotonic clock, deliberately: the build child runs on a
+    different monotonic origin, which is why ``apply_progress`` drops a
+    forwarded ``started_at``. ``phase_started_at`` obeys the same rule —
+    each process stamps its own, and the server's stamp is the one that
+    reaches ``/api/graph/progress``.
+
+    Pre: ``target`` is the caller's own progress dict, held under its lock.
+    Post: ``target["phase_started_at"]`` is reset iff ``incoming`` carries
+    a ``phase`` differing from ``target``'s.
+    """
+    phase = incoming.get("phase")
+    if phase is not None and phase != target.get("phase"):
+        target["phase_started_at"] = time.monotonic()
 
 
 def _forward(msg: tuple) -> None:

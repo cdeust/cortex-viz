@@ -141,14 +141,20 @@ def serve(handler, store) -> None:
     try:
         png = tile_renderer.render_tile_png(rows, z=z, x=x, y=y)
     except ImportError as exc:
-        body = (
-            f'{{"status":"error","reason":"datashader_missing","detail":"{exc}"}}'
-        ).encode("utf-8")
-        handler.send_response(503)
-        handler.send_header("Content-Type", "application/json")
-        handler.send_header("Content-Length", str(len(body)))
-        handler.end_headers()
-        handler.wfile.write(body)
+        # Second entry to the same absent extra: the module imports above
+        # can succeed while datashader/pandas — imported lazily inside the
+        # renderer — are missing. Same answer as the import guard, or the
+        # defect just moves one line down (#90).
+        print(
+            f"[cortex] /api/tile unavailable — viz-tile extra absent: {exc}",
+            file=sys.stderr,
+        )
+        send_json_capability_unavailable(
+            handler,
+            capability="viz-tile",
+            reason="extra_not_installed",
+            fallback="/api/graph",
+        )
         return
 
     handler.send_response(200)
