@@ -256,8 +256,9 @@
          Both the galaxy and the brain load the same durable full snapshot
          one-shot (entities + AST symbols together, unified-viz.html
          _loadFullGraph / brain boot.js) — the progressive L0-L5 phase build
-         is a fallback ONLY for a first install with no snapshot yet (a 503
-         on the one-shot fetch), not a standing per-view difference. Filled
+         is a fallback ONLY for a first install with no snapshot yet (a 202
+         warming answer on the one-shot fetch), not a standing per-view
+         difference. Filled
          by boot.js once the stream lands. -->
     <div id="brain-rendered" style="margin-top:8px; border-top:1px solid var(--divider); padding-top:6px;">
       <div class="sub" style="margin-bottom:4px;">Rendered graph</div>

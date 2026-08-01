@@ -349,9 +349,19 @@ def run_build(store, domain_filter: str | None) -> None:
             # 5.5M-edge corpus, observed 2026-07-02) — without this update
             # /api/graph/progress kept showing the LAST source message
             # ("loading memories") for the whole bake.
+            #
+            # ``indeterminate`` because igraph's layout() is one opaque
+            # blocking call — there is no inner progress to report. The
+            # 0.29 below is a POSITION in the phase sequence, not a
+            # measurement, and it cannot advance until the call returns:
+            # measured 0.29 held ~13 min on a 128k-node baseline while the
+            # client showed a frozen bar and read it as a crash (#90).
+            # Clients must render phase_elapsed, not pct, while this flag
+            # is set.
             _set_progress(
                 phase="layout bake (DrL)",
                 pct=0.29,
+                indeterminate=True,
                 message=(
                     f"DrL layout over {len(_bl_nodes)} baseline nodes — the long phase"
                 ),

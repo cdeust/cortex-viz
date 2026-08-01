@@ -28,6 +28,7 @@ from cortex_viz.server.graph_response import get_graph_response
 from cortex_viz.server.http_standalone_response import (
     send_json_error,
     send_json_ok,
+    send_json_warming,
 )
 
 
@@ -56,16 +57,21 @@ def serve_dashboard(handler, store) -> None:
 
 
 def _send_no_snapshot_warming(handler) -> None:
-    """503 ``{"reason":"no_snapshot"}`` — no build has finished since install.
+    """202 ``{"reason":"no_snapshot"}`` — no build has finished since install.
 
     Tells the client to fall back to the progressive ``/api/graph`` path.
+    Carries the live build progress so a first-install client can say
+    WHICH phase it is waiting on instead of showing an empty canvas
+    (issue #90). Was a 503 until then — an expected first-run state
+    dressed as a server fault.
     """
-    body = b'{"status":"warming","reason":"no_snapshot"}'
-    handler.send_response(503)
-    handler.send_header("Content-Type", "application/json")
-    handler.send_header("Content-Length", str(len(body)))
-    handler.end_headers()
-    handler.wfile.write(body)
+    from cortex_viz.server.graph_appliers import get_build_progress
+
+    try:
+        progress = get_build_progress()
+    except Exception:  # pragma: no cover - progress is advisory only
+        progress = None
+    send_json_warming(handler, "no_snapshot", progress)
 
 
 def _send_gzip_snapshot(handler, snap: dict) -> None:

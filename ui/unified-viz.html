@@ -567,7 +567,7 @@
   // lazy-kicks a build, so the hero view (entities + AST symbols) loads
   // once any build has completed once. We deliberately do NOT fall back to
   // /api/graph here — that volatile cache can return a PARTIAL graph
-  // mid-build, which must never latch as "full". 503 (no snapshot yet,
+  // mid-build, which must never latch as "full". 202 (no snapshot yet,
   // first install) just resolves false; the progressive L0–L5 path keeps
   // the view useful until the first build finishes and writes the
   // snapshot. Returns a Promise<bool> — true once applied (latched).
@@ -602,10 +602,36 @@
     });
   }
 
+  // 202 is the "first build still running" answer, and it IS ok by
+  // fetch's reckoning — so it must be rejected explicitly or the
+  // warming envelope gets handed to _applyFullGraph as if it were a
+  // graph and latches as "full" (#90). Announce the phase instead.
   function _legacyFullFetch() {
     return fetch('/api/graph/full')
-      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (r) {
+        if (r.status === 202) {
+          return r.json().catch(function () { return {}; })
+            .then(function (w) { _announceWarming(w); return null; });
+        }
+        return r.ok ? r.json() : null;
+      })
       .then(function (g) { return _applyFullGraph(g); });
+  }
+
+  // Say WHICH phase the first build is in, from the first paint. An
+  // empty canvas with no message is what users read as "broken", and a
+  // percentage that cannot advance (indeterminate phases — the DrL
+  // bake) is worse than none: show the phase's own elapsed clock.
+  function _announceWarming(w) {
+    var p = (w && w.progress) || {};
+    var phase = p.phase || 'first build';
+    if (p.indeterminate) {
+      var mins = Math.round((p.phase_elapsed || 0) / 60);
+      _symbolHint('first build — ' + phase + ' (' + mins + ' min elapsed, no ETA)');
+      return;
+    }
+    var pct = p.pct != null ? ' ' + Math.round(p.pct * 100) + '%' : '';
+    _symbolHint('first build — ' + phase + pct);
   }
 
   // A truncated stream (server restarted mid-transfer) must never latch as
@@ -710,11 +736,11 @@
     // exists (any prior build completed), load the complete hero view
     // (entities + AST symbols) immediately and STOP — no build wait, no
     // polling. If there is no snapshot yet (first install), this single try
-    // 503s and we fall through to the progressive L0–L5 build below, which
-    // keeps the view useful AND kicks the build (via /api/graph/progress) so
-    // the first snapshot gets written; _pollProgress then loads it on
-    // full_ready. One-shot — NOT retried every tick — so the console isn't
-    // flooded with premature 503s while the first build runs.
+    // answers 202 warming (announced, not logged as an error) and we fall
+    // through to the progressive L0–L5 build below, which keeps the view
+    // useful AND kicks the build (via /api/graph/progress) so the first
+    // snapshot gets written; _pollProgress then loads it on full_ready.
+    // One-shot — NOT retried every tick.
     if (_fullLoaded) return;
     if (!_triedSnapshot) {
       _triedSnapshot = true;

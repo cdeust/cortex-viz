@@ -77,8 +77,13 @@ def apply_progress(epoch: int, snap: dict) -> None:
         # started_at is SERVER-owned (set by begin_epoch on the server's
         # monotonic clock). The child runs on a DIFFERENT monotonic origin,
         # so a forwarded started_at would make get_build_progress compute a
-        # garbage elapsed. Drop it.
-        snap = {k: v for k, v in snap.items() if k != "started_at"}
+        # garbage elapsed. Drop it — and phase_started_at for the same
+        # reason, re-stamping it below on the server's own clock so
+        # phase_elapsed is a real duration (#90).
+        snap = {
+            k: v for k, v in snap.items() if k not in ("started_at", "phase_started_at")
+        }
+        state.stamp_phase_change(state._build_progress, snap)
         # phase_seq must be monotone: an out-of-order drain (or a stale
         # forwarded snapshot) must never roll the client's seq backwards,
         # or it would re-fetch an older graph. Take the max of current and
@@ -253,10 +258,22 @@ def apply_graph_replace(epoch: int, data: dict) -> None:
 
 
 def get_build_progress() -> dict:
+    """Progress snapshot with both elapsed clocks derived at READ time.
+
+    ``elapsed`` covers the whole build; ``phase_elapsed`` covers the
+    current phase only (stamped by ``_set_progress`` on each transition).
+    Deriving them here rather than storing them means a poll during a
+    long blocking phase still returns a CHANGING number — the signal a
+    client needs to tell "working" from "hung" when the phase cannot
+    report a real percentage (``indeterminate``, issue #90).
+    """
     with state._build_progress_lock:
         snap = dict(state._build_progress)
+        now = time.monotonic()
         if snap.get("started_at"):
-            snap["elapsed"] = time.monotonic() - snap["started_at"]
+            snap["elapsed"] = now - snap["started_at"]
+        if snap.get("phase_started_at"):
+            snap["phase_elapsed"] = now - snap.pop("phase_started_at")
     return snap
 
 
