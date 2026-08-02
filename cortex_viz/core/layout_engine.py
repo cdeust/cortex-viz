@@ -61,7 +61,7 @@ def layout(
     """
     try:
         import igraph as ig
-    except ImportError as exc:  # pragma: no cover
+    except ImportError as exc:
         raise ImportError(
             "igraph is required for layout — install the 'viz-tile' extra: "
             "pip install cortex-viz[viz-tile]"
