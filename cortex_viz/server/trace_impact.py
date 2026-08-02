@@ -10,6 +10,21 @@ keep resolving.
 
 from __future__ import annotations
 
+from cortex_viz.server.trace_impact_directions import (
+    _basename,
+    _blast_radius,
+    _fallback_directions,
+    _file_edges,
+    _processes_from,
+    _rollup,
+    _short_name,
+    _typed_directions,
+)
+
+# Re-exported for ``http_standalone_trace``, which imports ``_basename``
+# from this module and predates the directions split.
+__all__ = ["_basename", "impact_for_path"]
+
 # ── AP AST source: ONE warm instance per viz process ───────────────────
 # WorkflowGraphASTSource pins a single event loop on a dedicated thread
 # (_SyncLoop) and keeps the AP MCP connection alive across calls. The old
@@ -77,48 +92,58 @@ def _ast_and_impact(path: str) -> dict:
         loop_run = src._loop_owner.run  # noqa: SLF001
         bridge = src._bridge  # noqa: SLF001
 
-        # Enrich the first up-to-N symbols with AP's typed 360° context.
-        # Each call is serialized onto the warm pinned loop — no fresh
-        # APBridge, no asyncio.run.
-        for sym in symbols[:_AST_CONTEXT_CAP]:
-            qn = sym.get("qualified_name")
-            if not qn:
-                continue
-            try:
-                ctx = loop_run(bridge.get_context(gp, qn))
-            except Exception:
-                ctx = None
-            if isinstance(ctx, dict):
-                sym["context"] = {
-                    "relationships": ctx.get("relationships") or {},
-                    "community": ctx.get("community") or {},
-                    "processes": ctx.get("processes") or [],
-                }
-
-        # Blast-radius for the first symbol via the typed get_impact tool.
-        impact: dict = {}
-        try:
-            qn0 = symbols[0].get("qualified_name")
-            if qn0:
-                impact_raw = loop_run(bridge.get_impact(gp, qn0))
-                if isinstance(impact_raw, dict):
-                    impact = {
-                        "qualified_name": impact_raw.get("qualified_name"),
-                        "communities": impact_raw.get("communities") or [],
-                        "communities_affected": impact_raw.get("communities_affected"),
-                        "processes": impact_raw.get("processes") or [],
-                        "processes_affected": impact_raw.get("processes_affected"),
-                    }
-        except Exception:
-            impact = {}
-
+        _attach_symbol_context(loop_run, bridge, gp, symbols)
+        impact = _first_symbol_impact(loop_run, bridge, gp, symbols)
         return {"available": True, "symbols": symbols, "impact": impact}
     except Exception as exc:  # pragma: no cover - defensive
         return {"available": False, "error": str(exc)}
 
 
-def _basename(p: str) -> str:
-    return (p or "").replace("\\", "/").rstrip("/").split("/")[-1]
+def _attach_symbol_context(loop_run, bridge, gp: str, symbols: list[dict]) -> None:
+    """Enrich the first up-to-N symbols in place with AP's typed 360° context.
+
+    Each call is serialized onto the warm pinned loop — no fresh APBridge,
+    no asyncio.run. A symbol whose context cannot be fetched keeps its
+    unenriched shape rather than failing the whole panel.
+    """
+    for sym in symbols[:_AST_CONTEXT_CAP]:
+        qn = sym.get("qualified_name")
+        if not qn:
+            continue
+        try:
+            ctx = loop_run(bridge.get_context(gp, qn))
+        except Exception:
+            continue
+        if isinstance(ctx, dict):
+            sym["context"] = {
+                "relationships": ctx.get("relationships") or {},
+                "community": ctx.get("community") or {},
+                "processes": ctx.get("processes") or [],
+            }
+
+
+def _first_symbol_impact(loop_run, bridge, gp: str, symbols: list[dict]) -> dict:
+    """Blast radius of the file's first symbol, via the typed get_impact tool.
+
+    Empty dict on any failure: the symbol list is the primary payload and
+    must still render without the impact rollup.
+    """
+    qn0 = symbols[0].get("qualified_name")
+    if not qn0:
+        return {}
+    try:
+        impact_raw = loop_run(bridge.get_impact(gp, qn0))
+    except Exception:
+        return {}
+    if not isinstance(impact_raw, dict):
+        return {}
+    return {
+        "qualified_name": impact_raw.get("qualified_name"),
+        "communities": impact_raw.get("communities") or [],
+        "communities_affected": impact_raw.get("communities_affected"),
+        "processes": impact_raw.get("processes") or [],
+        "processes_affected": impact_raw.get("processes_affected"),
+    }
 
 
 def _impact_for_graph(graph_path: str, rel_path: str) -> dict | None:
@@ -153,155 +178,34 @@ def _impact_for_graph(graph_path: str, rel_path: str) -> dict | None:
             rows = await bridge.query_graph(graph_path, cypher)
             return _as_list(rows)
 
+        esc = rel_path.replace("'", "")
         # LEGITIMATE query_graph use: present-gate. AP has no typed
         # "is this file in the graph" tool. (cheap gate)
         present = await q(
-            "MATCH (f:File) WHERE f.id = '%s' RETURN f.id AS id LIMIT 1"
-            % rel_path.replace("'", "")
+            f"MATCH (f:File) WHERE f.id = '{esc}' RETURN f.id AS id LIMIT 1"
         )
         if not present:
             return None
 
-        esc = rel_path.replace("'", "")
         # LEGITIMATE query_graph use: members list. This is the N source
         # that drives the typed get_context fan-out below; AP has no
         # file-scoped "list members" typed tool.
         members_rows = await q(
-            "MATCH (s:Function) WHERE s.qualified_name STARTS WITH '%s::' "
-            "RETURN DISTINCT s.qualified_name AS name LIMIT 200" % esc
+            f"MATCH (s:Function) WHERE s.qualified_name STARTS WITH '{esc}::' "
+            "RETURN DISTINCT s.qualified_name AS name LIMIT 200"
         )
         member_qns = [r.get("name") for r in members_rows if r.get("name")]
 
-        def _file_of(qn):
-            return str(qn or "").partition("::")[0]
-
-        def _short_name(qn):
-            return str(qn or "").split("::")[-1]
-
-        def _conf(r):
-            try:
-                return float(r.get("conf")) if r.get("conf") is not None else None
-            except (TypeError, ValueError):
-                return None
-
-        downstream: list[dict] = []
-        upstream: list[dict] = []
         implements: list[dict] = []
         community: dict = {}
-
         if member_qns and len(member_qns) <= _AST_CONTEXT_CAP:
             # Typed path: AP's get_context per member (capped at N).
-            # downstream = calls + imports + uses; upstream = called_by
-            # + imported_by + used_by; plus implements/implemented_by.
-            seen_down: set[str] = set()
-            seen_up: set[str] = set()
-            seen_impl: set[str] = set()
-
-            def _item(rel, kind):
-                qn = rel.get("qualified_name") or rel.get("name")
-                if not qn:
-                    return None
-                return {
-                    "file": _file_of(qn),
-                    "name": qn,
-                    "label": _short_name(qn),
-                    "kind": kind,
-                    "confidence": None,  # get_context items carry no conf
-                }
-
-            for qn in member_qns:
-                try:
-                    ctx = await bridge.get_context(graph_path, qn)
-                except Exception:
-                    ctx = None
-                if not isinstance(ctx, dict):
-                    continue
-                rels = ctx.get("relationships") or {}
-                for rel in rels.get("calls") or []:
-                    it = _item(rel, "calls")
-                    if it and it["name"] not in seen_down:
-                        seen_down.add(it["name"])
-                        downstream.append(it)
-                for rel in rels.get("imports") or []:
-                    it = _item(rel, "imports")
-                    if it and it["name"] not in seen_down:
-                        seen_down.add(it["name"])
-                        downstream.append(it)
-                for rel in rels.get("uses") or []:
-                    it = _item(rel, "uses")
-                    if it and it["name"] not in seen_down:
-                        seen_down.add(it["name"])
-                        downstream.append(it)
-                for rel in rels.get("called_by") or []:
-                    it = _item(rel, "calls")
-                    if it and it["name"] not in seen_up:
-                        seen_up.add(it["name"])
-                        upstream.append(it)
-                for rel in rels.get("imported_by") or []:
-                    it = _item(rel, "imports")
-                    if it and it["name"] not in seen_up:
-                        seen_up.add(it["name"])
-                        upstream.append(it)
-                for rel in rels.get("used_by") or []:
-                    it = _item(rel, "uses")
-                    if it and it["name"] not in seen_up:
-                        seen_up.add(it["name"])
-                        upstream.append(it)
-                for rel in (rels.get("implements") or []) + (
-                    rels.get("implemented_by") or []
-                ):
-                    it = _item(rel, "implements")
-                    if it and it["name"] not in seen_impl:
-                        seen_impl.add(it["name"])
-                        implements.append(it)
-                if not community and ctx.get("community"):
-                    community = ctx.get("community") or {}
+            downstream, upstream, implements, community = await _typed_directions(
+                bridge, graph_path, member_qns
+            )
         else:
-            # FALLBACK path: file has >N members (or none). Avoid firing
-            # 200 get_context calls — use the targeted per-file Cypher.
-            # LEGITIMATE query_graph use under the N-cap fallback.
-            calls = await q(
-                "MATCH (s:Function)-[r:Calls_Function_Function]->(d:Function) "
-                "WHERE s.qualified_name STARTS WITH '%s::' "
-                "RETURN DISTINCT d.qualified_name AS name, r.confidence AS conf "
-                "LIMIT 200" % esc
-            )
-            imports = await q(
-                "MATCH (f:File)-[r:Imports_File_Function]->(d:Function) "
-                "WHERE f.id = '%s' "
-                "RETURN DISTINCT d.qualified_name AS name, r.confidence AS conf "
-                "LIMIT 200" % esc
-            )
-            callers = await q(
-                "MATCH (s:Function)-[r:Calls_Function_Function]->(d:Function) "
-                "WHERE d.qualified_name STARTS WITH '%s::' "
-                "RETURN DISTINCT s.qualified_name AS name, r.confidence AS conf "
-                "LIMIT 200" % esc
-            )
-            for r in calls + imports:
-                nm = r.get("name")
-                if not nm:
-                    continue
-                downstream.append(
-                    {
-                        "file": _file_of(nm),
-                        "name": nm,
-                        "label": _short_name(nm),
-                        "kind": "calls" if r in calls else "imports",
-                        "confidence": _conf(r),
-                    }
-                )
-            upstream = [
-                {
-                    "file": _file_of(r.get("name")),
-                    "name": r.get("name"),
-                    "label": _short_name(r.get("name")),
-                    "kind": "calls",
-                    "confidence": _conf(r),
-                }
-                for r in callers
-                if r.get("name")
-            ]
+            # FALLBACK path: file has >N members (or none).
+            downstream, upstream = await _fallback_directions(q, esc)
 
         # LEGITIMATE query_graph use: File→File edges. AP all-file
         # indexing (>= 0.2.0): Imports_File_File = .js import/require;
@@ -309,23 +213,23 @@ def _impact_for_graph(graph_path: str, rel_path: str) -> dict | None:
         # these non-AST direct file edges.
         file_imports = await q(
             "MATCH (f:File)-[r:Imports_File_File]->(d:File) "
-            "WHERE f.id = '%s' "
-            "RETURN DISTINCT d.id AS name, r.confidence AS conf LIMIT 200" % esc
+            f"WHERE f.id = '{esc}' "
+            "RETURN DISTINCT d.id AS name, r.confidence AS conf LIMIT 200"
         )
         file_imported_by = await q(
             "MATCH (s:File)-[r:Imports_File_File]->(f:File) "
-            "WHERE f.id = '%s' "
-            "RETURN DISTINCT s.id AS name, r.confidence AS conf LIMIT 200" % esc
+            f"WHERE f.id = '{esc}' "
+            "RETURN DISTINCT s.id AS name, r.confidence AS conf LIMIT 200"
         )
         doc_refs = await q(
             "MATCH (f:File)-[r:References_File_File]->(d:File) "
-            "WHERE f.id = '%s' "
-            "RETURN DISTINCT d.id AS name, r.confidence AS conf LIMIT 200" % esc
+            f"WHERE f.id = '{esc}' "
+            "RETURN DISTINCT d.id AS name, r.confidence AS conf LIMIT 200"
         )
         doc_referenced_by = await q(
             "MATCH (s:File)-[r:References_File_File]->(f:File) "
-            "WHERE f.id = '%s' "
-            "RETURN DISTINCT s.id AS name, r.confidence AS conf LIMIT 200" % esc
+            f"WHERE f.id = '{esc}' "
+            "RETURN DISTINCT s.id AS name, r.confidence AS conf LIMIT 200"
         )
 
         members = [
@@ -342,97 +246,30 @@ def _impact_for_graph(graph_path: str, rel_path: str) -> dict | None:
         # Blast-radius counts via AP's typed get_impact (first member).
         # processes/communities affected are the headline numbers the
         # panel shows; the entry-point process list below stays on Cypher.
-        communities_affected = None
-        processes_affected = None
-        try:
-            if member_qns:
-                imp = await bridge.get_impact(graph_path, member_qns[0])
-                if isinstance(imp, dict):
-                    communities_affected = imp.get("communities_affected")
-                    processes_affected = imp.get("processes_affected")
-        except Exception:
-            # The AP impact enrichment is additive: the direction view renders without
-            # communities_affected / processes_affected.
-            pass
+        communities_affected, processes_affected = await _blast_radius(
+            bridge, graph_path, member_qns
+        )
 
         # LEGITIMATE query_graph use: entry-point processes (causal
         # chains ENTERED from this file). AP's get_processes is graph-wide
         # (not file-scoped); this targeted Cypher filters to this file's
         # entry points. entry_point_id is ``file::symbol``.
         processes_rows = await q(
-            "MATCH (p:Process) WHERE p.entry_point_id STARTS WITH '%s::' "
+            f"MATCH (p:Process) WHERE p.entry_point_id STARTS WITH '{esc}::' "
             "RETURN DISTINCT p.entry_point_id AS entry, p.entry_kind AS kind, "
             "p.depth AS depth, p.symbol_count AS n "
-            "ORDER BY p.symbol_count DESC LIMIT 40" % esc
+            "ORDER BY p.symbol_count DESC LIMIT 40"
         )
-        processes = []
-        for r in processes_rows:
-            entry = r.get("entry")
-            if not entry:
-                continue
-            processes.append(
-                {
-                    "entry": entry,
-                    "label": _short_name(entry),
-                    "kind": r.get("kind"),
-                    "depth": r.get("depth"),
-                    "symbol_count": r.get("n"),
-                }
-            )
-
-        # ── File-level rollup: the "what does changing this break" view.
-        # Collapse symbol edges to distinct FILES, with edge counts, so a
-        # developer sees file→file blast radius at a glance (direction:
-        # depends_on = downstream files, depended_on_by = upstream files).
-        def _rollup(items):
-            agg: dict[str, dict] = {}
-            for it in items:
-                fp = it.get("file")
-                if not fp or fp == rel_path:
-                    continue
-                e = agg.setdefault(
-                    fp,
-                    {
-                        "file": fp,
-                        "label": _basename(fp),
-                        "edges": 0,
-                        "kinds": set(),
-                    },
-                )
-                e["edges"] += 1
-                if it.get("kind"):
-                    e["kinds"].add(it["kind"])
-            out = []
-            for e in agg.values():
-                e["kinds"] = sorted(e["kinds"])
-                out.append(e)
-            out.sort(key=lambda x: x["edges"], reverse=True)
-            return out
-
-        def _file_edges(rows, kind):
-            out = []
-            for r in rows:
-                nm = r.get("name")
-                if not nm or nm == rel_path:
-                    continue
-                out.append(
-                    {
-                        "file": nm,
-                        "label": _basename(nm),
-                        "kind": kind,
-                        "confidence": _conf(r),
-                    }
-                )
-            return out
+        processes = _processes_from(processes_rows)
 
         # Direct File→File edges (AP all-file indexing): code imports for
         # non-AST files (.js) and doc references (Markdown). Folded into the
         # file-level direction so the panel shows them even when a file has
         # no AST symbols at all.
-        imports_files = _file_edges(file_imports, "imports")
-        imported_by_files = _file_edges(file_imported_by, "imports")
-        references = _file_edges(doc_refs, "references")
-        referenced_by = _file_edges(doc_referenced_by, "references")
+        imports_files = _file_edges(file_imports, "imports", rel_path)
+        imported_by_files = _file_edges(file_imported_by, "imports", rel_path)
+        references = _file_edges(doc_refs, "references", rel_path)
+        referenced_by = _file_edges(doc_referenced_by, "references", rel_path)
 
         return {
             "downstream": downstream,
@@ -441,8 +278,8 @@ def _impact_for_graph(graph_path: str, rel_path: str) -> dict | None:
             "processes": processes,
             "references": references,
             "referenced_by": referenced_by,
-            "depends_on": _rollup(downstream + imports_files),
-            "depended_on_by": _rollup(upstream + imported_by_files),
+            "depends_on": _rollup(downstream + imports_files, rel_path),
+            "depended_on_by": _rollup(upstream + imported_by_files, rel_path),
             # New AP-typed enrichment fields (additive — frontend may
             # ignore them without breaking the existing direction view).
             "implements": implements,
@@ -471,30 +308,48 @@ def _to_repo_relative(path: str) -> str:
         if ".." in p.split("/"):
             return ""
         return p.lstrip("./")
-    import subprocess
-    import tempfile
-    from pathlib import Path
-
-    # Self-contained (the original git_diff / http_file_diff helpers were never
-    # ported in the extraction — their absence broke /api/trace/impact AND the
-    # live P3 impact pass). CWE-22 containment: resolve symlinks and require
-    # the path under an allowed root (HOME / cwd / temp); a crafted absolute
-    # path outside these is never made relative and never reaches a filesystem
-    # op against an arbitrary location.
     try:
         real = os.path.realpath(p)
     except (OSError, ValueError):
         return p.lstrip("/")
+    if not _is_contained(real):
+        return p.lstrip("/")
+    return _relative_to_git_root(real) or p.lstrip("/")
+
+
+def _is_contained(real: str) -> bool:
+    """CWE-22 containment: is the resolved path under an allowed root?
+
+    Self-contained (the original git_diff / http_file_diff helpers were
+    never ported in the extraction — their absence broke
+    /api/trace/impact AND the live P3 impact pass). A crafted absolute
+    path outside HOME / cwd / temp is never made relative and never
+    reaches a filesystem op against an arbitrary location.
+    """
+    import os
+    import tempfile
+    from pathlib import Path
+
     roots: list[str] = []
     for base in (Path.home(), Path.cwd(), Path(tempfile.gettempdir())):
         try:
             roots.append(os.path.realpath(base))
         except (OSError, ValueError):
-            # A base path that will not resolve is simply not a containment candidate.
+            # A base that will not resolve is simply not a containment candidate.
             pass
-    if not any(real == r or real.startswith(r + os.sep) for r in roots):
-        return p.lstrip("/")
-    # git root via rev-parse from the file's directory → relative to it.
+    return any(real == r or real.startswith(r + os.sep) for r in roots)
+
+
+def _relative_to_git_root(real: str) -> str:
+    """``real`` relative to its git root, or "" when that cannot be determined.
+
+    Empty covers all three misses — no git, rev-parse timed out, or the
+    file sits outside the root it reported — and the caller applies the
+    same leading-slash fallback to each.
+    """
+    import subprocess
+    from pathlib import Path
+
     try:
         res = subprocess.run(
             ["git", "rev-parse", "--show-toplevel"],
@@ -504,18 +359,15 @@ def _to_repo_relative(path: str) -> str:
             timeout=5,
             shell=False,
         )
-        root = res.stdout.strip() if res.returncode == 0 else ""
-        if root:
-            try:
-                return str(Path(real).relative_to(root))
-            except ValueError:
-                # The file is not under the git root; fall through to the leading-slash
-                # strip below.
-                pass
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-        # No git available, or rev-parse timed out; same fallback.
-        pass
-    return p.lstrip("/")
+        return ""
+    root = res.stdout.strip() if res.returncode == 0 else ""
+    if not root:
+        return ""
+    try:
+        return str(Path(real).relative_to(root))
+    except ValueError:
+        return ""
 
 
 # Edge-bearing keys whose totals rank a per-graph impact result; the richest

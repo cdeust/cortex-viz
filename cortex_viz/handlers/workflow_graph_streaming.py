@@ -114,8 +114,8 @@ def _build_interleaved(
     # after the entire source finishes ingesting). With 107 k memories
     # taking ~5 s of pydantic-bound CPU, 500-item chunks at ~40 chunks/s
     # = the browser repaints ~40 times during memories ingest. Small
-    # enough sources (<=_INGEST_CHUNK items) still get a single delta.
-    _INGEST_CHUNK = 500
+    # enough sources (<=ingest_chunk items) still get a single delta.
+    ingest_chunk = 500
 
     def _ingest_loop(
         label: str,
@@ -124,7 +124,7 @@ def _build_interleaved(
         fn_takes_builder: bool = False,
         stream: bool = True,
     ):
-        """Ingest items, emitting a partial delta every _INGEST_CHUNK so
+        """Ingest items, emitting a partial delta every ingest_chunk so
         the SSE subscribers see progress WITHIN the source — not just
         after the whole source finishes ingesting.
 
@@ -143,14 +143,12 @@ def _build_interleaved(
         items = items or []
         prev_n = len(builder._nodes)  # noqa: SLF001
         prev_e = len(builder._edges)  # noqa: SLF001
-        ingested = 0
-        for ev in items:
+        for ingested, ev in enumerate(items, start=1):
             if fn_takes_builder:
                 fn(builder, ev)
             else:
                 fn(ev)
-            ingested += 1
-            if stream and ingested % _INGEST_CHUNK == 0:
+            if stream and ingested % ingest_chunk == 0:
                 _emit_delta(label, prev_n, prev_e)
                 prev_n = len(builder._nodes)  # noqa: SLF001
                 prev_e = len(builder._edges)  # noqa: SLF001
@@ -374,10 +372,8 @@ def _build_interleaved(
             for _nd in builder._node_order[_struct_n:]:  # noqa: SLF001
                 retained_memory_nodes.append(_node_to_dict(_nd))
                 builder._nodes.pop(_nd.id, None)  # noqa: SLF001
-            retained_memory_edges.extend(
-                _edge_to_dict(_e)
-                for _e in builder._edges[_struct_e:]  # noqa: SLF001
-            )
+            _new_edges = builder._edges[_struct_e:]  # noqa: SLF001
+            retained_memory_edges.extend(_edge_to_dict(_e) for _e in _new_edges)
             del builder._node_order[_struct_n:]  # noqa: SLF001
             del builder._edges[_struct_e:]  # noqa: SLF001
         # Surface progress every chunk so /api/graph/progress shows the

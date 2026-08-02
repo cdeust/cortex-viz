@@ -89,7 +89,7 @@ class TestEntityNodeIngestion:
                 }
             ]
         )
-        node = [n for n in nodes if n.kind == NodeKind.ENTITY.value][0]
+        node = next(n for n in nodes if n.kind == NodeKind.ENTITY.value)
         assert node.label == "alive"
         assert node.full_name == "video/generate.py::Particle::alive"
 
@@ -105,7 +105,7 @@ class TestEntityNodeIngestion:
                 }
             ]
         )
-        node = [n for n in nodes if n.kind == NodeKind.ENTITY.value][0]
+        node = next(n for n in nodes if n.kind == NodeKind.ENTITY.value)
         assert node.label == "pgvector"
         assert node.full_name is None
 

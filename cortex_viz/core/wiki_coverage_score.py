@@ -80,21 +80,22 @@ def _has_substantive_anchor(
     """
     import time
 
+    def _is_fresh_anchor(path: str) -> bool:
+        try:
+            st = os.stat(path)
+        except OSError:
+            return False
+        if st.st_size < _MIN_PAGE_BYTES:
+            return False
+        if max_age_days is None:
+            return True
+        return (time.time() - st.st_mtime) / 86400.0 <= max_age_days
+
     for directory in directories:
         for filename in anchor_filenames:
             rel = f"{directory}/{domain}/{filename}"
-            full = os.path.join(wiki_root, rel)
-            try:
-                st = os.stat(full)
-            except OSError:
-                continue
-            if st.st_size < _MIN_PAGE_BYTES:
-                continue
-            if max_age_days is not None:
-                age_days = (time.time() - st.st_mtime) / 86400.0
-                if age_days > max_age_days:
-                    continue
-            return rel
+            if _is_fresh_anchor(os.path.join(wiki_root, rel)):
+                return rel
     return None
 
 
@@ -109,20 +110,21 @@ def _count_substantive_pages(
     Used to detect scopes that are "covered by accumulation" — many ADRs
     cover the ``decisions`` scope even without an anchor file.
     """
+
+    def _is_substantive(path: str) -> bool:
+        try:
+            return os.path.getsize(path) >= _MIN_PAGE_BYTES
+        except OSError:
+            return False
+
     count = 0
     for directory in directories:
         dom_path = os.path.join(wiki_root, directory, domain)
         if not os.path.isdir(dom_path):
             continue
         for entry in os.listdir(dom_path):
-            if not entry.endswith(".md"):
-                continue
-            full = os.path.join(dom_path, entry)
-            try:
-                if os.path.getsize(full) >= _MIN_PAGE_BYTES:
-                    count += 1
-            except OSError:
-                continue
+            if entry.endswith(".md") and _is_substantive(os.path.join(dom_path, entry)):
+                count += 1
     return count
 
 
@@ -204,9 +206,8 @@ def _is_plausible_domain(name: str) -> bool:
     """
     if not name or name.startswith((".", "_")):
         return False
-    if name.isdigit() and len(name) == 4:  # bare year
-        return False
-    return True
+    # Reject a bare year.
+    return not (name.isdigit() and len(name) == 4)
 
 
 _KNOWN_KINDS: Final[frozenset[str]] = frozenset(

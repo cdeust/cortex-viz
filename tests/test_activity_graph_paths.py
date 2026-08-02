@@ -115,12 +115,12 @@ def test_event_to_graph_legacy_and_fresh_row_for_same_file_produce_same_id():
         "cwd": "/Users/dev/repo",
         "detail": {"path": "/Users/dev/repo/foo.py"},
     }
-    legacy_fid = [
+    legacy_fid = next(
         n["id"] for n in event_to_graph(legacy_row)["nodes"] if n["kind"] == "file"
-    ][0]
-    fresh_fid = [
+    )
+    fresh_fid = next(
         n["id"] for n in event_to_graph(fresh_row)["nodes"] if n["kind"] == "file"
-    ][0]
+    )
     assert legacy_fid == fresh_fid
 
 

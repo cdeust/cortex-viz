@@ -35,40 +35,38 @@ _TOOL_NAME_LOWER = {t.value.lower(): t for t in ToolKind}
 
 # Scientific-measurement fields forwarded verbatim to memory nodes so
 # the Knowledge / Board cards can render them without a second PG hop.
-_MEMORY_SCIENTIFIC_KEYS = tuple(
-    [
-        "heat_base",
-        "arousal",
-        "emotional_valence",
-        "dominant_emotion",
-        "importance",
-        "surprise_score",
-        "confidence",
-        "access_count",
-        "useful_count",
-        "replay_count",
-        "reconsolidation_count",
-        "plasticity",
-        "stability",
-        "excitability",
-        "hippocampal_dependency",
-        "schema_match_score",
-        "schema_id",
-        "separation_index",
-        "interference_score",
-        "encoding_strength",
-        "hours_in_stage",
-        "stage_entered_at",
-        "last_accessed",
-        "no_decay",
-        "is_protected",
-        "is_stale",
-        "is_benchmark",
-        "is_global",
-        "store_type",
-        "compression_level",
-        "compressed",
-    ]
+_MEMORY_SCIENTIFIC_KEYS = (
+    "heat_base",
+    "arousal",
+    "emotional_valence",
+    "dominant_emotion",
+    "importance",
+    "surprise_score",
+    "confidence",
+    "access_count",
+    "useful_count",
+    "replay_count",
+    "reconsolidation_count",
+    "plasticity",
+    "stability",
+    "excitability",
+    "hippocampal_dependency",
+    "schema_match_score",
+    "schema_id",
+    "separation_index",
+    "interference_score",
+    "encoding_strength",
+    "hours_in_stage",
+    "stage_entered_at",
+    "last_accessed",
+    "no_decay",
+    "is_protected",
+    "is_stale",
+    "is_benchmark",
+    "is_global",
+    "store_type",
+    "compression_level",
+    "compressed",
 )
 
 
@@ -128,9 +126,12 @@ def _track_file_timestamp(b, path: str, tool: ToolKind, ev: dict) -> None:
         slot["first_seen"] = first_ts
     if last_ts and (slot["last_accessed"] is None or last_ts > slot["last_accessed"]):
         slot["last_accessed"] = last_ts
-    if tool in (ToolKind.EDIT, ToolKind.WRITE) and last_ts:
-        if slot["last_modified"] is None or last_ts > slot["last_modified"]:
-            slot["last_modified"] = last_ts
+    if (
+        tool in (ToolKind.EDIT, ToolKind.WRITE)
+        and last_ts
+        and (slot["last_modified"] is None or last_ts > slot["last_modified"])
+    ):
+        slot["last_modified"] = last_ts
 
 
 def _finalize_files(b):

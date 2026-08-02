@@ -28,6 +28,31 @@ from cortex_viz.shared.hash import simple_hash
 _L6_PROJECT_TIMEOUT_S = 180.0
 
 
+def _absolutize_in_place(
+    rows: list[dict],
+    root: str,
+    keys: tuple[str, ...],
+) -> None:
+    """Rewrite the named path keys of ``rows`` to absolute form, in place.
+
+    Both the symbol side (``file_path``) and the edge side
+    (``src_file``/``dst_file``) must be rewritten, or symbol ids computed
+    from one side stop matching ids computed from the other. An empty
+    value is left alone; ``absolutize`` returns the path unchanged when
+    the root does not resolve, which is the pre-fix behaviour.
+    """
+    # Imported here, like every other AP import in this module: the bridge
+    # pulls in the optional AST stack, which must stay off the import path
+    # of a build that never reaches L6.
+    from cortex_viz.infrastructure.ap_graph_root import absolutize
+
+    for row in rows:
+        for key in keys:
+            value = row.get(key)
+            if value:
+                row[key] = absolutize(root, value)
+
+
 def run_l6(
     store,
     baseline: dict,
@@ -61,7 +86,6 @@ def run_l6(
         resolve_graph_paths,
     )
     from cortex_viz.infrastructure.ap_graph_root import (
-        absolutize,
         graph_source_root,
     )
     from cortex_viz.infrastructure.workflow_graph_source_ast import (
@@ -75,7 +99,7 @@ def run_l6(
     import json as _json
     from pathlib import Path as _Path
 
-    _BATCH = 200
+    batch_size = 200
 
     # ── Per-project AST cache ──
     # AP parses tree-sitter once per project and writes the
@@ -99,8 +123,8 @@ def run_l6(
     # (relpath, size, mtime); keep the rglob branch only for the defensive
     # directory case the docstring still allows. source: galaxy-lag audit
     # (tasks/galaxy-lag-and-ap-aggregation-audit.md), Finding D.
-    _CACHE_DIR = _Path.home() / ".claude" / "methodology" / "ast_cache"
-    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    cache_dir = _Path.home() / ".claude" / "methodology" / "ast_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
 
     def _graph_signature(gp_: str) -> str:
         root = _Path(gp_)
@@ -119,9 +143,8 @@ def run_l6(
 
         if root.is_dir():
             # Defensive: a directory-layout graph — walk deterministically.
-            for f in sorted(root.rglob("*")):
-                if f.is_file():
-                    _mix(f, str(f.relative_to(root)))
+            for f in (p for p in sorted(root.rglob("*")) if p.is_file()):
+                _mix(f, str(f.relative_to(root)))
         else:
             # Single-file LadybugDB: the ``graph`` file + its WAL sibling.
             # The WAL rides the latest writes, so a re-index that has not yet
@@ -133,7 +156,7 @@ def run_l6(
         return h.hexdigest()[:16]
 
     def _cache_path(proj_name_: str) -> _Path:
-        return _CACHE_DIR / f"{proj_name_}.json"
+        return cache_dir / f"{proj_name_}.json"
 
     def _cache_load(proj_name_: str, sig_: str):
         p = _cache_path(proj_name_)
@@ -264,15 +287,8 @@ def run_l6(
         # so symbol ids computed from either side stay consistent.
         _root = graph_source_root(gp, proj_name)
         if _root:
-            for _s in syms:
-                _fp = _s.get("file_path")
-                if _fp:
-                    _s["file_path"] = absolutize(_root, _fp)
-            for _e in edgs:
-                for _k in ("src_file", "dst_file"):
-                    _v = _e.get(_k)
-                    if _v:
-                        _e[_k] = absolutize(_root, _v)
+            _absolutize_in_place(syms, _root, ("file_path",))
+            _absolutize_in_place(edgs, _root, ("src_file", "dst_file"))
 
         # Each symbol belongs to ITS PROJECT's domain — not the
         # global hub. The L0 phase emits domain ids as
@@ -390,13 +406,19 @@ def run_l6(
             if n.get("kind") == "file" and n.get("x") is not None
         }
 
-        def _file_xy(fid_: str | None) -> tuple[float, float] | None:
+        # ``_local_file_xy`` is bound as a default so the closure captures
+        # THIS iteration's mapping. It is only called below in the same
+        # iteration, but late binding here would be a silent cross-project
+        # coordinate mix-up if that ever stopped being true.
+        def _file_xy(
+            fid_: str | None, _local_xy: dict = _local_file_xy
+        ) -> tuple[float, float] | None:
             if not fid_:
                 return None
             cached = state._node_index.get(fid_)
             if cached and cached.get("x") is not None and cached.get("y") is not None:
                 return (cached["x"], cached["y"])
-            return _local_file_xy.get(fid_)
+            return _local_xy.get(fid_)
 
         for sym in syms:
             qn = sym.get("qualified_name") or ""
@@ -450,14 +472,16 @@ def run_l6(
                 continue
             did = NodeIdFactory.symbol_id(df, dn)
             kind = e.get("kind") or "calls"
+            # An ``imports`` edge starts at the FILE; every other kind
+            # starts at a symbol, which needs both halves of its id.
             if kind == "imports":
                 sid = file_id_by_path.get(sf)
-                if not sid:
-                    continue
-            else:
-                if not sf or not sn:
-                    continue
+            elif sf and sn:
                 sid = NodeIdFactory.symbol_id(sf, sn)
+            else:
+                sid = None
+            if not sid:
+                continue
             # Gap 6: single source-of-truth defaults.
             conf, reason_v = edge_provenance_defaults(
                 kind,
@@ -495,8 +519,8 @@ def run_l6(
         # of pure sleep, indistinguishable from a deadlock
         # (observed 2026-06-12). SSE chunking (emit chunk=1000)
         # is the pacing now.
-        for bstart in range(0, len(proj_nodes), _BATCH):
-            chunk_nodes = proj_nodes[bstart : bstart + _BATCH]
+        for bstart in range(0, len(proj_nodes), batch_size):
+            chunk_nodes = proj_nodes[bstart : bstart + batch_size]
             merge(
                 chunk_nodes,
                 [],

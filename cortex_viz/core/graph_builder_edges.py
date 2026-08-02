@@ -70,6 +70,28 @@ def add_bridge_edges(
 # ── Persistent feature edges ─────────────────────────────────────────────
 
 
+def _accumulate_pair(
+    pair_data: dict[tuple[str, str], dict],
+    pf: dict,
+    src: str | None,
+    tgt: str | None,
+) -> None:
+    """Fold one feature's contribution into the (src, tgt) domain pair.
+
+    The key is order-independent, so A→B and B→A aggregate into one edge.
+    A self-pair or an unresolved hub contributes nothing.
+    """
+    if not src or not tgt or src == tgt:
+        return
+    key = (min(src, tgt), max(src, tgt))
+    slot = pair_data.setdefault(key, {"weight": 0, "count": 0, "labels": []})
+    slot["weight"] += pf.get("persistence", 0)
+    slot["count"] += 1
+    label = pf.get("label", "")
+    if label and len(slot["labels"]) < 3:
+        slot["labels"].append(label)
+
+
 def add_persistent_feature_edges(
     profiles: dict,
     domain_hub_ids: dict[str, str],
@@ -84,17 +106,12 @@ def add_persistent_feature_edges(
         pf_domains = pf.get("domains") or []
         for i in range(len(pf_domains)):
             for j in range(i + 1, len(pf_domains)):
-                src = domain_hub_ids.get(pf_domains[i])
-                tgt = domain_hub_ids.get(pf_domains[j])
-                if src and tgt and src != tgt:
-                    key = (min(src, tgt), max(src, tgt))
-                    if key not in pair_data:
-                        pair_data[key] = {"weight": 0, "count": 0, "labels": []}
-                    pair_data[key]["weight"] += pf.get("persistence", 0)
-                    pair_data[key]["count"] += 1
-                    label = pf.get("label", "")
-                    if label and len(pair_data[key]["labels"]) < 3:
-                        pair_data[key]["labels"].append(label)
+                _accumulate_pair(
+                    pair_data,
+                    pf,
+                    domain_hub_ids.get(pf_domains[i]),
+                    domain_hub_ids.get(pf_domains[j]),
+                )
 
     for (src, tgt), info in pair_data.items():
         edges.append(
@@ -201,9 +218,9 @@ def apply_batch_pagination(
     if batch_size <= 0 or len(nodes) == 0:
         return nodes, edges, clusters, 1
 
-    _SKELETON_TYPES = {"root", "category", "domain", "agent", "type-group"}
-    skeleton_nodes = [n for n in nodes if n["type"] in _SKELETON_TYPES]
-    child_nodes = [n for n in nodes if n["type"] not in _SKELETON_TYPES]
+    skeleton_types = {"root", "category", "domain", "agent", "type-group"}
+    skeleton_nodes = [n for n in nodes if n["type"] in skeleton_types]
+    child_nodes = [n for n in nodes if n["type"] not in skeleton_types]
     skeleton_ids = {n["id"] for n in skeleton_nodes}
     total_batches = max(1, -(-len(child_nodes) // batch_size))
 

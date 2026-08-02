@@ -123,7 +123,7 @@ def _pip_install(deps_dir: str, packages: list[str]) -> None:
         err = (proc.stderr or "") + (proc.stdout or "")
         if proc.returncode != 0 and "externally-managed-environment" in err:
             proc = subprocess.run(
-                base + ["--break-system-packages"], capture_output=True, text=True
+                [*base, "--break-system-packages"], capture_output=True, text=True
             )
             err = (proc.stderr or "") + (proc.stdout or "")
         if proc.returncode != 0:
@@ -177,7 +177,7 @@ def main() -> None:
     _ensure_deps(deps_dir)
     os.chdir(plugin_root)
 
-    sys.argv = [module] + sys.argv[2:]
+    sys.argv = [module, *sys.argv[2:]]
     try:
         from runpy import run_module
 

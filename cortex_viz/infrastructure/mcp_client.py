@@ -13,6 +13,11 @@ from typing import Any
 
 from cortex_viz.errors import McpConnectionError
 from cortex_viz.infrastructure.mcp_call_timeout import default_call_timeout_s
+from cortex_viz.infrastructure.mcp_client_reader import (
+    _decoded_text_block,
+    read_loop,
+)
+from cortex_viz.infrastructure.mcp_client_spawn import ALLOWED_COMMANDS, spawn_process
 from cortex_viz.infrastructure.mcp_client_stderr import open_stderr_log, stderr_loop
 
 CLIENT_INFO = {"name": "cortex", "version": "1.0.0"}
@@ -44,6 +49,7 @@ class MCPClient:
         self._last_activity = 0.0
         self._idle_task: asyncio.Task | None = None
         self._reader_task: asyncio.Task | None = None
+        self._stderr_task: asyncio.Task | None = None
         # The event loop that owns this client's stdout reader, stdin
         # stream, and pending-call futures. Set at connect(). A pooled
         # client may be handed to a DIFFERENT loop on reuse (batch
@@ -66,7 +72,10 @@ class MCPClient:
         self._bound_loop = asyncio.get_running_loop()
         await self._spawn_process()
         self._reader_task = asyncio.create_task(self._read_loop())
-        asyncio.create_task(self._stderr_loop())
+        # Held, not fire-and-forget: the event loop keeps only a weak
+        # reference to a running task, so an unreferenced drain task can be
+        # collected mid-flight, and close() below could not cancel it.
+        self._stderr_task = asyncio.create_task(self._stderr_loop())
         # No fixed startup sleep. The previous ``await asyncio.sleep(1.5)``
         # was an unsourced guess at the child's "ready" time: too short
         # races a slow binary (initialize is sent, the child exits/EOFs
@@ -89,83 +98,17 @@ class MCPClient:
                 {"command": self._config.get("command")},
             ) from exc
 
-    # Allowlisted MCP server commands. Only these binaries may be spawned.
-    # Config-supplied commands are validated against this list to prevent
-    # command injection (CodeQL py/command-line-injection, CWE-78).
-    _ALLOWED_COMMANDS = frozenset(
-        {
-            "node",
-            "npx",
-            "python",
-            "python3",
-            "cortex",
-            "mcp-server",
-            # automatised-pipeline ships a compiled Rust MCP binary; the
-            # bridge resolves it from installed_plugins.json and invokes it
-            # directly (not via node). source: ap_bridge._resolve_command.
-            "automatised-pipeline",
-        }
-    )
+    # Kept as a class attribute: ap_bridge and prd_bridge widen the
+    # allowlist per client by setting ``_extra_allowed_commands``.
+    _ALLOWED_COMMANDS = ALLOWED_COMMANDS
 
     async def _spawn_process(self) -> None:
-        """Spawn the child MCP server process.
-
-        Security: command must be in _ALLOWED_COMMANDS allowlist.
-        Args are passed as a list (no shell=True). Environment is
-        merged from os.environ + config, not constructed from user input.
-        """
-        import os
-        import shutil
-
-        raw_command: str = self._config["command"]
-        args = self._config.get("args") or []
-        cwd = self._config.get("cwd")
-        env = self._config.get("env")
-        merged_env = {**os.environ, **(env or {})}
-        # Stream-buffer cap per JSON-RPC frame. Sized for the L6 path,
-        # where AP responses with 100k+ symbols + edges legitimately
-        # exceed 100MB. Keep an upper bound large enough that we never
-        # cap real workloads; OS-level subprocess pipe buffering still
-        # provides backpressure.
-        line_limit = 1024 * 1024 * 1024  # 1 GB
-
-        # Validate command against allowlist (CWE-78 mitigation).
-        # In test/dev, extra commands can be allowed via _extra_allowed_commands.
-        allowed = self._ALLOWED_COMMANDS | getattr(
-            self, "_extra_allowed_commands", set()
+        # Body split into ``mcp_client_spawn`` (300-line class limit).
+        self._proc = await spawn_process(
+            self._config,
+            self._connect_timeout_ms,
+            getattr(self, "_extra_allowed_commands", set()),
         )
-        base_cmd = raw_command.split("/")[-1] if "/" in raw_command else raw_command
-        if base_cmd not in allowed:
-            raise McpConnectionError(
-                f"Command '{raw_command}' not in allowed list: {sorted(allowed)}"
-            )
-        # Resolve to full path via shutil.which to avoid PATH manipulation
-        command = shutil.which(raw_command) or raw_command
-
-        try:
-            self._proc = await asyncio.wait_for(
-                asyncio.create_subprocess_exec(
-                    command,
-                    *args,
-                    stdin=asyncio.subprocess.PIPE,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                    cwd=cwd,
-                    env=merged_env,
-                    limit=line_limit,
-                ),
-                timeout=self._connect_timeout_ms / 1000,
-            )
-        except asyncio.TimeoutError:
-            raise McpConnectionError(
-                f"Connect timeout after {self._connect_timeout_ms}ms",
-                {"command": command, "args": args},
-            )
-        except Exception as e:
-            raise McpConnectionError(
-                f"Failed to spawn: {e}",
-                {"command": command, "args": args},
-            )
 
     async def _perform_handshake(self) -> None:
         """Initialize protocol, negotiate version, and discover tools."""
@@ -200,7 +143,7 @@ class MCPClient:
             raise McpConnectionError(
                 f"Handshake failed: {e}",
                 {"command": command},
-            )
+            ) from e
 
     async def call(self, name: str, args: dict | None = None) -> Any:
         """Call a tool on the remote MCP server."""
@@ -221,10 +164,7 @@ class MCPClient:
 
         for block in result["content"]:
             if block.get("type") == "text":
-                try:
-                    return json.loads(block["text"])
-                except (json.JSONDecodeError, ValueError):
-                    return block["text"]
+                return _decoded_text_block(block["text"])
 
         return result
 
@@ -310,6 +250,10 @@ class MCPClient:
             self._reader_task.cancel()
             self._reader_task = None
 
+        if self._stderr_task:
+            self._stderr_task.cancel()
+            self._stderr_task = None
+
         # Reject pending requests
         for future in self._pending.values():
             if not future.done():
@@ -364,7 +308,7 @@ class MCPClient:
         start = loop.time()
         try:
             return await asyncio.wait_for(future, timeout=effective_timeout)
-        except asyncio.TimeoutError:
+        except asyncio.TimeoutError as e:
             self._pending.pop(req_id, None)
             elapsed = loop.time() - start
             raise McpConnectionError(
@@ -375,7 +319,7 @@ class MCPClient:
                 f"than the OS pipe buffer, or the reader loop is no longer "
                 f"draining its stdout.",
                 {"method": method, "elapsed_s": round(elapsed, 1)},
-            )
+            ) from e
 
     def _notify(self, method: str, params: dict | None = None) -> None:
         msg: dict[str, Any] = {"jsonrpc": "2.0", "method": method}
@@ -392,87 +336,8 @@ class MCPClient:
             pass
 
     async def _read_loop(self) -> None:
-        # Track terminal cause so all pending futures get a real error
-        # instead of hanging forever when the reader exits.
-        terminal_exc: BaseException | None = None
-        try:
-            while True:
-                line = await self._proc.stdout.readline()  # type: ignore
-                if not line:
-                    # EOF — child closed stdout. Fall through to fail
-                    # pending futures so callers do not block forever.
-                    break
-                decoded = line.decode("utf-8").strip()
-                if not decoded or decoded.startswith("Content-Length"):
-                    continue
-                try:
-                    msg = json.loads(decoded)
-                    msg_id = msg.get("id")
-                    if msg_id is not None and msg_id in self._pending:
-                        future = self._pending.pop(msg_id)
-                        if not future.done():
-                            if msg.get("error"):
-                                future.set_exception(
-                                    McpConnectionError(
-                                        msg["error"].get("message", "Unknown error")
-                                    )
-                                )
-                            else:
-                                future.set_result(msg.get("result"))
-                except (json.JSONDecodeError, ValueError):
-                    # Bad payload from the upstream is recoverable —
-                    # log and continue rather than killing the loop.
-                    print(
-                        f"[mcp-client] non-JSON line dropped: {decoded[:200]}",
-                        file=sys.stderr,
-                    )
-                    continue
-        except asyncio.CancelledError:
-            terminal_exc = None
-        except (
-            asyncio.LimitOverrunError,
-            asyncio.IncompleteReadError,
-            ConnectionResetError,
-            BrokenPipeError,
-        ) as exc:
-            # Stream-level failure: most often a single response line
-            # exceeded the configured ``limit`` bytes. Surface it as
-            # the terminal cause for every pending future, so callers
-            # see a clear McpConnectionError instead of hanging.
-            terminal_exc = exc
-            print(
-                f"[mcp-client] reader stream error: {type(exc).__name__}: {exc}",
-                file=sys.stderr,
-            )
-        except Exception as exc:  # noqa: BLE001
-            terminal_exc = exc
-            print(
-                f"[mcp-client] reader unexpected error: {type(exc).__name__}: {exc}",
-                file=sys.stderr,
-            )
-        finally:
-            # Reader is exiting → the child's stdout is gone, so the
-            # connection is dead. Mark it disconnected at the ROOT here
-            # (not only in close()) so the pool's ``existing.connected``
-            # check discards this client and reconnects on the next call.
-            # Without this the flag stayed True after a child crash and
-            # the pool handed back a dead client, whose next stdin write
-            # raised ``ConnectionResetError: Connection lost`` — the fast
-            # failure seen on every ingest retry. source: ingest_codebase
-            # ConnectionResetError RCA 2026-06-09.
-            self._connected = False
-            # Reader is exiting — wake every pending caller. Without
-            # this, ``_send``'s ``await future`` blocks forever
-            # (deadlock observed on long upstream responses).
-            for fut in list(self._pending.values()):
-                if not fut.done():
-                    fut.set_exception(
-                        McpConnectionError(
-                            f"Upstream reader terminated: "
-                            f"{type(terminal_exc).__name__ if terminal_exc else 'EOF'}"
-                        )
-                    )
-            self._pending.clear()
+        # Body split into ``mcp_client_reader`` (300-line class limit).
+        await read_loop(self)
 
     async def _stderr_loop(self) -> None:
         # Body split into ``mcp_client_stderr`` (500-line limit).
@@ -482,18 +347,22 @@ class MCPClient:
         # Body split into ``mcp_client_stderr`` (500-line limit).
         return open_stderr_log(self._config)
 
+    async def _wait_until_idle(self) -> None:
+        """Poll every 30 s until the connection has gone idle.
+
+        The first sleep happens before the first check, so a client that
+        has only just been touched is never judged idle on entry.
+        """
+        await asyncio.sleep(30)
+        while not self.idle:
+            await asyncio.sleep(30)
+
     async def _idle_loop(self) -> None:
         try:
-            while True:
-                await asyncio.sleep(30)
-                if self.idle:
-                    print(
-                        "[mcp-client] Idle timeout — closing connection",
-                        file=sys.stderr,
-                    )
-                    self.close()
-                    break
+            await self._wait_until_idle()
         except asyncio.CancelledError:
             # Cooperative cancellation of the idle watchdog — the task was asked to
             # stop, which is the normal path, not a failure.
-            pass
+            return
+        print("[mcp-client] Idle timeout — closing connection", file=sys.stderr)
+        self.close()

@@ -161,7 +161,9 @@ def detect_communities(
             seed=seed,
         )
         membership = partition.membership
-        for vid, comm in zip(vertices, membership):
+        # strict=True: leidenalg returns one membership entry per vertex, so
+        # a length mismatch is a broken invariant, not an input to truncate.
+        for vid, comm in zip(vertices, membership, strict=True):
             mapping[vid] = int(comm)
         next_cid = (max(membership) + 1) if membership else 0
 

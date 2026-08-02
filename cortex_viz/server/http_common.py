@@ -82,22 +82,29 @@ class ServerManager:
 
         return self._start_server(handler_cls, preferred_port)
 
+    def _stop_running_server(self, reason: str = "") -> None:
+        """Shut the server down and clear the state. No-op if already stopped.
+
+        The single stop path for both the idle timer and an explicit
+        ``shutdown()``; the announcement is made after the lock is released
+        so a slow stderr never holds it.
+        """
+        with self._lock:
+            if not self._server_state:
+                return
+            self._server_state["server"].shutdown()
+            self._server_state = None
+        if reason:
+            print(f"[cortex] {self.label} stopped ({reason})", file=sys.stderr)
+
     def reset_idle_timer(self) -> None:
         """Cancel previous timer and start a new idle-timeout timer."""
         if self._idle_timer:
             self._idle_timer.cancel()
 
-        def _shutdown() -> None:
-            with self._lock:
-                if self._server_state:
-                    self._server_state["server"].shutdown()
-                    self._server_state = None
-                    print(
-                        f"[cortex] {self.label} stopped (idle timeout)",
-                        file=sys.stderr,
-                    )
-
-        self._idle_timer = threading.Timer(self.idle_seconds, _shutdown)
+        self._idle_timer = threading.Timer(
+            self.idle_seconds, self._stop_running_server, args=("idle timeout",)
+        )
         self._idle_timer.daemon = True
         self._idle_timer.start()
 
@@ -106,10 +113,7 @@ class ServerManager:
         if self._idle_timer:
             self._idle_timer.cancel()
             self._idle_timer = None
-        with self._lock:
-            if self._server_state:
-                self._server_state["server"].shutdown()
-                self._server_state = None
+        self._stop_running_server()
 
     def _start_server(
         self,
@@ -117,35 +121,53 @@ class ServerManager:
         preferred_port: int,
     ) -> str:
         """Try preferred port, then fall back to OS-assigned port."""
-        for port in [preferred_port, 0]:
-            try:
-                server = HTTPServer(("127.0.0.1", port), handler_cls)
-                actual_port = server.server_address[1]
-                url = f"http://127.0.0.1:{actual_port}"
-
-                with self._lock:
-                    self._server_state = {
-                        "server": server,
-                        "url": url,
-                        "port": actual_port,
-                    }
-
-                thread = threading.Thread(target=server.serve_forever, daemon=True)
-                thread.start()
-                self.reset_idle_timer()
-                print(
-                    f"[cortex] {self.label} started at {url}",
-                    file=sys.stderr,
-                )
+        candidates = [preferred_port, 0]
+        for port in candidates:
+            url = self._bind_and_serve(handler_cls, port, last=port == candidates[-1])
+            if url is not None:
                 return url
-            except OSError:
-                if port != 0:
-                    continue
-                raise
         # Unreachable: the port list ends with 0 (OS-assigned), whose
         # OSError re-raises above. Stated so the ``-> str`` contract has no
         # silent ``None`` exit if that list is ever edited.
-        raise RuntimeError(f"{self.label}: no port in {[preferred_port, 0]} could bind")
+        raise RuntimeError(f"{self.label}: no port in {candidates} could bind")
+
+    def _bind_and_serve(
+        self,
+        handler_cls: type[BaseHTTPRequestHandler],
+        port: int,
+        last: bool,
+    ) -> str | None:
+        """Bind one candidate port and start serving on it.
+
+        Returns the URL, or None when the port is taken and another
+        candidate remains. The last candidate re-raises instead of
+        returning None, so the caller never silently runs out of ports.
+
+        Only the bind itself is guarded: an OSError from starting the
+        serving thread is a different failure and must not be retried as
+        though the address were busy.
+        """
+        try:
+            server = HTTPServer(("127.0.0.1", port), handler_cls)
+        except OSError:
+            if last:
+                raise
+            return None
+
+        actual_port = server.server_address[1]
+        url = f"http://127.0.0.1:{actual_port}"
+        with self._lock:
+            self._server_state = {
+                "server": server,
+                "url": url,
+                "port": actual_port,
+            }
+
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.reset_idle_timer()
+        print(f"[cortex] {self.label} started at {url}", file=sys.stderr)
+        return url
 
 
 def get_ui_root() -> Path:
@@ -188,7 +210,7 @@ def read_html_file(path: Path, error_label: str) -> str:
     try:
         return path.read_text(encoding="utf-8")
     except Exception as e:
-        raise RuntimeError(f"Could not read {error_label}: {e}")
+        raise RuntimeError(f"Could not read {error_label}: {e}") from e
 
 
 def send_json_response(

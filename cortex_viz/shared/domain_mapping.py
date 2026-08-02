@@ -71,28 +71,35 @@ def _discover_repos(dev_root: Path) -> list[RepoInfo]:
     for item in dev_root.iterdir():
         if not item.is_dir() or item.name.startswith("."):
             continue
-        if (item / ".git").is_dir():
-            remote = _get_remote_url(item)
-            repos.append(
-                RepoInfo(
-                    fs_path=str(item),
-                    dir_name=item.name.lower(),
-                    remote_name=_extract_repo_name(remote) or item.name.lower(),
-                )
-            )
-        # One level deeper for org dirs (e.g., anthropic/ai-automatised-pipeline)
-        else:
-            for sub in item.iterdir():
-                if sub.is_dir() and (sub / ".git").is_dir():
-                    remote = _get_remote_url(sub)
-                    repos.append(
-                        RepoInfo(
-                            fs_path=str(sub),
-                            dir_name=sub.name.lower(),
-                            remote_name=_extract_repo_name(remote) or sub.name.lower(),
-                        )
-                    )
+        repos.extend(_repos_under(item))
     return repos
+
+
+def _repos_under(item: Path) -> list[RepoInfo]:
+    """The checkouts reachable from one dev-root entry.
+
+    Either the entry is itself a checkout, or it is an org directory
+    (e.g. ``anthropic/ai-automatised-pipeline``) whose children are —
+    which is the second of the two levels ``_discover_repos`` scans.
+    """
+    if (item / ".git").is_dir():
+        return [_repo_info(item)]
+    return [
+        _repo_info(sub)
+        for sub in item.iterdir()
+        if sub.is_dir() and (sub / ".git").is_dir()
+    ]
+
+
+def _repo_info(path: Path) -> RepoInfo:
+    """Describe one checkout, preferring the git remote's name over the
+    directory's when the two disagree."""
+    remote = _get_remote_url(path)
+    return RepoInfo(
+        fs_path=str(path),
+        dir_name=path.name.lower(),
+        remote_name=_extract_repo_name(remote) or path.name.lower(),
+    )
 
 
 # ── Step 2: Group repos by shared remote-name prefix ─────────────────
@@ -108,7 +115,10 @@ def _shared_prefix(a: str, b: str) -> str:
     parts_a = a.split("-")
     parts_b = b.split("-")
     common: list[str] = []
-    for pa, pb in zip(parts_a, parts_b):
+    # strict=False on purpose: the two names routinely have different
+    # segment counts, and stopping at the shorter one IS the common-prefix
+    # rule ('cortex' vs 'cortex-cowork' → 'cortex').
+    for pa, pb in zip(parts_a, parts_b, strict=False):
         if pa == pb:
             common.append(pa)
         else:
@@ -211,18 +221,27 @@ def _build_fragment_index(
     """
     fragments: dict[str, tuple[str, int]] = {}  # fragment → (canonical, length)
 
+    def _claim(fragment: str, canonical: str) -> None:
+        """Record ``fragment -> canonical`` unless a longer claim already won."""
+        if len(fragment) < 4:
+            return
+        existing = fragments.get(fragment)
+        if existing is None or len(fragment) > existing[1]:
+            fragments[fragment] = (canonical, len(fragment))
+
+    def _sub_sequences(name: str) -> list[str]:
+        """Every contiguous run of hyphen-delimited parts in ``name``."""
+        parts = name.split("-")
+        return [
+            "-".join(parts[i:j])
+            for i in range(len(parts))
+            for j in range(i + 1, len(parts) + 1)
+        ]
+
     for repo in repos:
-        canonical = repo.canonical
         for name in {repo.dir_name, repo.remote_name}:
-            parts = name.split("-")
-            for i in range(len(parts)):
-                for j in range(i + 1, len(parts) + 1):
-                    fragment = "-".join(parts[i:j])
-                    if len(fragment) < 4:
-                        continue
-                    existing = fragments.get(fragment)
-                    if existing is None or len(fragment) > existing[1]:
-                        fragments[fragment] = (canonical, len(fragment))
+            for fragment in _sub_sequences(name):
+                _claim(fragment, repo.canonical)
 
     return {k: v[0] for k, v in fragments.items()}
 
@@ -331,64 +350,87 @@ def resolve_domain(input_str: str) -> str:
 
     registry = _build_registry()
     clean = input_str.strip()
-
-    # 1. Is it a filesystem path? → git_root → repo match
-    if "/" in clean and not clean.startswith("-"):
-        root = _git_root(clean)
-        if root and root in registry.path_to_repo:
-            return registry.path_to_repo[root].canonical
-        # Try prefix match against known repo paths
-        for repo in registry.repos:
-            if clean.startswith(repo.fs_path):
-                return repo.canonical
-
-    # 2. Is it a slug? (starts with - and looks path-like)
-    if clean.startswith("-") and len(clean) > 10:
-        repo = _match_slug(clean, registry.slug_index)
-        if repo:
-            return repo.canonical
-
-    # 3. Exact match against known names
     lower = clean.lower()
-    if lower in registry.name_to_canonical:
-        return registry.name_to_canonical[lower]
 
-    # 4. Fragment match — longest known fragment that is a substring of input
-    if lower in registry.fragment_index:
-        return registry.fragment_index[lower]
+    # Ordered most-specific first: an answer from an earlier step is
+    # evidence-backed (a real git root, a real slug), a later one is a
+    # guess from a shared substring.
+    for candidate in (
+        _match_by_path(clean, registry),
+        _match_by_slug(clean, registry),
+        registry.name_to_canonical.get(lower),
+        _match_by_fragment(lower, registry),
+    ):
+        if candidate:
+            return candidate
 
-    # Also check if any known fragment is a substring of the input
-    best_frag = ""
-    best_frag_len = 0
+    return _slug_tail_fallback(clean, lower)
+
+
+def _match_by_path(clean: str, registry) -> str | None:
+    """Step 1 — filesystem path → git root → known repo."""
+    if "/" not in clean or clean.startswith("-"):
+        return None
+    root = _git_root(clean)
+    if root and root in registry.path_to_repo:
+        return registry.path_to_repo[root].canonical
+    # Try prefix match against known repo paths
+    for repo in registry.repos:
+        if clean.startswith(repo.fs_path):
+            return repo.canonical
+    return None
+
+
+def _match_by_slug(clean: str, registry) -> str | None:
+    """Step 2 — a path-encoded project slug (starts with ``-``)."""
+    if not clean.startswith("-") or len(clean) <= 10:
+        return None
+    repo = _match_slug(clean, registry.slug_index)
+    return repo.canonical if repo else None
+
+
+def _match_by_fragment(lower: str, registry) -> str | None:
+    """Step 4 — the longest known fragment contained in the input.
+
+    Exact fragment hits win outright; otherwise the longest substring
+    match does, so 'ai-architect-prd' beats 'prd'.
+    """
+    exact = registry.fragment_index.get(lower)
+    if exact:
+        return exact
+    best, best_len = None, 0
     for frag, canonical in registry.fragment_index.items():
-        if len(frag) >= 4 and frag in lower and len(frag) > best_frag_len:
-            best_frag = canonical
-            best_frag_len = len(frag)
-    if best_frag:
-        return best_frag
+        if len(frag) >= 4 and frag in lower and len(frag) > best_len:
+            best, best_len = canonical, len(frag)
+    return best
 
-    # 5. No match. For raw slugs (e.g. "-Users-cdeust-Developments-jarvis")
-    # returning the whole path-encoded string pollutes domain ids; strip the
-    # canonical "-Users-…-Developments-" / "-Documents-" prefix and return
-    # the trailing meaningful segment instead.
-    if clean.startswith("-"):
-        stripped = lower
-        for prefix in (
-            "-users-cdeust-developments-",
-            "-users-cdeust-documents-",
-            "-users-cdeust-",
-        ):
-            if stripped.startswith(prefix):
-                stripped = stripped[len(prefix) :]
-                break
-        # Strip worktree suffixes that survived (no slug match found above).
-        if "-worktrees-" in stripped:
-            stripped = stripped[: stripped.index("-worktrees-")]
-        # First hyphen-segment is the most meaningful tail (e.g. "jarvis"
-        # from "-Users-cdeust-Developments-jarvis"). Multi-segment tails
-        # (e.g. "ai-architect-prd-builder") collapse via earlier slug match.
-        return stripped.split("-", 1)[0] if stripped else lower
-    return lower
+
+def _slug_tail_fallback(clean: str, lower: str) -> str:
+    """Step 5 — nothing matched.
+
+    For a raw slug, returning the whole path-encoded string pollutes
+    domain ids, so the canonical ``-Users-…-Developments-`` /
+    ``-Documents-`` prefix is stripped and the trailing meaningful
+    segment returned instead.
+    """
+    if not clean.startswith("-"):
+        return lower
+    stripped = lower
+    for prefix in (
+        "-users-cdeust-developments-",
+        "-users-cdeust-documents-",
+        "-users-cdeust-",
+    ):
+        if stripped.startswith(prefix):
+            stripped = stripped[len(prefix) :]
+            break
+    # Strip worktree suffixes that survived (no slug match found above).
+    if "-worktrees-" in stripped:
+        stripped = stripped[: stripped.index("-worktrees-")]
+    # First hyphen-segment is the most meaningful tail (e.g. "jarvis" from
+    # "-Users-cdeust-Developments-jarvis"). Multi-segment tails (e.g.
+    # "ai-architect-prd-builder") collapse via the earlier slug match.
+    return stripped.split("-", 1)[0] if stripped else lower
 
 
 def resolve_cwd(cwd: str) -> str:
