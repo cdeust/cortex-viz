@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+from io import BytesIO
 from pathlib import Path
 
 import pytest
 
 from cortex_viz.core.activity_graph import normalize_event
 from cortex_viz.core.workflow_graph_schema import NodeIdFactory
+from cortex_viz.server.activity_stream import stream as activity_stream
+from cortex_viz.server.http_standalone_activity import serve_activity_ingest
 
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMA_PATH = ROOT / "docs" / "host-event-v1.schema.json"
@@ -29,6 +32,72 @@ def _event(**overrides):
     }
     event.update(overrides)
     return event
+
+
+class _Cursor:
+    def __init__(self, calls):
+        self.calls = calls
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        return False
+
+    def execute(self, sql, params=None):
+        self.calls.append((sql, params))
+
+    def fetchone(self):
+        return {"id": 41}
+
+
+class _Connection:
+    def __init__(self, calls):
+        self.calls = calls
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        return False
+
+    def cursor(self):
+        return _Cursor(self.calls)
+
+    def commit(self):
+        pass
+
+
+class _Pool:
+    def __init__(self):
+        self.calls = []
+
+    def connection(self):
+        return _Connection(self.calls)
+
+
+class _Store:
+    def __init__(self):
+        self.batch_pool = _Pool()
+
+
+class _Handler:
+    def __init__(self, payload):
+        raw = json.dumps(payload).encode("utf-8")
+        self.headers = {"Content-Length": str(len(raw))}
+        self.rfile = BytesIO(raw)
+        self.wfile = BytesIO()
+        self.status = None
+        self.response_headers = {}
+
+    def send_response(self, status):
+        self.status = status
+
+    def send_header(self, name, value):
+        self.response_headers[name] = value
+
+    def end_headers(self):
+        pass
 
 
 def test_published_schema_declares_the_runtime_contract():
@@ -73,6 +142,48 @@ def test_codex_tool_event_with_artifact_joins_the_existing_file_id_space():
         "result": "success",
         "path": "/repo/src/auth.ts",
     }
+
+
+def test_codex_event_traverses_http_store_and_live_sse_stream():
+    """Exercise the production seam, not just the neutral normalizer."""
+    store = _Store()
+    handler = _Handler(_event(event="file_read", tool="fs"))
+    live = activity_stream()
+    live.reset()
+
+    try:
+        serve_activity_ingest(handler, store)
+
+        assert handler.status == 200
+        assert json.loads(handler.wfile.getvalue()) == {
+            "ok": True,
+            "id": 41,
+            "action": "read",
+        }
+
+        inserts = [
+            params
+            for sql, params in store.batch_pool.calls
+            if params is not None and "INSERT INTO session_activity" in sql
+        ]
+        assert len(inserts) == 1
+        persisted = inserts[0]
+        assert persisted[0] == "session-1"
+        assert persisted[2:5] == ("file_read", "fs", "read")
+        assert persisted[5] == NodeIdFactory.file_id("/repo/src/auth.ts")
+        assert json.loads(persisted[10])["host"] == "codex"
+
+        emitted = list(live.subscribe(since=0, timeout=0.01))
+        assert len(emitted) == 1
+        _, event = emitted[0]
+        assert event["label"] == "activity"
+        assert any(
+            node["id"] == NodeIdFactory.file_id("/repo/src/auth.ts")
+            for node in event["nodes"]
+        )
+        assert event["edges"], "the SSE delta must include the action path"
+    finally:
+        live.reset()
 
 
 @pytest.mark.parametrize(
