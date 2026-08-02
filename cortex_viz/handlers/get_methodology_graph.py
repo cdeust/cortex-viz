@@ -30,7 +30,10 @@ schema = {
         "properties": {
             "domain": {
                 "type": "string",
-                "description": "Restrict the graph to a single cognitive domain. Omit for the full cross-domain graph.",
+                "description": (
+                    "Restrict the graph to a single cognitive domain. "
+                    "Omit for the full cross-domain graph."
+                ),
                 "examples": ["cortex", "auth-service"],
             },
         },

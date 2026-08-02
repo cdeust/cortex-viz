@@ -31,8 +31,9 @@ def read_full_conversation(file_path: str | Path) -> list[dict[str, Any]]:
                 try:
                     records.append(json.loads(trimmed))
                 except (json.JSONDecodeError, ValueError):
-                    # A malformed JSONL line is skipped by design: transcripts are appended
-                    # live, so the final line is routinely a partial write caught mid-flush.
+                    # A malformed JSONL line is skipped by design: transcripts
+                    # are appended live, so the final line is routinely a
+                    # partial write caught mid-flush.
                     pass
     except OSError:
         return []

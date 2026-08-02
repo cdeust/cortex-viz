@@ -305,8 +305,9 @@ def _auto_enable_ap() -> None:
                                     {"graph_path": str(graph_file)},
                                 )
                             except Exception:
-                                # resolve_graph is an idempotent optimisation. A failure leaves the graph
-                                # unresolved but still servable, and the roster loop continues.
+                                # resolve_graph is an idempotent optimisation.
+                                # A failure leaves the graph unresolved but
+                                # still servable; the roster loop continues.
                                 pass
                             continue
                         outdir.mkdir(parents=True, exist_ok=True)

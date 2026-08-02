@@ -212,8 +212,9 @@ def _drain(q: mp.Queue, proc, epoch: int) -> None:
                 try:
                     os.unlink(msg[2])
                 except OSError:
-                    # Best-effort cleanup of a stale spill file. If it is already gone, the
-                    # state this call wanted is the state that exists.
+                    # Best-effort cleanup of a stale spill file. If it is
+                    # already gone, the state this call wanted is the state
+                    # that exists.
                     pass
             continue
         try:
@@ -235,7 +236,8 @@ def _drain(q: mp.Queue, proc, epoch: int) -> None:
                     try:
                         os.unlink(path)
                     except OSError:
-                        # Same spill-file cleanup, on the path where the pickle was consumed.
+                        # Same spill-file cleanup, on the path where the
+                        # pickle was consumed.
                         pass
         except Exception as exc:  # pragma: no cover - defensive
             print(f"[cortex] build drain error: {exc}", file=sys.stderr)

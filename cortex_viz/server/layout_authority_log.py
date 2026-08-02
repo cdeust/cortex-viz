@@ -110,7 +110,8 @@ def _reap(dead: list[_queue_mod.Queue]) -> None:
             try:
                 _subscribers.remove(q)
             except ValueError:
-                # Already removed by a concurrent unsubscribe; removal is idempotent here.
+                # Already removed by a concurrent unsubscribe; removal is
+                # idempotent here.
                 pass
 
 

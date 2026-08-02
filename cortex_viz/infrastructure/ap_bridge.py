@@ -471,8 +471,8 @@ class APBridge:
                 # was ``await None`` → TypeError on every teardown.
                 self._client.close()
             except Exception:
-                # Teardown: the client is dropped either way, and a failing close must not
-                # mask whatever error triggered the teardown.
+                # Teardown: the client is dropped either way, and a failing
+                # close must not mask the error that triggered the teardown.
                 pass
             self._client = None
         self._connected = False

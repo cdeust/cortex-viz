@@ -194,7 +194,10 @@ def apply_batch_pagination(
     batch: int,
     batch_size: int,
 ) -> tuple[list[Node], list[Edge], list[dict[str, Any]], int]:
-    """Slice nodes/edges into batches. Returns (nodes, edges, clusters, total_batches)."""
+    """Slice nodes/edges into batches.
+
+    Returns (nodes, edges, clusters, total_batches).
+    """
     if batch_size <= 0 or len(nodes) == 0:
         return nodes, edges, clusters, 1
 

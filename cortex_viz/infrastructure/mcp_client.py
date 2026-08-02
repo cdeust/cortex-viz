@@ -325,7 +325,8 @@ class MCPClient:
             try:
                 self._proc.terminate()
             except Exception:
-                # Teardown: the process may have exited between the stdin close and here.
+                # Teardown: the process may have exited between the stdin
+                # close and here.
                 pass
             self._proc = None
 

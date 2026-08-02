@@ -174,9 +174,10 @@ def serve_full_document_from_ndjson(handler, snap: dict) -> None:
                     _json.loads(line).get("meta") or {}, separators=(",", ":")
                 ).encode()
             except ValueError:
-                # A header frame this server itself wrote failed to parse. meta falls back
-                # to the empty object initialised above, and the node/edge totals the
-                # client needs were already sent as response headers.
+                # A header frame this server itself wrote failed to parse.
+                # meta falls back to the empty object initialised above, and
+                # the node/edge totals the client needs were already sent as
+                # response headers.
                 pass
             continue
         prefix = b""

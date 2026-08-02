@@ -140,7 +140,8 @@ def _group_repos(repos: list[RepoInfo]) -> dict[str, str]:
                     {all_names[i][0], all_names[j][0]}
                 )
 
-    # Merge overlapping groups (if name appears in multiple prefix groups, use longest prefix)
+    # Merge overlapping groups: when a name appears in several prefix groups,
+    # the longest prefix wins.
     name_to_canonical: dict[str, str] = {}
     for prefix, members in sorted(prefix_groups.items(), key=lambda x: -len(x[0])):
         for member in members:
