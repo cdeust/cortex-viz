@@ -11,8 +11,8 @@ run with ``cwd=<plugin_root>`` — no ``scripts/launcher.py`` hop, no
 
 from __future__ import annotations
 
-import sys
 import subprocess
+import sys
 
 from cortex_viz.infrastructure.schema_migrate import (
     MigrationResult,

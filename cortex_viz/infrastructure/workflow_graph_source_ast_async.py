@@ -16,8 +16,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Iterator
 from concurrent.futures import TimeoutError as FutureTimeoutError
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import TYPE_CHECKING, Any
 
 from cortex_viz.errors import McpConnectionError
 
@@ -146,13 +147,13 @@ class _SyncLoop:
         a truncated full list).
         """
         loop = self._ensure_loop()
-        _SENTINEL = object()
+        sentinel = object()
 
         async def _step():
             try:
                 return await agen.__anext__()
             except StopAsyncIteration:
-                return _SENTINEL
+                return sentinel
 
         while True:
             future = asyncio.run_coroutine_threadsafe(_step(), loop)
@@ -164,30 +165,43 @@ class _SyncLoop:
                     "AP reader-thread step exceeded "
                     f"{_ap_sync_timeout_s():.0f}s — subprocess presumed wedged"
                 ) from exc
-            if item is _SENTINEL:
+            if item is sentinel:
                 return
             yield item
 
     def close(self) -> None:
+        # Guard first so the three teardown steps read at one level: each
+        # is independently best-effort, and a failure in one must not skip
+        # the next (a loop that refuses to stop still has to be closed).
         if self._loop and not self._loop.is_closed():
-            try:
-                self._loop.call_soon_threadsafe(self._loop.stop)
-            except Exception:
-                # Teardown: the loop may already be stopping or closed.
-                pass
-            try:
-                if self._thread is not None:
-                    self._thread.join(timeout=2.0)
-            except Exception:
-                # Teardown: the worker thread may already have exited.
-                pass
-            try:
-                self._loop.close()
-            except Exception:
-                # Teardown: the loop may already be closed.
-                pass
+            self._stop_loop()
+            self._join_thread()
+            self._close_loop()
         self._loop = None
         self._thread = None
+
+    def _stop_loop(self) -> None:
+        try:
+            self._loop.call_soon_threadsafe(self._loop.stop)
+        except Exception:
+            # Teardown: the loop may already be stopping or closed.
+            pass
+
+    def _join_thread(self) -> None:
+        try:
+            thread = self._thread
+            if thread is not None:
+                thread.join(timeout=2.0)
+        except Exception:
+            # Teardown: the worker thread may already have exited.
+            pass
+
+    def _close_loop(self) -> None:
+        try:
+            self._loop.close()
+        except Exception:
+            # Teardown: the loop may already be closed.
+            pass
 
 
 # ── Symbol/edge constants + per-graph async batch loaders ──────────────
@@ -235,10 +249,10 @@ def _as_list(payload: Any) -> list[dict]:
         if inner and isinstance(inner[0], dict) and inner[0].get("type") == "text":
             try:
                 parsed = json.loads(inner[0].get("text") or "")
-                if isinstance(parsed, list):
-                    return [r for r in parsed if isinstance(r, dict)]
             except ValueError:
                 return []
+            if isinstance(parsed, list):
+                return [r for r in parsed if isinstance(r, dict)]
         return [r for r in inner if isinstance(r, dict)]
     return []
 
@@ -360,8 +374,20 @@ def _repo_relative_for_match(p: str) -> str:
     return ""
 
 
+def _tail_matches(path_tails: list[str], file_part: str) -> bool:
+    """True when any requested path tail refers to the same file as ``file_part``.
+
+    Either side may be the shorter form, so containment is checked in both
+    directions rather than assuming which one is the suffix.
+    """
+    return any(
+        p == file_part or p.endswith(file_part) or file_part.endswith(p)
+        for p in path_tails
+    )
+
+
 async def _symbol_batches_async(
-    bridge: "APBridge",
+    bridge: APBridge,
     graph_path: str,
     paths: list[str],
 ):
@@ -473,10 +499,7 @@ async def _symbol_batches_async(
             # Python-side match as a secondary safeguard (the WHERE
             # clause is the primary filter; this handles edge cases
             # where a shorter tail matched a different file).
-            if path_tails and not any(
-                p == file_part or p.endswith(file_part) or file_part.endswith(p)
-                for p in path_tails
-            ):
+            if path_tails and not _tail_matches(path_tails, file_part):
                 continue
             # Resolve file_path back to the absolute form if possible.
             abs_match = next(

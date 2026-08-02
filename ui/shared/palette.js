@@ -67,7 +67,7 @@
     ctx.fillStyle = "#000";
     try {
       ctx.fillStyle = value; // ignored silently if the engine can't parse it
-    } catch (_) {
+    } catch {
       /* leave the #000 fallback */
     }
     ctx.fillRect(0, 0, 1, 1);

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import ClassVar
 
 from cortex_viz.server.git_diff_engine import (
     _last_commit_diff,
@@ -405,7 +406,7 @@ def test_resolve_name_relative_matches_known_repo_root(tmp_path: Path, monkeypat
             self.fs_path = fs_path
 
     class _FakeRegistry:
-        repos = [_FakeRepoInfo(str(repo_dir))]
+        repos: ClassVar[list] = [_FakeRepoInfo(str(repo_dir))]
 
     monkeypatch.setattr(
         "cortex_viz.shared.domain_mapping._build_registry",
@@ -439,7 +440,7 @@ def test_resolve_name_relative_refuses_a_symlink_leaving_the_repo(
             self.fs_path = fs_path
 
     class _FakeRegistry:
-        repos = [_FakeRepoInfo(str(repo_dir))]
+        repos: ClassVar[list] = [_FakeRepoInfo(str(repo_dir))]
 
     monkeypatch.setattr(
         "cortex_viz.shared.domain_mapping._build_registry",

@@ -52,7 +52,19 @@ LEGACY_MARKER = "mcp-prefix-allow-legacy"
 PREFIX_RE = re.compile(r"mcp__plugin_[a-zA-Z0-9_.\-]+?__")
 
 _BINARY_SUFFIXES = frozenset(
-    {".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".zip", ".gz", ".woff", ".woff2", ".ttf"}
+    {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".ico",
+        ".pdf",
+        ".zip",
+        ".gz",
+        ".woff",
+        ".woff2",
+        ".ttf",
+    }
 )
 
 
@@ -100,7 +112,7 @@ def test_only_resolvable_mcp_prefixes_are_named() -> None:
         "Unresolvable MCP tool prefix(es). The host drops these SILENTLY -- no "
         "error will ever tell you.\n"
         + "\n".join(offences)
-        + f'\n\nFix the reference, or if the dead spelling is quoted on purpose, '
+        + f"\n\nFix the reference, or if the dead spelling is quoted on purpose, "
         f'add the marker "{LEGACY_MARKER}" to that line.'
     )
 
@@ -114,7 +126,9 @@ def test_scan_is_not_vacuous() -> None:
     must not be able to reproduce it.
     """
     _, seen, scanned = _scan()
-    assert scanned > 50, f"only {scanned} files scanned; the walk is not reaching the repo"
+    assert scanned > 50, (
+        f"only {scanned} files scanned; the walk is not reaching the repo"
+    )
     assert seen, "no MCP prefix found anywhere; the regex or the root is wrong"
     assert "mcp__plugin_hypermnesia-mcp_cortex__" in seen
 

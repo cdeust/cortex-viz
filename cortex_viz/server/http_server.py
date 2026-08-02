@@ -80,7 +80,7 @@ def _read_html(html_path: Path) -> str:
     try:
         return html_path.read_text(encoding="utf-8")
     except Exception as e:
-        raise RuntimeError(f"Could not read UI file: {e}")
+        raise RuntimeError(f"Could not read UI file: {e}") from e
 
 
 def _build_handler_class(server_state: dict) -> type:

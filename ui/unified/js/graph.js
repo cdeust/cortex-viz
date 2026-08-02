@@ -158,7 +158,7 @@
           } else {
             // Large set: Archimedean spiral — no overlaps
             var spacing = 5;
-            for (var j = 0; j < count; j++) {
+            for (j = 0; j < count; j++) {
               var t = j * 0.5;
               var r = spacing + t * 2.2;
               children[j].x = px + Math.cos(t) * r;
@@ -321,7 +321,7 @@
           delta: { nodes: addedNodes, edges: addedEdges },
           old: null,
         });
-      } catch(_e){}
+      } catch {}
     }
   };
 

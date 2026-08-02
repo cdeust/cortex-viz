@@ -119,7 +119,7 @@ window.BRAIN = window.BRAIN || {};
       // hex may still be null only if CortexPalette AND getComputedStyle both
       // failed to resolve the token (broken page load) — skip .set() rather
       // than baking a literal, leaving THREE.Color's own default.
-      if (hex) { try { c.set(hex); } catch (e) { if (fallback) c.set(fallback); } }
+      if (hex) { try { c.set(hex); } catch { if (fallback) c.set(fallback); } }
       arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b;
     }
     return arr;

@@ -45,9 +45,7 @@ def test_parse_unified_classifies_lines():
 
 
 def test_parse_unified_truncates():
-    big = "@@ -1,1 +1,9999 @@\n" + "\n".join(
-        "+l%d" % i for i in range(_MAX_LINES + 500)
-    )
+    big = "@@ -1,1 +1,9999 @@\n" + "\n".join(f"+l{i}" for i in range(_MAX_LINES + 500))
     lines, truncated = _parse_unified(big)
     assert truncated
     assert len(lines) <= _MAX_LINES

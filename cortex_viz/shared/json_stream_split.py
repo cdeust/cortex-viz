@@ -31,7 +31,7 @@ structural bytes, and escape handling follows §7.
 from __future__ import annotations
 
 import re
-from typing import Iterable, Iterator
+from collections.abc import Iterable, Iterator
 
 # One token = a complete string literal (escape-aware) OR a single
 # structural bracket. In the compact wire shape everything between tokens

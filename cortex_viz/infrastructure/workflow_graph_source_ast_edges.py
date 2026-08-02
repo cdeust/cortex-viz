@@ -97,7 +97,7 @@ _AP_REL_TABLES: tuple[tuple[str, str, str, str, bool], ...] = (
 
 
 async def _edge_batches_async(
-    bridge: "APBridge",
+    bridge: APBridge,
     graph_path: str,
     paths: list[str],
 ):
@@ -151,9 +151,7 @@ async def _edge_batches_async(
         tables (HasMethod_* / Defines_*) have no such columns —
         callers default confidence to 1.0 for those kinds instead.
         """
-        if src_lbl == "File":
-            select_src = "src.id AS src_name"
-        elif src_lbl in _NON_QUALIFIED_LABELS:
+        if src_lbl == "File" or src_lbl in _NON_QUALIFIED_LABELS:
             select_src = "src.id AS src_name"
         else:
             select_src = "src.qualified_name AS src_name"
@@ -213,9 +211,7 @@ async def _edge_batches_async(
             except (TypeError, ValueError):
                 confidence = None
             reason_raw = r.get("reason") if has_provenance else None
-            reason_str = (
-                str(reason_raw).strip("'\"") or None if reason_raw else None
-            )
+            reason_str = str(reason_raw).strip("'\"") or None if reason_raw else None
             batch.append(
                 {
                     "kind": kind,

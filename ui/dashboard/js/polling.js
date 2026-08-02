@@ -35,7 +35,7 @@
           }, 600);
         }
       }
-    } catch (e) {
+    } catch {
       JMD.setState('connected', false);
     }
   }

@@ -93,7 +93,7 @@ window.JUG = window.JUG || {};
               return;
             }
             var frames = parser.push(decoder.decode(res.value, { stream: true }));
-            for (var i = 0; i < frames.length; i++) {
+            for (i = 0; i < frames.length; i++) {
               var f = frames[i];
               if (f.node_total != null) {
                 counts.node_total = f.node_total;

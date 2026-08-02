@@ -17,7 +17,8 @@ source in ``workflow_graph_source_native_ast``.
 
 from __future__ import annotations
 
-from typing import Any, Iterable, Iterator
+from collections.abc import Iterable, Iterator
+from typing import Any
 
 from cortex_viz.infrastructure.ap_bridge import (
     APBridge,
@@ -33,9 +34,9 @@ from cortex_viz.infrastructure.ap_bridge import (
 # whoever needs them.
 from cortex_viz.infrastructure.workflow_graph_source_ast_async import (
     _SYMBOL_LABELS,
-    _SyncLoop,
     _as_list,
     _symbol_batches_async,
+    _SyncLoop,
 )
 from cortex_viz.infrastructure.workflow_graph_source_ast_edges import (  # noqa: F401
     _edge_batches_async,
@@ -234,10 +235,10 @@ class WorkflowGraphASTSource:
         'verification skipped', not as confirmed staleness.
         """
         if not is_enabled():
-            return {q: False for q in qualnames}
+            return dict.fromkeys(qualnames, False)
         gp = resolve_graph_path()
         if not gp:
-            return {q: False for q in qualnames}
+            return dict.fromkeys(qualnames, False)
         uniq = [q for q in dict.fromkeys(qualnames) if q]
         if not uniq:
             return {}
@@ -257,7 +258,7 @@ class WorkflowGraphASTSource:
         its name equals the tail, or the qualified_name endswith the
         tail (``::tail`` or ``.tail``).
         """
-        out: dict[str, bool] = {q: False for q in qualnames}
+        out: dict[str, bool] = dict.fromkeys(qualnames, False)
         all_names: list[str] = []
         all_short: list[str] = []
         for label in _SYMBOL_LABELS:

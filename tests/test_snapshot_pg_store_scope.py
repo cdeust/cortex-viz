@@ -150,7 +150,11 @@ def test_ddl_creates_scoped_table_with_composite_pk():
     store = _FakeStore()
     snapshot_pg_store._ensure_table(store)
     ddl_calls = [c[0] for c in store.batch_pool.calls]
-    scoped_ddl = next(c for c in ddl_calls if "workflow_graph_snapshot_scoped" in c and "CREATE TABLE" in c)
+    scoped_ddl = next(
+        c
+        for c in ddl_calls
+        if "workflow_graph_snapshot_scoped" in c and "CREATE TABLE" in c
+    )
     assert "PRIMARY KEY (scope, fingerprint)" in scoped_ddl
     assert "DROP" not in scoped_ddl.upper()
 
@@ -161,7 +165,9 @@ def test_ddl_legacy_table_left_additive_no_drop():
     store = _FakeStore()
     snapshot_pg_store._ensure_table(store)
     ddl_calls = [c[0] for c in store.batch_pool.calls]
-    assert any("CREATE TABLE IF NOT EXISTS workflow_graph_snapshot " in c for c in ddl_calls)
+    assert any(
+        "CREATE TABLE IF NOT EXISTS workflow_graph_snapshot " in c for c in ddl_calls
+    )
     assert all("DROP" not in c.upper() for c in ddl_calls)
 
 

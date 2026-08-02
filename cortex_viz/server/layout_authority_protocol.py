@@ -22,8 +22,7 @@ Lamport event log.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional, Protocol, runtime_checkable
-
+from typing import Any, Protocol, runtime_checkable
 
 # ── Allowed-value sets (NORMATIVE) ────────────────────────────────
 
@@ -96,8 +95,8 @@ class NodeDelta:
     node_id: str
     kind: str
     domain_id: str
-    parent_id: Optional[str] = None
-    tool_name: Optional[str] = None
+    parent_id: str | None = None
+    tool_name: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -85,7 +85,7 @@ def iter_tool_uses(file_path: str | Path):
     if not fp.exists():
         return
     try:
-        with open(fp, "r", encoding="utf-8", errors="replace") as f:
+        with open(fp, encoding="utf-8", errors="replace") as f:
             for line_no, raw in enumerate(f, start=1):
                 s = raw.strip()
                 if not s:

@@ -102,4 +102,4 @@ def ingest_about_entity(b, link: dict) -> None:
     )
 
 
-__all__ = ["ingest_entity", "ingest_about_entity"]
+__all__ = ["ingest_about_entity", "ingest_entity"]

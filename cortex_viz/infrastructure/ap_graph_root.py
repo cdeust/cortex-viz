@@ -123,4 +123,4 @@ def absolutize(root: str | None, rel_path: str) -> str:
     return os.path.join(root.rstrip("/"), rel_path)
 
 
-__all__ = ["graph_source_root", "absolutize"]
+__all__ = ["absolutize", "graph_source_root"]

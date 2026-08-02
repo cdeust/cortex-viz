@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from cortex_viz.core.graph_builder import build_graph
-from cortex_viz.infrastructure.profile_store import load_profiles
 from cortex_viz.handlers._tool_meta import READ_ONLY
+from cortex_viz.infrastructure.profile_store import load_profiles
 
 schema = {
     "title": "Get methodology graph",
@@ -30,7 +30,10 @@ schema = {
         "properties": {
             "domain": {
                 "type": "string",
-                "description": "Restrict the graph to a single cognitive domain. Omit for the full cross-domain graph.",
+                "description": (
+                    "Restrict the graph to a single cognitive domain. "
+                    "Omit for the full cross-domain graph."
+                ),
                 "examples": ["cortex", "auth-service"],
             },
         },

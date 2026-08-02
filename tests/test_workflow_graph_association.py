@@ -49,8 +49,12 @@ def test_missing_source_endpoint_is_dropped_silently():
     target = _FakeTarget({NodeIdFactory.memory_id(2)})
     ingest_association(
         target,
-        {"source_memory_id": 1, "target_memory_id": 2, "weight": 1.0,
-         "shared_count": 1},
+        {
+            "source_memory_id": 1,
+            "target_memory_id": 2,
+            "weight": 1.0,
+            "shared_count": 1,
+        },
     )
     assert target._edges == []
 
@@ -59,8 +63,12 @@ def test_missing_target_endpoint_is_dropped_silently():
     target = _FakeTarget({NodeIdFactory.memory_id(1)})
     ingest_association(
         target,
-        {"source_memory_id": 1, "target_memory_id": 2, "weight": 1.0,
-         "shared_count": 1},
+        {
+            "source_memory_id": 1,
+            "target_memory_id": 2,
+            "weight": 1.0,
+            "shared_count": 1,
+        },
     )
     assert target._edges == []
 
@@ -68,12 +76,22 @@ def test_missing_target_endpoint_is_dropped_silently():
 def test_none_ids_are_skipped():
     target = _FakeTarget({NodeIdFactory.memory_id(1), NodeIdFactory.memory_id(2)})
     ingest_association(
-        target, {"source_memory_id": None, "target_memory_id": 2,
-                  "weight": 1.0, "shared_count": 1}
+        target,
+        {
+            "source_memory_id": None,
+            "target_memory_id": 2,
+            "weight": 1.0,
+            "shared_count": 1,
+        },
     )
     ingest_association(
-        target, {"source_memory_id": 1, "target_memory_id": None,
-                  "weight": 1.0, "shared_count": 1}
+        target,
+        {
+            "source_memory_id": 1,
+            "target_memory_id": None,
+            "weight": 1.0,
+            "shared_count": 1,
+        },
     )
     assert target._edges == []
 
@@ -93,16 +111,33 @@ def test_missing_weight_and_shared_count_default_to_zero():
 def test_reason_and_label_follow_the_evidence_channel():
     """Unified-substrate rows carry a per-row channel tag; the edge's
     reason mirrors it and shared_count>0 keeps the 'N shared' label."""
-    target = _FakeTarget({NodeIdFactory.memory_id(1), NodeIdFactory.memory_id(2),
-                          NodeIdFactory.memory_id(3), NodeIdFactory.memory_id(4)})
-    ingest_association(
-        target, {"source_memory_id": 1, "target_memory_id": 2,
-                  "weight": 0.9, "shared_count": 0, "reason": "semantic"}
+    target = _FakeTarget(
+        {
+            NodeIdFactory.memory_id(1),
+            NodeIdFactory.memory_id(2),
+            NodeIdFactory.memory_id(3),
+            NodeIdFactory.memory_id(4),
+        }
     )
     ingest_association(
-        target, {"source_memory_id": 3, "target_memory_id": 4,
-                  "weight": 1.0, "shared_count": 2,
-                  "reason": "co-entity+semantic"}
+        target,
+        {
+            "source_memory_id": 1,
+            "target_memory_id": 2,
+            "weight": 0.9,
+            "shared_count": 0,
+            "reason": "semantic",
+        },
+    )
+    ingest_association(
+        target,
+        {
+            "source_memory_id": 3,
+            "target_memory_id": 4,
+            "weight": 1.0,
+            "shared_count": 2,
+            "reason": "co-entity+semantic",
+        },
     )
     assert target._edges[0].reason == "semantic"
     assert target._edges[0].label == "semantic"
@@ -115,8 +150,14 @@ def test_temporal_only_pair_labelled_by_channel():
     label is the channel tag, same fallback as semantic-only pairs."""
     target = _FakeTarget({NodeIdFactory.memory_id(5), NodeIdFactory.memory_id(6)})
     ingest_association(
-        target, {"source_memory_id": 5, "target_memory_id": 6,
-                  "weight": 0.8, "shared_count": 0, "reason": "temporal"}
+        target,
+        {
+            "source_memory_id": 5,
+            "target_memory_id": 6,
+            "weight": 0.8,
+            "shared_count": 0,
+            "reason": "temporal",
+        },
     )
     assert target._edges[0].reason == "temporal"
     assert target._edges[0].label == "temporal"

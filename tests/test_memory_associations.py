@@ -155,8 +155,16 @@ def test_ceiling_entities_excluded_is_a_forwarded_sql_param():
 
 
 def test_zero_top_k_short_circuits_without_querying():
-    store = _FakeStore(rows=[{"source_memory_id": 1, "target_memory_id": 2,
-                               "weight": 1.0, "shared_count": 1}])
+    store = _FakeStore(
+        rows=[
+            {
+                "source_memory_id": 1,
+                "target_memory_id": 2,
+                "weight": 1.0,
+                "shared_count": 1,
+            }
+        ]
+    )
     out = load_co_entity_associations(store, top_k=0)
     assert out == []
     assert store.calls == []
@@ -216,8 +224,9 @@ def test_semantic_min_sim_env_override(monkeypatch):
 
 
 def test_semantic_zero_top_k_short_circuits_without_querying():
-    store = _FakeStore(rows=[{"source_memory_id": 1, "target_memory_id": 2,
-                               "weight": 0.9}])
+    store = _FakeStore(
+        rows=[{"source_memory_id": 1, "target_memory_id": 2, "weight": 0.9}]
+    )
     out = load_semantic_associations(store, top_k=0)
     assert out == []
     assert store.calls == []
@@ -227,9 +236,7 @@ def test_semantic_row_shape_and_types():
     rows = [{"source_memory_id": 1, "target_memory_id": 2, "weight": "0.83"}]
     store = _FakeStore(rows=rows)
     out = load_semantic_associations(store)
-    assert out == [
-        {"source_memory_id": 1, "target_memory_id": 2, "weight": 0.83}
-    ]
+    assert out == [{"source_memory_id": 1, "target_memory_id": 2, "weight": 0.83}]
 
 
 # ── v3 temporal co-access loader ────────────────────────────────────
@@ -280,8 +287,9 @@ def test_temporal_invalid_env_falls_back_to_defaults(monkeypatch):
 
 
 def test_temporal_zero_top_k_short_circuits_without_querying():
-    store = _FakeStore(rows=[{"source_memory_id": 1, "target_memory_id": 2,
-                               "weight": 0.9}])
+    store = _FakeStore(
+        rows=[{"source_memory_id": 1, "target_memory_id": 2, "weight": 0.9}]
+    )
     out = load_temporal_associations(store, top_k=0)
     assert out == []
     assert store.calls == []
@@ -291,9 +299,7 @@ def test_temporal_row_shape_and_types():
     rows = [{"source_memory_id": 1, "target_memory_id": 2, "weight": "0.75"}]
     store = _FakeStore(rows=rows)
     out = load_temporal_associations(store)
-    assert out == [
-        {"source_memory_id": 1, "target_memory_id": 2, "weight": 0.75}
-    ]
+    assert out == [{"source_memory_id": 1, "target_memory_id": 2, "weight": 0.75}]
 
 
 # ── channel combiner (pure — no store involved) ─────────────────────
@@ -304,10 +310,18 @@ def test_combine_normalizes_each_channel_by_its_own_max():
     bounded cosine sim); each is divided by its own max before the
     per-pair MAX, so a channel's strongest pair always lands at 1.0."""
     co = [
-        {"source_memory_id": 1, "target_memory_id": 2, "weight": 10.0,
-         "shared_count": 2},
-        {"source_memory_id": 3, "target_memory_id": 4, "weight": 5.0,
-         "shared_count": 1},
+        {
+            "source_memory_id": 1,
+            "target_memory_id": 2,
+            "weight": 10.0,
+            "shared_count": 2,
+        },
+        {
+            "source_memory_id": 3,
+            "target_memory_id": 4,
+            "weight": 5.0,
+            "shared_count": 1,
+        },
     ]
     sem = [
         {"source_memory_id": 5, "target_memory_id": 6, "weight": 0.9},
@@ -324,8 +338,9 @@ def test_combine_normalizes_each_channel_by_its_own_max():
 
 
 def test_combine_shared_pair_takes_max_and_merges_reason():
-    co = [{"source_memory_id": 1, "target_memory_id": 2, "weight": 4.0,
-           "shared_count": 3}]
+    co = [
+        {"source_memory_id": 1, "target_memory_id": 2, "weight": 4.0, "shared_count": 3}
+    ]
     sem = [{"source_memory_id": 1, "target_memory_id": 2, "weight": 0.8}]
     out = combine_associations(co, sem)
     assert len(out) == 1
@@ -337,8 +352,9 @@ def test_combine_shared_pair_takes_max_and_merges_reason():
 
 
 def test_combine_tags_single_channel_reasons():
-    co = [{"source_memory_id": 1, "target_memory_id": 2, "weight": 4.0,
-           "shared_count": 1}]
+    co = [
+        {"source_memory_id": 1, "target_memory_id": 2, "weight": 4.0, "shared_count": 1}
+    ]
     sem = [{"source_memory_id": 3, "target_memory_id": 4, "weight": 0.7}]
     by_pair = {
         (r["source_memory_id"], r["target_memory_id"]): r
@@ -374,8 +390,9 @@ def test_combine_temporal_channel_normalized_and_tagged():
 
 
 def test_combine_three_channel_pair_joins_reasons_in_order():
-    co = [{"source_memory_id": 1, "target_memory_id": 2, "weight": 4.0,
-           "shared_count": 2}]
+    co = [
+        {"source_memory_id": 1, "target_memory_id": 2, "weight": 4.0, "shared_count": 2}
+    ]
     sem = [{"source_memory_id": 1, "target_memory_id": 2, "weight": 0.8}]
     temp = [{"source_memory_id": 1, "target_memory_id": 2, "weight": 0.9}]
     out = combine_associations(co, sem, temp)
@@ -389,8 +406,9 @@ def test_combine_three_channel_pair_joins_reasons_in_order():
 def test_combine_temporal_default_is_backward_compatible():
     """Omitting temporal_rows behaves exactly like the two-channel v2
     combiner — existing callers are unaffected."""
-    co = [{"source_memory_id": 1, "target_memory_id": 2, "weight": 4.0,
-           "shared_count": 1}]
+    co = [
+        {"source_memory_id": 1, "target_memory_id": 2, "weight": 4.0, "shared_count": 1}
+    ]
     assert combine_associations(co, []) == combine_associations(co, [], None)
 
 
@@ -414,13 +432,19 @@ class _ThreeChannelStore:
     def query(self, sql, params=None, *, batch=False):
         self.calls.append(sql)
         if "memory_entities" in sql:  # co-entity channel
-            return [{"source_memory_id": 1, "target_memory_id": 2,
-                     "weight": 3.0, "shared_count": 2}]
+            return [
+                {
+                    "source_memory_id": 1,
+                    "target_memory_id": 2,
+                    "weight": 3.0,
+                    "shared_count": 2,
+                }
+            ]
         if "get_temporal_co_access" in sql:  # temporal channel
-            return [{"source_memory_id": 1, "target_memory_id": 2,
-                     "weight": 0.7}]
-        return [{"source_memory_id": 1, "target_memory_id": 2,
-                 "weight": 0.9}]  # semantic channel
+            return [{"source_memory_id": 1, "target_memory_id": 2, "weight": 0.7}]
+        return [
+            {"source_memory_id": 1, "target_memory_id": 2, "weight": 0.9}
+        ]  # semantic channel
 
 
 def test_load_memory_associations_default_runs_all_three_channels(monkeypatch):

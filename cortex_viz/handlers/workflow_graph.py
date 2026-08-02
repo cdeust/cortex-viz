@@ -15,13 +15,6 @@ from cortex_viz.core.workflow_graph_schema import (
     GraphValidationError,
     validate_graph,
 )
-from cortex_viz.infrastructure.workflow_graph_source import WorkflowGraphSource
-from cortex_viz.infrastructure.workflow_graph_source_ast import (
-    WorkflowGraphASTSource,
-)
-from cortex_viz.infrastructure.workflow_graph_source_native_ast import (
-    WorkflowGraphNativeASTSource,
-)
 
 # Serialization helpers + the interleaved streaming path were split into
 # sibling modules (500-line limit). ``_node_to_dict`` is re-exported for
@@ -31,6 +24,13 @@ from cortex_viz.handlers.workflow_graph_serialize import (
     _node_to_dict,
 )
 from cortex_viz.handlers.workflow_graph_streaming import _build_interleaved
+from cortex_viz.infrastructure.workflow_graph_source import WorkflowGraphSource
+from cortex_viz.infrastructure.workflow_graph_source_ast import (
+    WorkflowGraphASTSource,
+)
+from cortex_viz.infrastructure.workflow_graph_source_native_ast import (
+    WorkflowGraphNativeASTSource,
+)
 
 
 def build_workflow_graph(
@@ -342,4 +342,4 @@ def build_workflow_graph(
     }
 
 
-__all__ = ["build_workflow_graph", "GraphValidationError"]
+__all__ = ["GraphValidationError", "build_workflow_graph"]

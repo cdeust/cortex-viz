@@ -9,16 +9,17 @@ to keep that module under the 300-line project ceiling.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from cortex_viz.infrastructure.config import CLAUDE_DIR
+from cortex_viz.infrastructure.file_io import list_dir
 from cortex_viz.infrastructure.scanner import (
     discover_conversations,
     iter_tool_uses,
     read_head_tail,
 )
-from cortex_viz.infrastructure.file_io import list_dir
 
 _SLASH_RE = re.compile(r"^\s*/([A-Za-z][A-Za-z0-9:_\-]*)")
 _MCP_NAME_RE = re.compile(r"^mcp__([A-Za-z0-9_]+)__([A-Za-z0-9_]+)$")

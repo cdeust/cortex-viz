@@ -22,7 +22,6 @@ All constants below are copied verbatim from that file (lines 43-84).
 from __future__ import annotations
 
 import math
-from typing import Tuple
 
 # ── Radii (workflow_graph.js lines 43-54) ────────────────────────────────
 SETUP_R: float = 70.0
@@ -74,7 +73,7 @@ def domain_anchor(
     cx: float,
     cy: float,
     base_r: float,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """Fibonacci spiral — same formula as workflow_graph.js line 326."""
     n = max(total_domains, 1)
     r = base_r * math.sqrt((index + 0.5) / n)
@@ -82,7 +81,7 @@ def domain_anchor(
     return (cx + r * math.cos(theta), cy + r * math.sin(theta))
 
 
-def outward_angle(anchor: Tuple[float, float], cx: float, cy: float) -> float:
+def outward_angle(anchor: tuple[float, float], cx: float, cy: float) -> float:
     """Radially-outward axis from graph center to the domain anchor.
 
     Domains within 5px of the center get a stable upward bias
@@ -96,11 +95,11 @@ def outward_angle(anchor: Tuple[float, float], cx: float, cy: float) -> float:
 
 # ── L1 setup ring (workflow_graph.js lines 500-507) ─────────────────────
 def slot_for_setup(
-    anchor: Tuple[float, float],
+    anchor: tuple[float, float],
     outward: float,
     idx: int,
     total: int,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """Skill / hook / command / agent fan inside the setup sector."""
     arc = SECTOR_SETUP_HALF * 2.0
     n = max(total, 1)
@@ -111,10 +110,10 @@ def slot_for_setup(
 
 # ── L2 tool hubs (workflow_graph.js lines 469-476) ──────────────────────
 def slot_for_tool_hub(
-    anchor: Tuple[float, float],
+    anchor: tuple[float, float],
     outward: float,
     tool_name: str,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """Tool hub at fixed per-tool angle along the outward axis."""
     local = TOOL_LOCAL_ANGLE.get(tool_name, 0.0)
     t = outward + local
@@ -128,11 +127,11 @@ def tool_hub_angle(outward: float, tool_name: str) -> float:
 
 # ── L3 files (workflow_graph.js lines 485-495) ──────────────────────────
 def slot_for_file(
-    anchor: Tuple[float, float],
+    anchor: tuple[float, float],
     hub_angle: float,
     idx_in_hub: int,
     total_in_hub: int,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """File orbits its primary tool hub; arc widens with file count."""
     n = max(total_in_hub, 1)
     arc = min(0.35, 0.08 + n * 0.015)
@@ -143,11 +142,11 @@ def slot_for_file(
 
 # ── L4 discussions (workflow_graph.js lines 511-519) ────────────────────
 def slot_for_discussion(
-    anchor: Tuple[float, float],
+    anchor: tuple[float, float],
     outward: float,
     idx: int,
     total: int,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """Discussion lane on one side of the domain, opposite memories."""
     center = outward + SECTOR_SIDE_ANGLE
     n = max(total, 1)
@@ -159,11 +158,11 @@ def slot_for_discussion(
 
 # ── L5 memories (workflow_graph.js lines 522-531) ───────────────────────
 def slot_for_memory(
-    anchor: Tuple[float, float],
+    anchor: tuple[float, float],
     outward: float,
     idx: int,
     total: int,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """Memory lane on the opposite side from discussions."""
     center = outward - SECTOR_SIDE_ANGLE
     n = max(total, 1)
@@ -175,11 +174,11 @@ def slot_for_memory(
 
 # ── MCPs (workflow_graph.js lines 536-541) ──────────────────────────────
 def slot_for_mcp(
-    anchor: Tuple[float, float],
+    anchor: tuple[float, float],
     outward: float,
     idx: int,
     total: int,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """MCPs sit INWARD of the domain so cross-domain edges fan visibly."""
     t = outward + math.pi
     jitter = (idx - (max(total, 1) - 1) / 2.0) * 0.25
@@ -191,10 +190,10 @@ def slot_for_mcp(
 
 # ── L6 symbols (workflow_graph.js — petal cloud around parent file) ─────
 def slot_for_symbol(
-    file_slot: Tuple[float, float],
+    file_slot: tuple[float, float],
     idx_in_file: int,
     total_in_file: int,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """Petal around parent file. Idx-deterministic angle around the file."""
     if total_in_file <= 0:
         return file_slot
@@ -204,7 +203,7 @@ def slot_for_symbol(
 
 
 # ── Dispatcher ──────────────────────────────────────────────────────────
-def compute_slot(node_kind: str, ctx: dict) -> Tuple[float, float]:
+def compute_slot(node_kind: str, ctx: dict) -> tuple[float, float]:
     """Closed-form slot lookup keyed by node kind.
 
     `ctx` is a plain dict supplying only the fields each helper needs:

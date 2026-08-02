@@ -259,9 +259,14 @@ def build_chain(
                 if emit:
                     nodes.append(
                         {
-                            "id": nid, "kind": "discussion", "type": "discussion",
-                            "label": _short(text, 60), "full": text[:4000],
-                            "ts": ts, "seq": step, "session_id": session_id,
+                            "id": nid,
+                            "kind": "discussion",
+                            "type": "discussion",
+                            "label": _short(text, 60),
+                            "full": text[:4000],
+                            "ts": ts,
+                            "seq": step,
+                            "session_id": session_id,
                             "domain_id": session_node,
                         }
                     )
@@ -272,18 +277,26 @@ def build_chain(
                 if emit:
                     nodes.append(
                         {
-                            "id": nid, "kind": "memory", "type": "memory",
+                            "id": nid,
+                            "kind": "memory",
+                            "type": "memory",
                             "label": op + " · " + _short(text, 50),
-                            "full": text[:4000], "ts": ts, "seq": step,
-                            "session_id": session_id, "domain_id": session_node,
+                            "full": text[:4000],
+                            "ts": ts,
+                            "seq": step,
+                            "session_id": session_id,
+                            "domain_id": session_node,
                         }
                     )
                 verb = "remembers"
             if emit and prev_id is not None:
                 edges.append(
                     {
-                        "id": f"{prev_id}->{nid}", "source": prev_id,
-                        "target": nid, "kind": verb, "type": verb,
+                        "id": f"{prev_id}->{nid}",
+                        "source": prev_id,
+                        "target": nid,
+                        "kind": verb,
+                        "type": verb,
                     }
                 )
             step += 1

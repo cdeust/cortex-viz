@@ -17,7 +17,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from cortex_viz.server.http_launcher import launch_server, open_in_browser
 from cortex_viz.handlers._tool_meta import READ_ONLY_EXTERNAL
 from cortex_viz.infrastructure.db_probe import (
     DB_UNREACHABLE_ERRORS,
@@ -29,6 +28,7 @@ from cortex_viz.infrastructure.schema_migrate import (
     run_schema_migration,
 )
 from cortex_viz.infrastructure.schema_preflight import check_schema
+from cortex_viz.server.http_launcher import launch_server, open_in_browser
 
 schema = {
     "title": "Open visualization",

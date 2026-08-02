@@ -100,6 +100,11 @@ dev = [
     "pytest-timeout>=2.3.0",
     # scripts/mutation_check.sh — rules/coding-standards.md §12.
     "mutmut>=3.6.0",
+    # The lint gate (issue #45). Floor AND ceiling: a ruff minor release
+    # adds rules, so an open range would fail CI on a commit that changed
+    # nothing. Bumping it is a deliberate edit with the new findings fixed
+    # in the same PR — the same contract dependabot already applies to npm.
+    "ruff>=0.15.0,<0.16.0",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -109,7 +114,54 @@ packages = ["cortex_viz"]
 "ui" = "cortex_viz/ui"
 
 [tool.ruff]
-extend-exclude = [".claude"]
+# `scratchpad*` are untracked local working directories; a local `ruff format .`
+# reformatting a throwaway script is noise, and CI never sees them anyway.
+extend-exclude = [".claude", "scratchpad", "scratchpad-session"]
+
+[tool.ruff.lint]
+# The gate enforced by the `lint` job in .github/workflows/ci.yml (issue #45).
+# Ruff's default set is E4/E7/E9 + F — syntax and undefined names only, which
+# the tree already passed. That is not "maximally strict with warnings"
+# (OpenSSF `warnings_strict`), so the set below is widened to the rule
+# families whose findings are actionable on this codebase. `ALL` is not the
+# target: it reports 6369 here, dominated by docstring-style (D), annotation
+# completeness (ANN) and assert-in-test (S101) findings that would be answered
+# with a blanket ignore, which is a preference dressed as a gate.
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort — import ordering
+    "N",    # pep8-naming
+    "UP",   # pyupgrade — the floor is Python 3.10
+    "B",    # flake8-bugbear — real bug patterns
+    "C4",   # flake8-comprehensions
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific
+]
+ignore = [
+    # RUF100 (unused-noqa) is only sound when the enabled set IS the full set.
+    # Under a curated `select` it does not find stale suppressions, it finds
+    # suppressions for rules this config does not enable: enabling it deleted
+    # 52 of the 60 it flagged — SLF001 (45), S603 (4), BLE001 (2), S606 (1) —
+    # each a reviewed decision, four of them security ones, that would have
+    # come back as fresh findings the next time anyone ran `--select S`.
+    "RUF100",
+    # SIM105 (try-except-pass -> contextlib.suppress) is withheld by ruff's own
+    # fixer whenever the handler carries a comment, because the rewrite would
+    # discard it. Measured here: 42 sites, 0 fixable even under
+    # `--unsafe-fixes` — i.e. every one of them states its named failure mode
+    # inside the handler, which is what rules/coding-standards.md §3.2 and §9
+    # require and what a bare `contextlib.suppress(Exception)` would erase.
+    # Enforcing the rule would mean deleting the justifications the gate exists
+    # to protect.
+    "SIM105",
+]
+# The only two confusables this codebase uses, both deliberately and both
+# more correct than their ASCII lookalike: `×` for tile dimensions (256×256)
+# and `–` for ranges in prose. Naming them keeps RUF001/RUF002/RUF003 armed
+# against the homoglyphs the rule actually exists for (Cyrillic а, Greek ο).
+allowed-confusables = ["×", "–"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

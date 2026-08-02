@@ -22,13 +22,13 @@ from cortex_viz.shared.json_stream_split import (
 # Labels chosen to defeat naive splitters: structural bytes inside strings,
 # escaped quotes, escaped backslash before a closing quote, unicode.
 _HOSTILE_LABELS = [
-    'plain',
-    'braces {inside} [brackets]',
+    "plain",
+    "braces {inside} [brackets]",
     'quote \\" then }',
-    'trailing backslash \\\\',
+    "trailing backslash \\\\",
     'json-in-string: {"k":[1,2,{"x":"]"}]}',
-    'unicode 🧠 héat',
-    '',
+    "unicode 🧠 héat",
+    "",
     'comma, and ]},{" fake boundary',
 ]
 

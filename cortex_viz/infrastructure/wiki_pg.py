@@ -57,8 +57,10 @@ def page_meta(store, rel_path: str) -> dict[str, Any]:
             for r in store.query(
                 """
                 SELECT l.src_page_id, l.dst_slug, l.dst_page_id, l.link_kind,
-                       (SELECT title FROM wiki.pages WHERE id = l.src_page_id) AS src_title,
-                       (SELECT rel_path FROM wiki.pages WHERE id = l.src_page_id) AS src_rel_path
+                       (SELECT title FROM wiki.pages WHERE id = l.src_page_id)
+                           AS src_title,
+                       (SELECT rel_path FROM wiki.pages WHERE id = l.src_page_id)
+                           AS src_rel_path
                 FROM wiki.links l WHERE l.dst_page_id = %s LIMIT 100
                 """,
                 (page_id,),
@@ -75,7 +77,8 @@ def page_meta(store, rel_path: str) -> dict[str, Any]:
         citations = [
             _isodict(r)
             for r in store.query(
-                "SELECT id, session_id, domain, memory_id, cited_at FROM wiki.citations "
+                "SELECT id, session_id, domain, memory_id, cited_at "
+                "FROM wiki.citations "
                 "WHERE page_id = %s ORDER BY cited_at DESC LIMIT 20",
                 (page_id,),
             )
@@ -113,4 +116,4 @@ def list_memos(
     return {"memos": memos, "count": len(memos)}
 
 
-__all__ = ["page_meta", "list_memos"]
+__all__ = ["list_memos", "page_meta"]

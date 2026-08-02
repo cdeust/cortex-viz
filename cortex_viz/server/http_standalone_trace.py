@@ -279,9 +279,9 @@ def serve_trace_impact(handler) -> None:
 
 
 __all__ = [
-    "serve_trace_domains",
-    "serve_trace_sessions",
     "serve_trace_chain",
+    "serve_trace_domains",
     "serve_trace_file",
     "serve_trace_impact",
+    "serve_trace_sessions",
 ]

@@ -36,7 +36,7 @@ graph.
 from __future__ import annotations
 
 import os
-from typing import Iterable
+from collections.abc import Iterable
 
 # source: CPM resolution gamma is NOT a paper-derived universal constant
 # — it sets the density granularity of the partition (a community's
@@ -161,7 +161,9 @@ def detect_communities(
             seed=seed,
         )
         membership = partition.membership
-        for vid, comm in zip(vertices, membership):
+        # strict=True: leidenalg returns one membership entry per vertex, so
+        # a length mismatch is a broken invariant, not an input to truncate.
+        for vid, comm in zip(vertices, membership, strict=True):
             mapping[vid] = int(comm)
         next_cid = (max(membership) + 1) if membership else 0
 
@@ -177,4 +179,4 @@ def detect_communities(
     return mapping
 
 
-__all__ = ["detect_communities", "DEFAULT_RESOLUTION", "SEED"]
+__all__ = ["DEFAULT_RESOLUTION", "SEED", "detect_communities"]

@@ -19,9 +19,11 @@ def test_resolve_source_target_ids_matches_wiki_source_resolve(monkeypatch):
     monkeypatch.setattr(
         mod,
         "resolve_file_node_id",
-        lambda domain_id, source_path: NodeIdFactory.file_id(f"/repo/cortex/{source_path}")
-        if domain_id == "domain:cortex"
-        else None,
+        lambda domain_id, source_path: (
+            NodeIdFactory.file_id(f"/repo/cortex/{source_path}")
+            if domain_id == "domain:cortex"
+            else None
+        ),
     )
     sources = [
         {"source_path": "foo.py", "link_kind": "documents"},
@@ -37,10 +39,10 @@ def test_resolve_source_target_ids_matches_wiki_source_resolve(monkeypatch):
 def test_resolve_source_target_ids_drops_unresolvable_domain(monkeypatch):
     # resolve_file_node_id returning None (e.g. a memory-only domain with
     # no checked-out repo) must drop the source rather than fabricate an id.
-    monkeypatch.setattr(mod, "resolve_file_node_id", lambda domain_id, source_path: None)
-    got = mod.resolve_source_target_ids(
-        "domain:no-repo", [{"source_path": "foo.py"}]
+    monkeypatch.setattr(
+        mod, "resolve_file_node_id", lambda domain_id, source_path: None
     )
+    got = mod.resolve_source_target_ids("domain:no-repo", [{"source_path": "foo.py"}])
     assert got == {}
 
 
@@ -61,8 +63,12 @@ def test_match_activity_rows_legacy_row_self_heals_and_matches():
     tid = file_target_id("/repo/cortex/foo.py", cwd="/repo/cortex")
     target_map = {"foo.py": tid}
     legacy_rows = [
-        {"id": 1, "target_id": "file:/repo/cortex/foo.py", "target_kind": "file",
-         "cwd": "/repo/cortex"},
+        {
+            "id": 1,
+            "target_id": "file:/repo/cortex/foo.py",
+            "target_kind": "file",
+            "cwd": "/repo/cortex",
+        },
     ]
     matched = mod.match_activity_rows(target_map, [], legacy_rows)
     assert len(matched) == 1
@@ -73,8 +79,12 @@ def test_match_activity_rows_legacy_row_self_heals_and_matches():
 def test_match_activity_rows_legacy_row_that_does_not_resolve_is_skipped():
     target_map = {"foo.py": file_target_id("/repo/cortex/foo.py", cwd="")}
     legacy_rows = [
-        {"id": 1, "target_id": "file:/repo/other/unrelated.py", "target_kind": "file",
-         "cwd": ""},
+        {
+            "id": 1,
+            "target_id": "file:/repo/other/unrelated.py",
+            "target_kind": "file",
+            "cwd": "",
+        },
     ]
     assert mod.match_activity_rows(target_map, [], legacy_rows) == []
 

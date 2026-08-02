@@ -120,8 +120,8 @@ def _apply_cors_headers(handler: BaseHTTPRequestHandler) -> None:
 
 
 __all__ = [
-    "validate_host_header",
-    "resolve_allowed_origin",
-    "enforce_same_origin_write",
     "_apply_cors_headers",
+    "enforce_same_origin_write",
+    "resolve_allowed_origin",
+    "validate_host_header",
 ]

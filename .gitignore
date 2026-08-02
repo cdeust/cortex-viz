@@ -12,3 +12,8 @@ node_modules/
 coverage/
 .stryker-tmp/
 reports/
+
+# Local working directories (also excluded in [tool.ruff] extend-exclude,
+# so a local `ruff format .` never reformats a throwaway script).
+scratchpad/
+scratchpad-session/

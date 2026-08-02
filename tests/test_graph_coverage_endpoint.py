@@ -125,7 +125,11 @@ def test_failure_entries_missing_fields_are_defaulted():
     )
     # the string entry is dropped; the two dicts are defaulted.
     assert len(out["extraction_failures"]) == 2
-    assert out["extraction_failures"][0] == {"path": "", "error_ranges": [], "reason": ""}
+    assert out["extraction_failures"][0] == {
+        "path": "",
+        "error_ranges": [],
+        "reason": "",
+    }
     assert out["extraction_failures"][1]["path"] == "x"
 
 

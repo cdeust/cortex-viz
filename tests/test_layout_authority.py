@@ -253,7 +253,7 @@ class TestReplayCorrectness(unittest.TestCase):
             self.assertEqual(got, expected, f"mismatch at since={cut}")
 
     def test_replay_since_newest_returns_empty(self) -> None:
-        for i in range(10):
+        for _i in range(10):
             evlog.emit("slot", b"x")
         newest = evlog.stats()["newest_seq"]
         events, oldest = evlog.replay_since(newest)

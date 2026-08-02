@@ -28,10 +28,9 @@ This module is pure logic. Imports stdlib only. No I/O.
 from __future__ import annotations
 
 import hashlib
-from typing import Iterable, Iterator
+from collections.abc import Iterable, Iterator
 
 from cortex_viz.server.layout_authority_protocol import NodeDelta
-
 
 # ── Kinds that are ALWAYS visible regardless of zoom ─────────────
 # These form the structural scaffolding; their cardinality is bounded

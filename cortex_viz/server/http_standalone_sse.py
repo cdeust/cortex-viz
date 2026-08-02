@@ -61,8 +61,8 @@ def _write_sse_batch_events(handler, stream, cursor: int) -> tuple[int, bool]:
 
 def _write_sse_done(handler) -> None:
     """Write the terminal ``done`` SSE event once the build has finished."""
-    from cortex_viz.server.graph_event_stream import format_done
     from cortex_viz.server.graph_appliers import get_build_progress
+    from cortex_viz.server.graph_event_stream import format_done
 
     prog = get_build_progress()
     try:
@@ -162,8 +162,8 @@ def serve_graph_events(handler, store=None) -> None:
     Lazy-kicks the build (ensure_build_started) so opening the SSE
     stream on a cold cache starts the pipeline producing events.
     """
-    from cortex_viz.server.graph_event_stream import get_stream
     from cortex_viz.server.graph_build import ensure_build_started
+    from cortex_viz.server.graph_event_stream import get_stream
 
     # A held SSE stream is a live client: without this, Chrome freezing a
     # background tab stops the 30s stats polls, the idle watchdog sees no

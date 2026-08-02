@@ -79,23 +79,30 @@ def serve(handler, store) -> None:
 
     q = authority.subscribe()
     try:
-        while True:
-            try:
-                seq, kind, payload = q.get(timeout=_KEEPALIVE_TIMEOUT_S)
-            except _queue_mod.Empty:
-                # Keepalive — payload is a non-empty SSE comment.
-                if not _write_chunk(handler, _wire.format_keepalive()):
-                    return
-                continue
-
-            if not _write_chunk(handler, payload):
-                return
-
-            if kind == "done":
-                _write_terminator(handler)
-                return
+        while _pump_one(handler, q):
+            pass
     finally:
         authority.unsubscribe(q)
+
+
+def _pump_one(handler, q) -> bool:
+    """Deliver one authority message. False means the stream is finished.
+
+    Ends on a client that stopped reading (``_write_chunk`` returns False)
+    or on the authority's ``done`` message, which is terminated first.
+    """
+    try:
+        _seq, kind, payload = q.get(timeout=_KEEPALIVE_TIMEOUT_S)
+    except _queue_mod.Empty:
+        # Keepalive — payload is a non-empty SSE comment.
+        return _write_chunk(handler, _wire.format_keepalive())
+
+    if not _write_chunk(handler, payload):
+        return False
+    if kind == "done":
+        _write_terminator(handler)
+        return False
+    return True
 
 
 def serve_stats(handler, store) -> None:

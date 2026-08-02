@@ -20,7 +20,7 @@ original name.
 from __future__ import annotations
 
 import hashlib
-from typing import Iterable
+from collections.abc import Iterable
 
 
 def topology_fingerprint(node_ids: Iterable[str], edges: Iterable[tuple]) -> str:

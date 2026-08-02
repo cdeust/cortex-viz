@@ -25,19 +25,25 @@ def read_full_conversation(file_path: str | Path) -> list[dict[str, Any]]:
     try:
         with open(fp, encoding="utf-8", errors="replace") as f:
             for line in f:
-                trimmed = line.strip()
-                if not trimmed:
-                    continue
-                try:
-                    records.append(json.loads(trimmed))
-                except (json.JSONDecodeError, ValueError):
-                    # A malformed JSONL line is skipped by design: transcripts are appended
-                    # live, so the final line is routinely a partial write caught mid-flush.
-                    pass
+                _append_record(records, line)
     except OSError:
         return []
 
     return records
+
+
+def _append_record(records: list[dict[str, Any]], line: str) -> None:
+    """Parse one JSONL line into ``records``, dropping what will not parse."""
+    trimmed = line.strip()
+    if not trimmed:
+        return
+    try:
+        records.append(json.loads(trimmed))
+    except (json.JSONDecodeError, ValueError):
+        # A malformed JSONL line is skipped by design: transcripts are
+        # appended live, so the final line is routinely a partial write
+        # caught mid-flush.
+        pass
 
 
 def _extract_text(content: Any) -> str:
@@ -80,9 +86,7 @@ def _is_skippable(rec: dict[str, Any]) -> bool:
         return True
     if rec.get("type") == "user" and rec.get("toolUseResult"):
         return True
-    if rec.get("permissionMode"):
-        return True
-    return False
+    return bool(rec.get("permissionMode"))
 
 
 def format_conversation_messages(

@@ -106,7 +106,7 @@ class TestBuildDiscussionNodes:
             _make_conv(sessionId="s2", project="-Users-dev-CompletelyUnrelated"),
         ]
 
-        nodes, edges = build_discussion_nodes(convs, domain_hubs)
+        nodes, _edges = build_discussion_nodes(convs, domain_hubs)
 
         # Both should be included — second falls back to first hub
         assert len(nodes) == 2

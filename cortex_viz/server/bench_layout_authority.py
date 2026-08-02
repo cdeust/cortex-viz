@@ -16,8 +16,8 @@ import argparse
 import math
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 from cortex_viz.server.layout_authority_geometry import (
     base_radius,
@@ -29,6 +29,8 @@ from cortex_viz.server.layout_authority_geometry import (
 from cortex_viz.server.layout_authority_log import (
     emit,
     replay_since,
+)
+from cortex_viz.server.layout_authority_log import (
     reset as log_reset,
 )
 from cortex_viz.server.layout_authority_protocol import EdgeDelta
@@ -38,7 +40,6 @@ from cortex_viz.server.layout_authority_scheduler import (
     priority_for_node,
 )
 from cortex_viz.server.layout_authority_wire import format_edge, format_slot
-
 
 # ── Workload synthesis ──────────────────────────────────────────────────
 
@@ -218,7 +219,7 @@ def bench_log(spec: WorkloadSpec) -> dict:
 
 def bench_integration(spec: WorkloadSpec) -> dict:
     """Full pipeline (submit -> pop -> format_{slot,edge} -> emit) in
-    bounded BATCH waves so scheduler caps are respected."""
+    bounded batches so scheduler caps are respected."""
     kinds = synthesize_kinds(spec)
     anchors, *_ = precompute_anchors(spec.n_domains)
     sched = PriorityScheduler()
@@ -226,7 +227,7 @@ def bench_integration(spec: WorkloadSpec) -> dict:
     n_edges = spec.n_total * 4
     total = spec.n_total + n_edges
     sample_edge = EdgeDelta(source_id="src", target_id="tgt", kind="calls")
-    nd, BATCH = spec.n_domains, 4096
+    nd, batch_size = spec.n_domains, 4096
     edges_per_node = n_edges // max(spec.n_total, 1)
     ep = priority_for_edge()
 
@@ -256,16 +257,20 @@ def bench_integration(spec: WorkloadSpec) -> dict:
             else:
                 emit("edge", format_edge(seq, sample_edge))
 
+    def submit_node_with_edges(i: int, edge_remaining: int) -> int:
+        """Submit node ``i`` plus its share of edges. Returns the new budget."""
+        sched.submit(priority_for_node(kinds[i]), (i, kinds[i]))
+        n = min(edges_per_node, max(edge_remaining, 0))
+        for _e in range(n):
+            sched.submit(ep, edge_remaining)
+            edge_remaining -= 1
+        return edge_remaining
+
     def run() -> None:
         seq, edge_remaining = 0, n_edges
-        for bs in range(0, spec.n_total, BATCH):
-            for i in range(bs, min(bs + BATCH, spec.n_total)):
-                sched.submit(priority_for_node(kinds[i]), (i, kinds[i]))
-                for _e in range(edges_per_node):
-                    if edge_remaining <= 0:
-                        break
-                    sched.submit(ep, edge_remaining)
-                    edge_remaining -= 1
+        for bs in range(0, spec.n_total, batch_size):
+            for i in range(bs, min(bs + batch_size, spec.n_total)):
+                edge_remaining = submit_node_with_edges(i, edge_remaining)
             seq = drain(seq)
         drain(seq)
 

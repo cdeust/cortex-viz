@@ -40,7 +40,9 @@ from cortex_viz.core.workflow_graph_schema_enums import (
 
 DOMAIN_COLOR = "#8D6D00"  # oklch(55% 0.13 92)  — gold hub, paper-deep
 SKILL_COLOR = "#9C4800"  # oklch(50% 0.14 56)  — orange, slash commands/skills
-COMMAND_COLOR = "#755600"  # oklch(47% 0.13 92) — distinct from Bash-tool orange by lightness
+COMMAND_COLOR = (
+    "#755600"  # oklch(47% 0.13 92) — distinct from Bash-tool orange by lightness
+)
 HOOK_COLOR = "#6C399F"  # oklch(46% 0.16 304) — purple, settings hooks
 AGENT_COLOR = "#A33069"  # oklch(50% 0.16 354) — pink, subagents
 DISCUSSION_COLOR = "#A5292B"  # oklch(48% 0.16 25) — red, session anchors
@@ -62,8 +64,8 @@ SYMBOL_COLORS: dict[str, str] = {
     "function": "#00738B",  # oklch(50% 0.12 212) — sky, verbs
     # ``method`` gets a lighter sky so method vs free-function is visible
     # at a glance, matching the legend's dedicated entry for methods.
-    "method": "#0F7BA7",  # oklch(55% 0.11 233) — sky/blue, methods (receiver-bound functions)
-    "class": "#5E41A2",  # oklch(46% 0.15 293) — violet, types (also Rust struct/enum/trait)
+    "method": "#0F7BA7",  # oklch(55% 0.11 233) — sky/blue, receiver-bound
+    "class": "#5E41A2",  # oklch(46% 0.15 293) — violet, types (Rust struct too)
     "module": "#8C6000",  # oklch(52% 0.13 84) — amber, boxes/packages/namespaces
     # ``constant`` covers language-level consts, fields, typedefs, type
     # aliases — values rather than behaviour. Intentionally desaturated
@@ -71,7 +73,9 @@ SYMBOL_COLORS: dict[str, str] = {
     "constant": "#596475",  # oklch(50% 0.03 257)
     "import": "#596475",  # oklch(50% 0.03 257) — slate, structural, de-emphasised
 }
-SYMBOL_COLOR_DEFAULT = "#62626C"  # oklch(50% 0.015 286) — zinc fallback, intentionally desaturated
+SYMBOL_COLOR_DEFAULT = (
+    "#62626C"  # oklch(50% 0.015 286) — zinc fallback, intentionally desaturated
+)
 
 TOOL_HUB_COLORS: dict[ToolKind, str] = {
     ToolKind.EDIT: "#00784F",  # oklch(50% 0.12 163) — emerald
@@ -80,14 +84,16 @@ TOOL_HUB_COLORS: dict[ToolKind, str] = {
     ToolKind.GREP: "#8B3C98",  # oklch(50% 0.16 322) — fuchsia
     ToolKind.GLOB: "#7A2984",  # oklch(44% 0.16 323) — deeper fuchsia, paired with Grep
     ToolKind.BASH: "#A04400",  # oklch(50% 0.14 48) — orange, shell band
-    ToolKind.TASK: "#A33069",  # oklch(50% 0.16 354) — pink, paired with Agent (same hue by design)
+    ToolKind.TASK: "#A33069",  # oklch(50% 0.16 354) — pink, Agent's hue by design
 }
 
+# Same hues as TOOL_HUB_COLORS above; the comment names which files the
+# cluster claims, since a file is attributed to exactly one of them.
 PRIMARY_TOOL_COLORS: dict[PrimaryToolCluster, str] = {
-    PrimaryToolCluster.EDIT_WRITE: "#00784F",  # oklch(50% 0.12 163) — emerald, files you author
-    PrimaryToolCluster.READ: "#00728A",  # oklch(50% 0.11 215) — cyan, files you only read
-    PrimaryToolCluster.GREP_GLOB: "#8B3C98",  # oklch(50% 0.16 322) — fuchsia, files you only searched
-    PrimaryToolCluster.BASH: "#A04400",  # oklch(50% 0.14 48) — orange, files touched only by shell
+    PrimaryToolCluster.EDIT_WRITE: "#00784F",  # emerald — files you author
+    PrimaryToolCluster.READ: "#00728A",  # cyan — files you only read
+    PrimaryToolCluster.GREP_GLOB: "#8B3C98",  # fuchsia — files you only searched
+    PrimaryToolCluster.BASH: "#A04400",  # orange — files touched only by shell
 }
 
 # Consolidation-stage → node color, mirroring the design system's canonical

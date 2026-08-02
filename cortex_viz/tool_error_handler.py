@@ -15,7 +15,8 @@ validates structured content against output_schema and rejects strings).
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Callable, Coroutine
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 
 def _run_coroutine_on_thread(

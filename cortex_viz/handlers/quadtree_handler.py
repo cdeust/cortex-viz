@@ -160,6 +160,7 @@ def serve(handler, store) -> None:
     try:
         import pyarrow as pa
         import pyarrow.ipc as ipc
+
         from cortex_viz.infrastructure import layout_pg_store
     except ImportError as exc:
         print(

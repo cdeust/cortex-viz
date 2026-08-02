@@ -108,8 +108,8 @@ def canonical_file_id_for_legacy(target_id: str, cwd: str | None) -> str:
 
 
 __all__ = [
+    "canonical_file_id_for_legacy",
     "canonicalize_path",
     "file_target_id",
     "is_canonical_file_target_id",
-    "canonical_file_id_for_legacy",
 ]

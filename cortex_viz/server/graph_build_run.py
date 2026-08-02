@@ -93,7 +93,7 @@ def run_build(store, domain_filter: str | None) -> None:
                 state._phase_payloads.pop(_k, None)
         with state._build_progress_lock:
             state._build_progress["phase_seq"] = 0
-            state._build_progress["phases"] = {k: False for k in state.PHASES}
+            state._build_progress["phases"] = dict.fromkeys(state.PHASES, False)
         # ── Per-layer streaming build ──
         # Each layer is published the instant its data is ready:
         #   L0  domains (the hubs)

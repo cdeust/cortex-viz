@@ -37,18 +37,35 @@ Security problems do **not** go through this process. See
 
 ### Coding style
 
-| Language | Style guide | Tool |
-|---|---|---|
-| Python | [PEP 8](https://peps.python.org/pep-0008/), with the project's `[tool.ruff]` settings in `pyproject.toml` | [`ruff`](https://docs.astral.sh/ruff/) |
-| JavaScript (`ui/`) | Vanilla browser ESM and IIFE, no bundler, no framework. Match the file you are editing. | none enforced yet (see below) |
+| Language | Style guide | Tool | CI job |
+|---|---|---|---|
+| Python | [PEP 8](https://peps.python.org/pep-0008/), with the project's `[tool.ruff]` settings in `pyproject.toml` | [`ruff`](https://docs.astral.sh/ruff/) | `lint` (required) |
+| JavaScript (`ui/`) | Vanilla browser script-tag JavaScript, no bundler, no framework. Match the file you are editing. | [`eslint`](https://eslint.org/) (`eslint.config.mjs`) | `js-lint` (required) |
 
-Ruff is the selected Python linter and its configuration lives in
-`pyproject.toml`. It is **not yet a required CI gate**: the existing tree does
-not pass a clean run, and wiring the gate before the cleanup would block every
-contributor on debt they did not create. Tracking issue:
-[#45](https://github.com/cdeust/cortex-viz/issues/45). Until that gate lands,
-run `ruff check <the files you changed>` and leave your files no worse than you
-found them.
+Both are **required CI gates**. Run them before pushing:
+
+```bash
+uv run ruff check .          # rule set: [tool.ruff.lint].select in pyproject.toml
+uv run ruff format .         # CI checks this with --check
+npm run lint                 # ESLint over ui/
+```
+
+Two notes on what the gates deliberately do *not* do:
+
+- The Python rule set is wider than ruff's default (`E, W, F, I, N, UP, B, C4,
+  SIM, RUF`) but is not `--select ALL`, which reports 6,369 findings here —
+  mostly docstring-style and annotation-completeness rules that could only be
+  answered with a blanket ignore. Two rules are ignored, each with its reason
+  written at the ignore in `pyproject.toml`.
+- ESLint enforces the classes of defect a reader cannot catch in one file —
+  undefined names, accidental globals, redeclarations, unused bindings — not
+  style. The UI has no bundler and its script load order is hand-maintained in
+  the HTML, which is exactly what makes `no-undef` worth running. Vendored
+  bundles under `ui/**/vendor/` are excluded.
+
+If a gate is wrong for your change, say so in the pull request. Do not add a
+blanket ignore: a suppression carries its justification at the site, the same
+way the existing `# noqa` comments do.
 
 ### Structural limits
 

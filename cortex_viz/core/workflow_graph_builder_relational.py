@@ -207,7 +207,7 @@ def ingest_skill_usage(b, sue: dict) -> None:
         if existing.domain_id != dom and dom not in existing.extra_domain_ids:
             b._nodes[sid] = existing.model_copy(
                 update={
-                    "extra_domain_ids": list(existing.extra_domain_ids) + [dom],
+                    "extra_domain_ids": [*list(existing.extra_domain_ids), dom],
                 }
             )
             b._edges.append(b._in_domain(sid, dom))
@@ -246,7 +246,7 @@ def ingest_mcp_usage(b, mue: dict) -> None:
         if dom != existing.domain_id and dom not in existing.extra_domain_ids:
             b._nodes[mcp_id] = existing.model_copy(
                 update={
-                    "extra_domain_ids": list(existing.extra_domain_ids) + [dom],
+                    "extra_domain_ids": [*list(existing.extra_domain_ids), dom],
                     "count": (existing.count or 0) + count,
                 }
             )
@@ -265,6 +265,35 @@ def ingest_mcp_usage(b, mue: dict) -> None:
 # ── AST ingestion (ADR-0046) ─────────────────────────────────────────────
 
 
+def _synthesise_file_node(b, fid: str, file_path: str) -> None:
+    """Add the FILE node an AST symbol needs, plus its in_domain anchor.
+
+    ``_finalize_files`` has already run by the time symbols are ingested,
+    so the node is added directly with the default file palette. The
+    in_domain edge keeps the schema invariant (every non-domain node has
+    at least one) true for files no session ever touched.
+    """
+    b._nodes[fid] = WorkflowNode(
+        id=fid,
+        kind=NodeKind.FILE,
+        label=file_path.rsplit("/", 1)[-1],
+        color=primary_tool_color(PrimaryToolCluster.READ),
+        domain_id=b._GLOBAL_DOMAIN_ID
+        if hasattr(b, "_GLOBAL_DOMAIN_ID")
+        else "domain:__global__",
+        size=0.8,
+        path=file_path,
+        extra_domain_ids=[],
+    )
+    b._edges.append(
+        WorkflowEdge(
+            source=fid,
+            target=b._nodes[fid].domain_id,
+            kind=EdgeKind.IN_DOMAIN,
+        )
+    )
+
+
 def ingest_symbol(b, sym: dict) -> None:
     """Create a SYMBOL node + its DEFINED_IN edge anchoring it to a
     FILE node. Synthesises the parent file node on-demand so AST
@@ -276,31 +305,7 @@ def ingest_symbol(b, sym: dict) -> None:
     qname = _require(sym, "qualified_name", "symbol")
     fid = NodeIdFactory.file_id(str(file_path))
     if fid not in b._nodes:
-        # Synthesise a minimal file node anchored to the global domain.
-        # The builder's ``_finalize_files`` has already run, so we add
-        # the file directly; colour via the default file palette.
-        b._nodes[fid] = WorkflowNode(
-            id=fid,
-            kind=NodeKind.FILE,
-            label=str(file_path).rsplit("/", 1)[-1],
-            color=primary_tool_color(PrimaryToolCluster.READ),
-            domain_id=b._GLOBAL_DOMAIN_ID
-            if hasattr(b, "_GLOBAL_DOMAIN_ID")
-            else "domain:__global__",
-            size=0.8,
-            path=str(file_path),
-            extra_domain_ids=[],
-        )
-        # Anchor the synthesised file to the global domain so the graph
-        # schema invariant (every non-domain node has >= 1 in_domain edge)
-        # still holds.
-        b._edges.append(
-            WorkflowEdge(
-                source=fid,
-                target=b._nodes[fid].domain_id,
-                kind=EdgeKind.IN_DOMAIN,
-            )
-        )
+        _synthesise_file_node(b, fid, str(file_path))
     sid = NodeIdFactory.symbol_id(str(file_path), str(qname))
     if sid in b._nodes:
         return

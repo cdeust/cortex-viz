@@ -20,8 +20,8 @@ import inspect
 import psycopg
 import pytest
 
-from cortex_viz.infrastructure.memory_config import get_memory_settings
 from cortex_viz.infrastructure import memory_read
+from cortex_viz.infrastructure.memory_config import get_memory_settings
 
 # The exact surface grepped from mcp_server/server/ (store.<method>( call sites).
 # A divergence here means the viz server would call a method the reader lacks.

@@ -64,7 +64,7 @@
     if (window.JUG && typeof JUG.getGraph === 'function') {
       var g = JUG.getGraph();
       if (g && typeof g.pauseAnimation === 'function') {
-        try { g.pauseAnimation(); } catch (_) {}
+        try { g.pauseAnimation(); } catch {}
       }
     }
   }
@@ -93,7 +93,7 @@
       if (window.JUG) JUG.__wfgActive = true;
       hideLegacyRenderer();
       if (_handle && typeof _handle.destroy === 'function') {
-        try { _handle.destroy(); } catch (_) {}
+        try { _handle.destroy(); } catch {}
       }
       if (!window.JUG || typeof JUG.renderWorkflowGraph !== 'function') {
         console.warn(LOG, 'renderWorkflowGraph missing — retry in 80ms');

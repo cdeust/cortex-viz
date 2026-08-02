@@ -35,10 +35,10 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime
-from typing import Any, Iterator
-
 import re
+from collections.abc import Iterator
+from datetime import datetime
+from typing import Any
 
 import psycopg
 from psycopg.rows import dict_row
@@ -124,7 +124,7 @@ class _MaterializedCursor:
     """Cursor surrogate that pre-fetches rows so the pooled connection can be
     returned immediately. source: pg_store.py _MaterializedCursor."""
 
-    __slots__ = ("_rows", "_idx", "_rowcount")
+    __slots__ = ("_idx", "_rowcount", "_rows")
 
     def __init__(self, cursor: psycopg.Cursor) -> None:
         self._rowcount = cursor.rowcount
@@ -247,8 +247,9 @@ class MemoryReader:
                 try:
                     pool.close()
                 except Exception:
-                    # Teardown: a pool already closed, or whose connection died, raises here —
-                    # and both mean the resource this call wanted released is gone.
+                    # Teardown: a pool already closed, or whose connection
+                    # died, raises here — and both mean the resource this
+                    # call wanted released is gone.
                     pass
 
     # A memory's CURRENT heat is derived at READ TIME by Cortex's effective_heat
@@ -1083,7 +1084,7 @@ class MemoryReader:
         chunk_size: int = 1000,
         columns: str = "*",
         hard_limit: int | None = None,
-    ) -> "Iterator[list[dict[str, Any]]]":
+    ) -> Iterator[list[dict[str, Any]]]:
         """Stream hot memories hottest-first via KEYSET pagination, on the
         batch pool. Each chunk borrows + returns a connection, so between
         chunks the connection is free and interactive requests are unaffected.

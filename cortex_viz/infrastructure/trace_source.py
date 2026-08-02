@@ -165,7 +165,7 @@ def _scan_session_meta(path: Path) -> dict[str, Any] | None:
     git_branch = None
     n_actions = 0
     try:
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
+        with open(path, encoding="utf-8", errors="replace") as f:
             for raw in f:
                 s = raw.strip()
                 if not s:
@@ -297,7 +297,7 @@ def iter_session_events(session_id: str) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
     for path in _find_session_files(session_id):
         try:
-            with open(path, "r", encoding="utf-8", errors="replace") as f:
+            with open(path, encoding="utf-8", errors="replace") as f:
                 for line_no, raw in enumerate(f, start=1):
                     s = raw.strip()
                     if not s:
@@ -357,9 +357,7 @@ def iter_session_events(session_id: str) -> list[dict[str, Any]]:
                                         "kind": "memory",
                                         "op": mop,
                                         "text": str(
-                                            inp.get("content")
-                                            or inp.get("query")
-                                            or ""
+                                            inp.get("content") or inp.get("query") or ""
                                         ),
                                         "ts": ts,
                                         "line": line_no,
@@ -389,4 +387,4 @@ def iter_session_events(session_id: str) -> list[dict[str, Any]]:
     return events
 
 
-__all__ = ["list_domains", "list_sessions", "iter_session_events"]
+__all__ = ["iter_session_events", "list_domains", "list_sessions"]

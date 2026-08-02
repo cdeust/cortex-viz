@@ -192,7 +192,8 @@ def _kill_stale(src: Path, vi) -> None:
         try:
             vi.kill_and_wait(pid)
         except Exception:
-            # One PID that is already gone must not stop the sweep from freeing the port.
+            # One PID that is already gone must not stop the sweep from
+            # freeing the port.
             pass
 
 
@@ -282,8 +283,8 @@ def _drive_prepare_then_render(base: str, timeout_s: int = 600) -> str | None:
                 if p.get("baseline_ready") or p.get("full_ready"):
                     break
             except Exception:
-                # A failed progress poll just means not-ready-yet; the loop retries until
-                # the deadline.
+                # A failed progress poll just means not-ready-yet; the loop
+                # retries until the deadline.
                 pass
             _time.sleep(2)
         try:

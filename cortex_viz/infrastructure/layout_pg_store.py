@@ -8,7 +8,7 @@ with ``core.layout_engine`` to produce + persist coords.
 from __future__ import annotations
 
 import time
-from typing import Iterable
+from collections.abc import Iterable
 
 
 def _conn(store):
@@ -197,7 +197,7 @@ def read_positions_in_bbox(
     params: tuple = (min_x, max_x, min_y, max_y)
     if limit is not None:
         sql += " LIMIT %s"
-        params = params + (int(limit),)
+        params = (*params, int(limit))
     with _conn(store) as conn, conn.cursor() as cur:
         cur.execute(sql, params)
         return [

@@ -17,7 +17,6 @@ from cortex_viz.core.wiki_coverage_score import (
     list_domains,
 )
 
-
 _SUBSTANTIVE = "x" * 900  # ≥ _MIN_PAGE_BYTES (800)
 _STUB = "x" * 100
 

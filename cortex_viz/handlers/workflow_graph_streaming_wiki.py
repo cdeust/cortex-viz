@@ -15,7 +15,8 @@ and infrastructure, never the reverse.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from cortex_viz.core.workflow_graph_wiki import (
     ingest_wiki_citation,
@@ -131,7 +132,9 @@ def ingest_wiki_memory_edges(
         prev_e = len(builder._edges)  # noqa: SLF001
     else:
         wiki_node_ids = {
-            nid for nid, n in builder._nodes.items() if n.kind == "wiki"  # noqa: SLF001
+            nid
+            for nid, n in builder._nodes.items()
+            if n.kind == "wiki"  # noqa: SLF001
         }
         assoc_target._nodes = assoc_target._nodes | wiki_node_ids
         wm_target = assoc_target
@@ -142,9 +145,7 @@ def ingest_wiki_memory_edges(
         emit_delta("wiki_memory", prev_n, prev_e)
         count = len(builder._edges) - prev_e  # noqa: SLF001
     else:
-        retained_memory_edges.extend(
-            edge_to_dict(e) for e in wm_target._edges[prev_e:]
-        )
+        retained_memory_edges.extend(edge_to_dict(e) for e in wm_target._edges[prev_e:])
         count = len(wm_target._edges) - prev_e
     if on_source_loaded is not None:
         on_source_loaded("wiki_memory", count)
@@ -152,7 +153,7 @@ def ingest_wiki_memory_edges(
 
 
 __all__ = [
-    "ingest_wiki_pages_and_links",
     "ingest_wiki_citation_edges",
     "ingest_wiki_memory_edges",
+    "ingest_wiki_pages_and_links",
 ]

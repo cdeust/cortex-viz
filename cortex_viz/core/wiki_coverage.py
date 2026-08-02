@@ -28,7 +28,6 @@ import re
 from dataclasses import dataclass, field
 from typing import Final
 
-
 # ── File-level coverage ────────────────────────────────────────────────
 #
 # Anchor-page coverage (above) ensures every project has the six

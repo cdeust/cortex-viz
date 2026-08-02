@@ -71,8 +71,10 @@ def _trigger_impact(store, file_path: str) -> None:
     if not file_path:
         return
     _threading.Thread(
-        target=_run_impact_pass, args=(file_path,),
-        name="cortex-impact-pass", daemon=True,
+        target=_run_impact_pass,
+        args=(file_path,),
+        name="cortex-impact-pass",
+        daemon=True,
     ).start()
 
 
@@ -157,9 +159,16 @@ def _replay_log(handler, store, since: int) -> bool:
     try:
         for row in activity_store.read_recent(store, since_id=since):
             frag = event_to_graph(row)
-            handler.wfile.write(format_event(int(row["id"]), {
-                "label": "activity", "nodes": frag["nodes"], "edges": frag["edges"],
-            }))
+            handler.wfile.write(
+                format_event(
+                    int(row["id"]),
+                    {
+                        "label": "activity",
+                        "nodes": frag["nodes"],
+                        "edges": frag["edges"],
+                    },
+                )
+            )
         handler.wfile.flush()
         return True
     except (BrokenPipeError, ConnectionResetError):

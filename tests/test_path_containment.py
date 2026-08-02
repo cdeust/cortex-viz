@@ -24,7 +24,6 @@ from cortex_viz.shared.path_containment import (
     resolve_under_any,
 )
 
-
 # ── real_path ──────────────────────────────────────────────────────────
 
 

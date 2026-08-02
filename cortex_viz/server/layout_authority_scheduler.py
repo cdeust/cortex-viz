@@ -69,8 +69,6 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Optional
-
 
 # Per-priority bounded-deque sizes.
 # source: design brief option 1 ("Cap P4 at 64k"); see module docstring
@@ -120,8 +118,12 @@ class Stats:
     dropped — cumulative drops due to a full queue (monotonic).
     """
 
-    queued: dict[int, int] = field(default_factory=lambda: {p: 0 for p in QUEUE_SIZES})
-    dropped: dict[int, int] = field(default_factory=lambda: {p: 0 for p in QUEUE_SIZES})
+    queued: dict[int, int] = field(
+        default_factory=lambda: dict.fromkeys(QUEUE_SIZES, 0)
+    )
+    dropped: dict[int, int] = field(
+        default_factory=lambda: dict.fromkeys(QUEUE_SIZES, 0)
+    )
 
 
 class PriorityScheduler:
@@ -196,7 +198,7 @@ class PriorityScheduler:
 
     # ---- consumer side --------------------------------------------------
 
-    def pop(self, timeout: Optional[float] = None) -> Optional[tuple[int, object]]:
+    def pop(self, timeout: float | None = None) -> tuple[int, object] | None:
         """Block until the next highest-priority item is ready.
 
         Returns (priority, item) or None on timeout. Strict priority:
@@ -217,7 +219,7 @@ class PriorityScheduler:
                         return None
                     self._not_empty.wait(timeout=remaining)
 
-    def _pop_highest_locked(self) -> Optional[tuple[int, object]]:
+    def _pop_highest_locked(self) -> tuple[int, object] | None:
         """Caller must hold self._lock."""
         for p in self._priorities_sorted:
             q = self._queues[p]
