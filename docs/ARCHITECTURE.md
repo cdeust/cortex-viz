@@ -62,7 +62,8 @@ Cortex's live Python objects.
 |---|---|---|
 | Memories, entities, relationships | Cortex PG store (`DATABASE_URL`) | read-only, via `MemoryReader` |
 | Wiki pages, thermodynamic state | `~/.claude/methodology/wiki/` plus the `wiki.*` PG schema | read-only |
-| Sessions and execution traces | `~/.claude/projects/*.jsonl` | read-only |
+| Archived sessions and execution traces | `~/.claude/projects/*.jsonl` | read-only |
+| Live host activity | `POST /api/activity`, `docs/host-event-v1.schema.json` | append-only derived activity |
 | Cognitive profiles | `~/.claude/methodology/profiles.json` | read-only |
 | Codebase graph (AST symbols, impact) | [`automatised-pipeline`](https://github.com/cdeust/ai-automatised-pipeline) MCP | read-only, stdio |
 | PRD document nodes | [`prd-spec-generator`](https://github.com/cdeust/ai-prd-generator) MCP | read-only |

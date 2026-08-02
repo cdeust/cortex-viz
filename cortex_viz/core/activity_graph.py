@@ -1,10 +1,10 @@
-"""Pure mapping: one Claude action (hook event) → directional graph fragment.
+"""Pure mapping: one host action → directional graph fragment.
 
-The live session-activity spine. A Claude Code hook fires on EVERY action and
-hands the viz server the raw event ``{tool_name, tool_input, tool_response,
-cwd, session_id, ts}``; this module turns it into the normalized activity row
-(persisted by ``infrastructure.activity_store``) and into the directional
-nodes/edges streamed to the live graph.
+The live session-activity spine accepts both the historical Claude Code hook
+shape and the versioned host-neutral contract in
+``docs/host-event-v1.schema.json``. This module turns either shape into the
+same normalized activity row (persisted by ``infrastructure.activity_store``)
+and directional nodes/edges streamed to the live graph.
 
 Every Claude action is one of a fixed taxonomy — tool / mcp_call / file-read /
 file-edit / file-write / terminal-run / skill / subagent / web / prompt — and
@@ -33,6 +33,7 @@ from cortex_viz.core.activity_paths import (
     file_target_id,
     is_canonical_file_target_id,
 )
+from cortex_viz.core.host_event import normalize_host_event
 from cortex_viz.core.workflow_graph_schema import NodeIdFactory
 
 # Tool → (action verb, target kind, edge kind). The verbs match the Trace
@@ -171,13 +172,14 @@ def _file_action(verb: str, path: str, cwd: str) -> dict[str, Any]:
 
 
 def normalize_event(event: dict[str, Any]) -> dict[str, Any] | None:
-    """Raw hook payload → normalized activity row (or None to drop).
+    """Raw host payload → normalized activity row (or None to drop).
 
-    Accepts the PostToolUse-shaped ``{tool_name, tool_input, tool_response,
-    cwd, session_id, ts, event_type}``. UserPromptSubmit-shaped events
-    (``{prompt|content}``) normalize to a ``prompt`` action. Anything without
-    a recognizable action is dropped (returns None) so the spine stays signal.
+    Accepts the public ``host-event-v1`` shape and the legacy Claude
+    PostToolUse/UserPromptSubmit shapes. Anything without a recognizable
+    action is dropped so the spine stays signal.
     """
+    if "schema_version" in event:
+        return normalize_host_event(event, _file_action)
     etype = event.get("event_type") or event.get("hook_event_name") or ""
     session_id = event.get("session_id") or event.get("sessionId") or "live"
     ts = event.get("ts") or event.get("timestamp")

@@ -140,7 +140,34 @@ cortex-viz                          # or: python -m cortex_viz   (stdio MCP tran
 
 Set `DATABASE_URL` to the shared Cortex database. `open_visualization` launches the galaxy UI in the browser, bound to `127.0.0.1`.
 
-**Other MCP hosts.** Any MCP host can launch the server: it is a plain stdio process. From a clone after `pip install -e .`, register `{"command": "python3", "args": ["-m", "cortex_viz"]}` in your host's MCP config (Gemini CLI `~/.gemini/settings.json`, Cursor `.cursor/mcp.json`, Windsurf `~/.codeium/windsurf/mcp_config.json`, VS Code `.vscode/mcp.json` under `"servers"`, or Codex CLI: `codex mcp add cortex-viz -- python3 -m cortex_viz`) and the `open_visualization` tool opens the UI in the browser. Be clear about what you'll see: the **Trace** view reads Claude Code session JSONLs under `~/.claude/projects/` (it is Claude-data-specific and stays empty if you don't use Claude Code), and the galaxy/brain/knowledge/wiki/board views need a [Cortex](https://github.com/cdeust/Cortex) store to read. On a non-Claude host, cortex-viz is only useful as a viewer over data those two produce.
+**Other MCP hosts.** Any MCP host can launch the server: it is a plain stdio process. From a clone after `pip install -e .`, register `{"command": "python3", "args": ["-m", "cortex_viz"]}` in your host's MCP config (Gemini CLI `~/.gemini/settings.json`, Cursor `.cursor/mcp.json`, Windsurf `~/.codeium/windsurf/mcp_config.json`, VS Code `.vscode/mcp.json` under `"servers"`, or Codex CLI: `codex mcp add cortex-viz -- python3 -m cortex_viz`) and the `open_visualization` tool opens the UI in the browser. The historical **Trace** archive still reads Claude Code JSONLs under `~/.claude/projects/`, but live activity is now host-neutral: a Codex, Gemini, or generic MCP adapter can POST the versioned schema below to the local `/api/activity` endpoint. The galaxy/brain/knowledge/wiki/board views still need a [Cortex](https://github.com/cdeust/Cortex) store to read.
+
+### Host-neutral live activity
+
+`POST /api/activity` accepts the JSON Schema contract in
+[`docs/host-event-v1.schema.json`](docs/host-event-v1.schema.json) alongside
+the existing Claude hook payload. Producers identify their host explicitly;
+tool names are provenance and are not reinterpreted as Claude tools.
+
+```json
+{
+  "schema_version": "1",
+  "host": "codex",
+  "session_id": "01J...",
+  "timestamp": "2026-08-02T12:34:56Z",
+  "event": "tool_call",
+  "tool": "read_file",
+  "input_summary": "Read the authentication module",
+  "artifact": "src/auth.ts",
+  "result": "success",
+  "cwd": "/workspace/project"
+}
+```
+
+The endpoint normalizes the event into the same session/action/file graph as
+Claude activity. This PR defines the ingestion boundary; host-specific hook or
+telemetry adapters can be added independently without changing the graph or
+database schema.
 
 ## Boundary
 

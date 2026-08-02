@@ -101,16 +101,15 @@ def _maybe_trigger_impact(store, row: dict) -> None:
 
 
 def serve_activity_ingest(handler, store) -> None:
-    """POST /api/activity — ingest ONE captured Claude action (hook event).
+    """POST /api/activity — ingest ONE captured host action.
 
-    The producer is a Claude Code hook (``activity_capture.py``), not a
-    browser — host-guarded to 127.0.0.1 but not same-origin. Body is the raw
-    hook payload ``{tool_name, tool_input, tool_response, cwd, session_id,
-    ts, event_type}``. We normalize it to the activity taxonomy, append it to
-    the durable ``session_activity`` log, and emit its directional nodes/edges
-    onto the live activity stream so every open ``/api/activity/stream``
-    subscriber paints it within ~1 s. Fire-and-forget: a malformed or
-    actionless event returns 204 and never errors the hook.
+    Producers may send the versioned neutral shape documented by
+    ``docs/host-event-v1.schema.json`` or the existing Claude Code hook shape
+    emitted by ``activity_capture.py``. The endpoint is host-guarded to
+    127.0.0.1 but not same-origin. We normalize either shape to the activity
+    taxonomy, append it to the durable ``session_activity`` log, and emit its
+    directional nodes/edges onto the live activity stream. Fire-and-forget: a
+    malformed or actionless event returns 204 and never errors the producer.
 
     No-DB mode (``store is None``): the durable log lives in PostgreSQL
     (``session_activity``), so the event is acknowledged and dropped —

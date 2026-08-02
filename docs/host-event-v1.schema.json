@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/cdeust/cortex-viz/blob/main/docs/host-event-v1.schema.json",
+  "title": "cortex-viz host event v1",
+  "description": "Host-neutral activity event accepted by POST /api/activity.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "host",
+    "session_id",
+    "timestamp",
+    "event"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1"
+    },
+    "host": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "timestamp": {
+      "oneOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "format": "date-time"
+        }
+      ]
+    },
+    "event": {
+      "enum": [
+        "prompt",
+        "tool_call",
+        "file_read",
+        "file_edit",
+        "file_write",
+        "terminal_run",
+        "skill",
+        "subagent",
+        "web"
+      ]
+    },
+    "tool": {
+      "type": "string",
+      "minLength": 1
+    },
+    "input_summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "artifact": {
+      "type": "string",
+      "minLength": 1
+    },
+    "result": {
+      "type": "string"
+    },
+    "cwd": {
+      "type": "string"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "const": "prompt"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "input_summary"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "enum": [
+              "file_read",
+              "file_edit",
+              "file_write"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "artifact"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "const": "tool_call"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "tool"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "const": "terminal_run"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "input_summary"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "enum": [
+              "skill",
+              "subagent"
+            ]
+          }
+        }
+      },
+      "then": {
+        "anyOf": [
+          {
+            "required": [
+              "tool"
+            ]
+          },
+          {
+            "required": [
+              "input_summary"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "const": "web"
+          }
+        }
+      },
+      "then": {
+        "anyOf": [
+          {
+            "required": [
+              "artifact"
+            ]
+          },
+          {
+            "required": [
+              "input_summary"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
