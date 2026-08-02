@@ -213,9 +213,7 @@ async def _edge_batches_async(
             except (TypeError, ValueError):
                 confidence = None
             reason_raw = r.get("reason") if has_provenance else None
-            reason_str = (
-                str(reason_raw).strip("'\"") or None if reason_raw else None
-            )
+            reason_str = str(reason_raw).strip("'\"") or None if reason_raw else None
             batch.append(
                 {
                     "kind": kind,

@@ -108,7 +108,16 @@ def _pip_install(deps_dir: str, packages: list[str]) -> None:
     import shutil
 
     tmp_dir = f"{deps_dir}.tmp-{os.getpid()}"
-    base = [sys.executable, "-m", "pip", "install", "-q", "--target", tmp_dir, *packages]
+    base = [
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "-q",
+        "--target",
+        tmp_dir,
+        *packages,
+    ]
     try:
         proc = subprocess.run(base, capture_output=True, text=True)
         err = (proc.stderr or "") + (proc.stdout or "")

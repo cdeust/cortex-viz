@@ -357,9 +357,7 @@ def iter_session_events(session_id: str) -> list[dict[str, Any]]:
                                         "kind": "memory",
                                         "op": mop,
                                         "text": str(
-                                            inp.get("content")
-                                            or inp.get("query")
-                                            or ""
+                                            inp.get("content") or inp.get("query") or ""
                                         ),
                                         "ts": ts,
                                         "line": line_no,

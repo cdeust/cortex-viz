@@ -45,7 +45,9 @@ def _safe_int(value, default: int) -> int:
         return default
 
 
-def _source_summary(sources: list[dict], source_target_ids: dict[str, str]) -> list[dict]:
+def _source_summary(
+    sources: list[dict], source_target_ids: dict[str, str]
+) -> list[dict]:
     return [
         {
             "source_path": s.get("source_path"),
@@ -109,15 +111,23 @@ def _page_actions(store, params: dict[str, str]) -> dict:
         page_id = int(params.get("page_id", ""))
     except (TypeError, ValueError):
         return {
-            "ok": True, "page_id": None, "sources": [], "actions": [],
-            "count": 0, "note": "missing_or_invalid_page_id",
+            "ok": True,
+            "page_id": None,
+            "sources": [],
+            "actions": [],
+            "count": 0,
+            "note": "missing_or_invalid_page_id",
         }
 
     page = load_page_by_id(store, page_id)
     if page is None:
         return {
-            "ok": True, "page_id": page_id, "sources": [], "actions": [],
-            "count": 0, "note": "page_not_found",
+            "ok": True,
+            "page_id": page_id,
+            "sources": [],
+            "actions": [],
+            "count": 0,
+            "note": "page_not_found",
         }
 
     sources = load_page_sources(store, page_id)
@@ -125,13 +135,18 @@ def _page_actions(store, params: dict[str, str]) -> dict:
     source_target_ids = resolve_source_target_ids(domain_id, sources)
     source_summary = _source_summary(sources, source_target_ids)
     base = {
-        "ok": True, "page_id": page_id, "rel_path": page.get("rel_path"),
+        "ok": True,
+        "page_id": page_id,
+        "rel_path": page.get("rel_path"),
         "sources": source_summary,
     }
     if not source_target_ids:
         return {**base, "actions": [], "count": 0}
 
-    limit = max(1, min(_safe_int(params.get("limit"), _ACTIONS_DEFAULT_LIMIT), _ACTIONS_MAX_LIMIT))
+    limit = max(
+        1,
+        min(_safe_int(params.get("limit"), _ACTIONS_DEFAULT_LIMIT), _ACTIONS_MAX_LIMIT),
+    )
     matched = _fetch_matched_actions(store, source_target_ids)
     truncated = len(matched) > limit
     matched = matched[:limit]

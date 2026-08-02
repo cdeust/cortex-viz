@@ -48,8 +48,12 @@ def impact_to_graph(
     """
     fid = NodeIdFactory.file_id(file_path)
     nodes: list[dict] = [
-        {"id": fid, "kind": "file", "type": "file",
-         "label": file_path.rsplit("/", 1)[-1] or file_path},
+        {
+            "id": fid,
+            "kind": "file",
+            "type": "file",
+            "label": file_path.rsplit("/", 1)[-1] or file_path,
+        },
     ]
     edges: list[dict] = []
     seen: set[str] = {fid}
@@ -61,14 +65,34 @@ def impact_to_graph(
         nid = f"symbol:{qn}"
         if nid not in seen:
             seen.add(nid)
-            nodes.append({"id": nid, "kind": "symbol", "type": "symbol",
-                          "label": item.get("label") or _short(qn)})
+            nodes.append(
+                {
+                    "id": nid,
+                    "kind": "symbol",
+                    "type": "symbol",
+                    "label": item.get("label") or _short(qn),
+                }
+            )
         if into_file:  # caller ──impacts──▶ edited file
-            edges.append({"id": f"{nid}->{fid}", "source": nid, "target": fid,
-                          "kind": edge_kind, "type": edge_kind})
+            edges.append(
+                {
+                    "id": f"{nid}->{fid}",
+                    "source": nid,
+                    "target": fid,
+                    "kind": edge_kind,
+                    "type": edge_kind,
+                }
+            )
         else:  # edited file ──uses──▶ dependency
-            edges.append({"id": f"{fid}->{nid}", "source": fid, "target": nid,
-                          "kind": edge_kind, "type": edge_kind})
+            edges.append(
+                {
+                    "id": f"{fid}->{nid}",
+                    "source": fid,
+                    "target": nid,
+                    "kind": edge_kind,
+                    "type": edge_kind,
+                }
+            )
 
     # upstream = callers/importers — these break if the file changes.
     for it in (impact.get("upstream") or [])[:max_items]:
@@ -85,9 +109,22 @@ def impact_to_graph(
         nid = f"file:{f}"
         if nid not in seen:
             seen.add(nid)
-            nodes.append({"id": nid, "kind": "file", "type": "file",
-                          "label": f.rsplit("/", 1)[-1] or f})
-        edges.append({"id": f"{nid}->{fid}", "source": nid, "target": fid,
-                      "kind": "impacts", "type": "impacts"})
+            nodes.append(
+                {
+                    "id": nid,
+                    "kind": "file",
+                    "type": "file",
+                    "label": f.rsplit("/", 1)[-1] or f,
+                }
+            )
+        edges.append(
+            {
+                "id": f"{nid}->{fid}",
+                "source": nid,
+                "target": fid,
+                "kind": "impacts",
+                "type": "impacts",
+            }
+        )
 
     return {"nodes": nodes, "edges": edges}

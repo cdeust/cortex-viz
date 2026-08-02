@@ -38,11 +38,15 @@ class _FakeHandler:
 def _graph(n_nodes: int = 7, n_edges: int = 11) -> dict:
     return {
         "nodes": [
-            {"id": f"n{i}", "kind": "memory", "label": f'l"{i}}}' , "heat": i / 10}
+            {"id": f"n{i}", "kind": "memory", "label": f'l"{i}}}', "heat": i / 10}
             for i in range(n_nodes)
         ],
         "edges": [
-            {"source": f"n{i % n_nodes}", "target": f"n{(i + 1) % n_nodes}", "kind": "k"}
+            {
+                "source": f"n{i % n_nodes}",
+                "target": f"n{(i + 1) % n_nodes}",
+                "kind": "k",
+            }
             for i in range(n_edges)
         ],
         "meta": {"schema": "workflow_graph.v1"},
@@ -87,8 +91,13 @@ def _parse_frames(raw: bytes) -> dict:
         if "node_total" in f:
             header = f
             meta = f.get("meta", meta)
-    return {"nodes": nodes, "edges": edges, "meta": meta,
-            "header": header, "done": done}
+    return {
+        "nodes": nodes,
+        "edges": edges,
+        "meta": meta,
+        "header": header,
+        "done": done,
+    }
 
 
 def test_legacy_row_streams_equivalent_frames():

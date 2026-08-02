@@ -567,9 +567,7 @@ def load_memory_associations(
     )
     semantic_rows = load_semantic_associations(pg_store, top_k=top_k, min_sim=min_sim)
     temporal_rows = (
-        load_temporal_associations(pg_store, top_k=top_k)
-        if _temporal_enabled()
-        else []
+        load_temporal_associations(pg_store, top_k=top_k) if _temporal_enabled() else []
     )
     return combine_associations(co_rows, semantic_rows, temporal_rows)
 

@@ -84,6 +84,7 @@ def _ingest_tool_event(b, ev):
         )
     )
 
+
 def _track_file_timestamp(b, path: str, tool: ToolKind, ev: dict) -> None:
     """Accumulate per-file first_seen / last_accessed / last_modified.
 
@@ -101,13 +102,12 @@ def _track_file_timestamp(b, path: str, tool: ToolKind, ev: dict) -> None:
     )
     if first_ts and (slot["first_seen"] is None or first_ts < slot["first_seen"]):
         slot["first_seen"] = first_ts
-    if last_ts and (
-        slot["last_accessed"] is None or last_ts > slot["last_accessed"]
-    ):
+    if last_ts and (slot["last_accessed"] is None or last_ts > slot["last_accessed"]):
         slot["last_accessed"] = last_ts
     if tool in (ToolKind.EDIT, ToolKind.WRITE) and last_ts:
         if slot["last_modified"] is None or last_ts > slot["last_modified"]:
             slot["last_modified"] = last_ts
+
 
 def _finalize_files(b):
     for path, tc in b._file_tool_counts.items():
@@ -136,6 +136,7 @@ def _finalize_files(b):
         for d in doms:
             b._edges.append(b._in_domain(fid, d))
 
+
 def _ingest_memory(b, mem):
     pg_id = _require(mem, "id", "memory")
     dom = b._assign_domain(mem.get("domain"))
@@ -145,9 +146,7 @@ def _ingest_memory(b, mem):
     content = mem.get("content") or ""
     tags = mem.get("tags") if isinstance(mem.get("tags"), list) else []
     science = {
-        k: mem[k]
-        for k in _MEMORY_SCIENTIFIC_KEYS
-        if k in mem and mem[k] is not None
+        k: mem[k] for k in _MEMORY_SCIENTIFIC_KEYS if k in mem and mem[k] is not None
     }
     b._add_child(
         NodeIdFactory.memory_id(pg_id),
@@ -163,6 +162,7 @@ def _ingest_memory(b, mem):
         created_at=mem.get("created_at"),
         **science,
     )
+
 
 def _ingest_discussion(b, dc):
     sid = str(_require(dc, "session_id", "discussion"))
@@ -182,6 +182,7 @@ def _ingest_discussion(b, dc):
         last_activity=dc.get("last_activity"),
         duration_ms=dc.get("duration_ms"),
     )
+
 
 def _ingest_skill(b, sk):
     name = str(_require(sk, "name", "skill"))
@@ -212,6 +213,7 @@ def _ingest_skill(b, sk):
             )
         )
 
+
 def _ingest_hook(b, hk):
     event = str(_require(hk, "event", "hook"))
     cmd = str(_require(hk, "command", "hook"))
@@ -232,6 +234,7 @@ def _ingest_hook(b, hk):
             label=event,
         )
     )
+
 
 def _ingest_agent(b, ag):
     sub = str(_require(ag, "subagent_type", "agent"))
@@ -259,6 +262,7 @@ def _ingest_agent(b, ag):
             weight=float(count),
         )
     )
+
 
 def _ingest_command(b, cm):
     cmd = str(_require(cm, "cmd", "command"))

@@ -45,7 +45,8 @@ def _format_skill(row: dict) -> dict:
         "failure_count": row.get("failure_count", 0) or 0,
         "proficiency": round(float(row.get("proficiency", 0.0) or 0.0), 4),
         "is_habitual": bool(row.get("is_habitual", False)),
-        "last_seen": last_seen.isoformat() if hasattr(last_seen, "isoformat")
+        "last_seen": last_seen.isoformat()
+        if hasattr(last_seen, "isoformat")
         else (last_seen or ""),
     }
 

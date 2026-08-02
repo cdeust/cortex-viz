@@ -40,7 +40,9 @@ from cortex_viz.core.workflow_graph_schema_enums import (
 
 DOMAIN_COLOR = "#8D6D00"  # oklch(55% 0.13 92)  — gold hub, paper-deep
 SKILL_COLOR = "#9C4800"  # oklch(50% 0.14 56)  — orange, slash commands/skills
-COMMAND_COLOR = "#755600"  # oklch(47% 0.13 92) — distinct from Bash-tool orange by lightness
+COMMAND_COLOR = (
+    "#755600"  # oklch(47% 0.13 92) — distinct from Bash-tool orange by lightness
+)
 HOOK_COLOR = "#6C399F"  # oklch(46% 0.16 304) — purple, settings hooks
 AGENT_COLOR = "#A33069"  # oklch(50% 0.16 354) — pink, subagents
 DISCUSSION_COLOR = "#A5292B"  # oklch(48% 0.16 25) — red, session anchors
@@ -71,7 +73,9 @@ SYMBOL_COLORS: dict[str, str] = {
     "constant": "#596475",  # oklch(50% 0.03 257)
     "import": "#596475",  # oklch(50% 0.03 257) — slate, structural, de-emphasised
 }
-SYMBOL_COLOR_DEFAULT = "#62626C"  # oklch(50% 0.015 286) — zinc fallback, intentionally desaturated
+SYMBOL_COLOR_DEFAULT = (
+    "#62626C"  # oklch(50% 0.015 286) — zinc fallback, intentionally desaturated
+)
 
 TOOL_HUB_COLORS: dict[ToolKind, str] = {
     ToolKind.EDIT: "#00784F",  # oklch(50% 0.12 163) — emerald
