@@ -115,9 +115,16 @@ def serve(handler, store) -> None:
         from cortex_viz.core import tile_renderer
         from cortex_viz.infrastructure import layout_pg_store, lod_pg_store
     except ImportError as exc:
-        # ``viz-tile`` extra not installed — a supported configuration
-        # (~200 MB of datashader/numba, opt-in by design), so the answer
-        # is "this install cannot do that", not an error (#90).
+        # NOT the ``viz-tile`` guard, despite appearances: none of the
+        # three modules above imports datashader/pandas/pyarrow at module
+        # level, so an absent extra sails through here and is caught by
+        # the second guard below, on the renderer's lazy import (verified
+        # 2026-08-02, #88 — that is also why the second guard had to be
+        # added). What this one genuinely catches is a broken or partial
+        # install of cortex_viz itself. The answer is the same either way
+        # — "this install cannot do that", not an error (#90) — so the
+        # guard stays, and both are now covered by
+        # tests/test_optional_extra_absent.py.
         print(
             f"[cortex] /api/tile unavailable — viz-tile extra absent: {exc}",
             file=sys.stderr,

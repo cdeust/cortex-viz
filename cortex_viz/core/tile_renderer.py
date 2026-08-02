@@ -72,7 +72,7 @@ def render_tile_png(
         import datashader as ds
         import datashader.transfer_functions as tf
         import pandas as pd
-    except ImportError as exc:  # pragma: no cover
+    except ImportError as exc:
         raise ImportError(
             "datashader + pandas are required for tile rendering — install "
             "the 'viz-tile' extra: pip install cortex-viz[viz-tile]"
@@ -110,7 +110,7 @@ def _empty_tile_png(tile_size: int) -> bytes:
     """Cheap transparent PNG, used when the bbox query returns no rows."""
     try:
         from PIL import Image
-    except ImportError as exc:  # pragma: no cover
+    except ImportError as exc:
         raise ImportError("Pillow is required for tile rendering") from exc
     img = Image.new("RGBA", (tile_size, tile_size), (0, 0, 0, 0))
     buf = io.BytesIO()
