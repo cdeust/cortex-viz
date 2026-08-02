@@ -121,7 +121,9 @@ def test_render_tile_png_empty_input_is_a_valid_transparent_tile():
 
 def test_render_tile_png_honours_tile_size():
     png = tile_renderer.render_tile_png(_ROWS, z=0, x=0, y=0, tile_size=128)
-    assert Image.open(io.BytesIO(png)).size == (128, 128)
+
+    img = Image.open(io.BytesIO(png))
+    assert img.size == (128, 128)
 
 
 def test_render_tile_png_clips_to_the_tile_bbox():
