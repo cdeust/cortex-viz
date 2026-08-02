@@ -18,9 +18,9 @@ Generated content — NOT human-authored. Regenerated on every
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 from cortex_viz.core.wiki_coverage import audit_files
 from cortex_viz.core.wiki_coverage_score import audit_domain

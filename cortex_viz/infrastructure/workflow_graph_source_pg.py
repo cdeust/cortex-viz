@@ -9,7 +9,8 @@ Split out of ``workflow_graph_source`` to keep that module under the
 from __future__ import annotations
 
 import re
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from cortex_viz.infrastructure.memory_associations import (
     load_co_entity_associations as _load_co_entity_associations,
@@ -57,15 +58,41 @@ _COMMAND_LINE_RE = re.compile(r"\*\*Command:\*\*\s*`([^`]+)`")
 _PATH_TOKEN_RE = re.compile(r"(?:^|\s)((?:\.{1,2}/|~/|/)[^\s`'\"]{3,})")
 
 _MEMORY_PASSTHROUGH_KEYS = tuple(
-    (
-        "heat_base arousal emotional_valence dominant_emotion importance "
-        "surprise_score confidence access_count useful_count replay_count "
-        "reconsolidation_count plasticity stability excitability "
-        "hippocampal_dependency schema_match_score schema_id separation_index "
-        "interference_score encoding_strength hours_in_stage stage_entered_at "
-        "no_decay is_protected is_stale is_benchmark is_global store_type "
-        "last_accessed created_at compression_level compressed tags"
-    ).split()
+    [
+        "heat_base",
+        "arousal",
+        "emotional_valence",
+        "dominant_emotion",
+        "importance",
+        "surprise_score",
+        "confidence",
+        "access_count",
+        "useful_count",
+        "replay_count",
+        "reconsolidation_count",
+        "plasticity",
+        "stability",
+        "excitability",
+        "hippocampal_dependency",
+        "schema_match_score",
+        "schema_id",
+        "separation_index",
+        "interference_score",
+        "encoding_strength",
+        "hours_in_stage",
+        "stage_entered_at",
+        "no_decay",
+        "is_protected",
+        "is_stale",
+        "is_benchmark",
+        "is_global",
+        "store_type",
+        "last_accessed",
+        "created_at",
+        "compression_level",
+        "compressed",
+        "tags",
+    ]
 )
 
 # Explicit SELECT list for the memory cursor — exactly the columns the

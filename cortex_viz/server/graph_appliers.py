@@ -65,7 +65,7 @@ def begin_epoch(epoch: int) -> None:
                 "edge_count": 0,
                 "started_at": time.monotonic(),
                 "elapsed": 0.0,
-                "phases": {k: False for k in state.PHASES},
+                "phases": dict.fromkeys(state.PHASES, False),
             }
         )
 

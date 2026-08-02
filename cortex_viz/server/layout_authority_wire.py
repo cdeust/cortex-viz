@@ -87,7 +87,7 @@ def _validate_finite(v: float, field: str) -> None:
 # --- encoders ----------------------------------------------------------------
 
 
-def format_slot(seq: int, slot: "SlotAssignment") -> bytes:
+def format_slot(seq: int, slot: SlotAssignment) -> bytes:
     """SSE-frame one slot assignment as raw bytes.
 
     Wire shape::
@@ -114,7 +114,7 @@ def format_slot(seq: int, slot: "SlotAssignment") -> bytes:
     return _ID_PREFIX + seq_bytes + _NL + _EVT_SLOT + _DATA_PREFIX + data_bytes + _NLNL
 
 
-def format_edge(seq: int, edge: "EdgeDelta") -> bytes:
+def format_edge(seq: int, edge: EdgeDelta) -> bytes:
     """SSE-frame one edge between two already-placed nodes."""
     _validate_id(edge.source_id, "edge.source_id")
     _validate_id(edge.target_id, "edge.target_id")

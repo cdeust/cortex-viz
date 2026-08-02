@@ -36,7 +36,7 @@ graph.
 from __future__ import annotations
 
 import os
-from typing import Iterable
+from collections.abc import Iterable
 
 # source: CPM resolution gamma is NOT a paper-derived universal constant
 # — it sets the density granularity of the partition (a community's
@@ -177,4 +177,4 @@ def detect_communities(
     return mapping
 
 
-__all__ = ["detect_communities", "DEFAULT_RESOLUTION", "SEED"]
+__all__ = ["DEFAULT_RESOLUTION", "SEED", "detect_communities"]

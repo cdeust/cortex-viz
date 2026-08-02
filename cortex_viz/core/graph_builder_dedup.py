@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import re
 
-# Words to strip from path-based domain names before grouping
+# Words to strip from path-based domain names before grouping.
+# Kept as one split string rather than a 22-entry list literal: this is a
+# word list, and the runtime cost SIM905 objects to is one split at import.
 _PATH_NOISE = frozenset(
-    "users documents mac mini de cl ment cle clement developments ios "
+    "users documents mac mini de cl ment cle clement developments ios "  # noqa: SIM905
     "personal bu business pipeline worktrees builds landing pages "
     "aiprd website 008".split()
 )

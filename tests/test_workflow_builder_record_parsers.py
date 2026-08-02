@@ -20,7 +20,6 @@ from cortex_viz.core import workflow_graph_builder_relational as relational
 from cortex_viz.core.workflow_graph_builder_ingest import _as_tool, _require
 from cortex_viz.core.workflow_graph_schema import ToolKind
 
-
 # ── _as_tool ─────────────────────────────────────────────────────────
 
 

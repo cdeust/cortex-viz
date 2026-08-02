@@ -573,16 +573,16 @@ def load_memory_associations(
 
 
 __all__ = [
-    "load_co_entity_associations",
-    "load_semantic_associations",
-    "load_temporal_associations",
-    "combine_associations",
-    "load_memory_associations",
     "DEFAULT_ASSOC_TOP_K",
-    "DF_CEILING_FRAC",
     "DEFAULT_SEMANTIC_MIN_SIM",
     "DEFAULT_TEMPORAL_ENABLED",
-    "DEFAULT_TEMPORAL_WINDOW_HOURS",
     "DEFAULT_TEMPORAL_MIN_ACCESS",
     "DEFAULT_TEMPORAL_SEED_LIMIT",
+    "DEFAULT_TEMPORAL_WINDOW_HOURS",
+    "DF_CEILING_FRAC",
+    "combine_associations",
+    "load_co_entity_associations",
+    "load_memory_associations",
+    "load_semantic_associations",
+    "load_temporal_associations",
 ]

@@ -34,8 +34,6 @@ subscriber delivery order identical. ``subscribe`` / ``unsubscribe`` /
 import collections
 import queue as _queue_mod
 import threading
-from typing import Deque, List, Tuple
-
 
 # --- module configuration --------------------------------------------------
 
@@ -43,17 +41,17 @@ _EVENT_LOG_CAP = 500_000
 _SUBSCRIBER_QUEUE_CAP = 100_000
 _DEAD_QUEUE_MISS_THRESHOLD = 200
 
-Event = Tuple[int, str, bytes]
+Event = tuple[int, str, bytes]
 
 
 # --- module state ----------------------------------------------------------
 
-_event_log: Deque[Event] = collections.deque(maxlen=_EVENT_LOG_CAP)
+_event_log: collections.deque[Event] = collections.deque(maxlen=_EVENT_LOG_CAP)
 _event_log_lock = threading.Lock()
 _event_seq = 0
 _event_log_drops = 0
 
-_subscribers: List[_queue_mod.Queue] = []
+_subscribers: list[_queue_mod.Queue] = []
 _subscribers_lock = threading.Lock()
 
 
@@ -81,7 +79,7 @@ def _clear_misses(q: _queue_mod.Queue) -> None:
         pass
 
 
-def _fan_out(event: Event) -> List[_queue_mod.Queue]:
+def _fan_out(event: Event) -> list[_queue_mod.Queue]:
     """Deliver ``event`` to every live subscriber queue.
 
     Returns the list of subscribers that crossed the dead-queue threshold
@@ -92,7 +90,7 @@ def _fan_out(event: Event) -> List[_queue_mod.Queue]:
     """
     with _subscribers_lock:
         subs = list(_subscribers)
-    dead: List[_queue_mod.Queue] = []
+    dead: list[_queue_mod.Queue] = []
     for q in subs:
         try:
             q.put_nowait(event)
@@ -104,7 +102,7 @@ def _fan_out(event: Event) -> List[_queue_mod.Queue]:
     return dead
 
 
-def _reap(dead: List[_queue_mod.Queue]) -> None:
+def _reap(dead: list[_queue_mod.Queue]) -> None:
     if not dead:
         return
     with _subscribers_lock:
@@ -166,7 +164,7 @@ def unsubscribe(q: _queue_mod.Queue) -> None:
             pass
 
 
-def replay_since(since: int) -> Tuple[List[Event], int]:
+def replay_since(since: int) -> tuple[list[Event], int]:
     """Return ``(events_to_replay, oldest_available_seq)``.
 
     If ``since`` is older than the oldest retained seq the second tuple

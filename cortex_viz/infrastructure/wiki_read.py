@@ -212,10 +212,10 @@ def save_page(rel_path: str, content: str) -> dict[str, Any]:
 
 
 __all__ = [
-    "list_pages",
-    "read_page",
-    "list_projects",
     "list_bibliography",
+    "list_pages",
+    "list_projects",
     "read_bibliography",
+    "read_page",
     "save_page",
 ]

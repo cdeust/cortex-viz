@@ -120,6 +120,6 @@ def serve_capabilities(handler, store) -> None:
 __all__ = [
     "CORTEX_INSTALL_URL",
     "requires_store",
-    "serve_db_unavailable",
     "serve_capabilities",
+    "serve_db_unavailable",
 ]

@@ -44,6 +44,7 @@ def _build_interleaved(
     files + discussions) within seconds, with the heavy memory /
     entity / AST sources streaming in behind.
     """
+    from cortex_viz.core.workflow_graph_association import ingest_association
     from cortex_viz.core.workflow_graph_builder import WorkflowGraphBuilder
     from cortex_viz.core.workflow_graph_builder_relational import (
         ingest_ast_edge,
@@ -56,20 +57,19 @@ def _build_interleaved(
         ingest_skill_usage,
         ingest_symbol,
     )
-    from cortex_viz.core.workflow_graph_association import ingest_association
-    from cortex_viz.core.workflow_graph_supersede import ingest_supersede
     from cortex_viz.core.workflow_graph_entity import (
         ingest_about_entity,
         ingest_entity,
     )
+    from cortex_viz.core.workflow_graph_schema import (
+        GLOBAL_DOMAIN_ID,
+        NodeIdFactory,
+    )
+    from cortex_viz.core.workflow_graph_supersede import ingest_supersede
     from cortex_viz.handlers.workflow_graph_streaming_wiki import (
         ingest_wiki_citation_edges,
         ingest_wiki_memory_edges,
         ingest_wiki_pages_and_links,
-    )
-    from cortex_viz.core.workflow_graph_schema import (
-        GLOBAL_DOMAIN_ID,
-        NodeIdFactory,
     )
 
     builder = WorkflowGraphBuilder()

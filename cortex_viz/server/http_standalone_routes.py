@@ -20,14 +20,14 @@ from cortex_viz.server.http_standalone_endpoints_sankey import (
     serve_sankey,
     serve_stats,
 )
-from cortex_viz.server.http_standalone_static import (
-    serve_file_diff,
-    serve_static,
-)
 from cortex_viz.server.http_standalone_nodb import (
     requires_store,
     serve_capabilities,
     serve_db_unavailable,
+)
+from cortex_viz.server.http_standalone_static import (
+    serve_file_diff,
+    serve_static,
 )
 
 

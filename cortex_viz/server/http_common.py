@@ -34,7 +34,6 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any
 
-
 # Security primitives live in a dedicated module so this file stays
 # focused on server-manager + response helpers. Re-exported here for
 # backward-compatibility with existing import sites.

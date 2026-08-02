@@ -20,8 +20,25 @@ agent / command, skill / mcp usage) lives in
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from typing import Callable, Iterable, List, Optional, Tuple
+from collections.abc import Callable, Iterable
 
+# Per-source node-ingest helpers were split into
+# ``workflow_graph_builder_ingest`` (500-line limit). Imported here; the
+# class methods below delegate to them so the streaming-build dispatch
+# table (``self._ingest_*``) is unchanged. Only the names this module
+# actually delegates to are imported — callers that want ``_require`` /
+# ``_as_tool`` import them from ``_ingest``, which owns them.
+from cortex_viz.core.workflow_graph_builder_ingest import (
+    _finalize_files,
+    _ingest_agent,
+    _ingest_command,
+    _ingest_discussion,
+    _ingest_hook,
+    _ingest_memory,
+    _ingest_skill,
+    _ingest_tool_event,
+    _track_file_timestamp,
+)
 from cortex_viz.core.workflow_graph_builder_relational import (
     ingest_ast_edge,
     ingest_command_file,
@@ -50,24 +67,6 @@ from cortex_viz.core.workflow_graph_schema import (
     ToolKind,
     WorkflowEdge,
     WorkflowNode,
-)
-
-# Per-source node-ingest helpers were split into
-# ``workflow_graph_builder_ingest`` (500-line limit). Imported here; the
-# class methods below delegate to them so the streaming-build dispatch
-# table (``self._ingest_*``) is unchanged. Only the names this module
-# actually delegates to are imported — callers that want ``_require`` /
-# ``_as_tool`` import them from ``_ingest``, which owns them.
-from cortex_viz.core.workflow_graph_builder_ingest import (
-    _finalize_files,
-    _ingest_agent,
-    _ingest_command,
-    _ingest_discussion,
-    _ingest_hook,
-    _ingest_memory,
-    _ingest_skill,
-    _ingest_tool_event,
-    _track_file_timestamp,
 )
 
 
@@ -104,9 +103,8 @@ class WorkflowGraphBuilder:
     def streaming_build(
         self,
         inputs: WorkflowBuildInputs,
-        on_batch: Optional[
-            Callable[[str, List[WorkflowNode], List[WorkflowEdge]], None]
-        ] = None,
+        on_batch: Callable[[str, list[WorkflowNode], list[WorkflowEdge]], None]
+        | None = None,
     ):
         """Generator variant: yield ``(label, new_nodes, new_edges)`` per
         source-ingest step.
@@ -172,7 +170,7 @@ class WorkflowGraphBuilder:
         # (for kinds the builder owns) and free functions that take
         # the builder as first arg (for externalised kinds like
         # ENTITY). The dispatch shape is the same for both.
-        phase1: Tuple[Tuple[str, list, object], ...] = (
+        phase1: tuple[tuple[str, list, object], ...] = (
             ("tool_events", inputs.tool_events, self._ingest_tool_event),
             ("skills", inputs.skill_paths, self._ingest_skill),
             ("hooks", inputs.hook_defs, self._ingest_hook),
@@ -198,7 +196,7 @@ class WorkflowGraphBuilder:
         yield _emit("files")
         # Phase 2: relational edges. Every helper takes the builder
         # as first arg, assumes file nodes exist.
-        phase2: Tuple[Tuple[str, list, object], ...] = (
+        phase2: tuple[tuple[str, list, object], ...] = (
             ("discussion_files", inputs.discussion_file_events, ingest_discussion_file),
             ("command_files", inputs.command_file_events, ingest_command_file),
             ("skill_usage", inputs.skill_usage_events, ingest_skill_usage),

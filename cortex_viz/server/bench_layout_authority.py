@@ -16,8 +16,8 @@ import argparse
 import math
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 from cortex_viz.server.layout_authority_geometry import (
     base_radius,
@@ -29,6 +29,8 @@ from cortex_viz.server.layout_authority_geometry import (
 from cortex_viz.server.layout_authority_log import (
     emit,
     replay_since,
+)
+from cortex_viz.server.layout_authority_log import (
     reset as log_reset,
 )
 from cortex_viz.server.layout_authority_protocol import EdgeDelta
@@ -38,7 +40,6 @@ from cortex_viz.server.layout_authority_scheduler import (
     priority_for_node,
 )
 from cortex_viz.server.layout_authority_wire import format_edge, format_slot
-
 
 # ── Workload synthesis ──────────────────────────────────────────────────
 

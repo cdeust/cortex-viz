@@ -188,8 +188,8 @@ def ingest_wiki_citation(b, row: dict) -> None:
 
 
 __all__ = [
-    "ingest_wiki_page",
+    "ingest_wiki_citation",
     "ingest_wiki_link",
     "ingest_wiki_memory",
-    "ingest_wiki_citation",
+    "ingest_wiki_page",
 ]

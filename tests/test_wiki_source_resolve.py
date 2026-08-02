@@ -12,7 +12,6 @@ import os
 import cortex_viz.core.wiki_source_resolve as mod
 from cortex_viz.core.workflow_graph_schema import NodeIdFactory
 
-
 # ── Single-root fast path (historic behaviour, no disk read) ──────────
 
 

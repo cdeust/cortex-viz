@@ -242,7 +242,7 @@ class MemorySettings(BaseSettings):
     model_config = {"env_prefix": "CORTEX_MEMORY_"}
 
     @model_validator(mode="after")
-    def _set_runtime(self) -> "MemorySettings":
+    def _set_runtime(self) -> MemorySettings:
         if not self.RUNTIME:
             self.RUNTIME = _detect_runtime()
         return self

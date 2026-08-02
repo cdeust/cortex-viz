@@ -8,7 +8,7 @@ with ``core.layout_engine`` to produce + persist coords.
 from __future__ import annotations
 
 import time
-from typing import Iterable
+from collections.abc import Iterable
 
 
 def _conn(store):

@@ -15,10 +15,9 @@ Exposes:
 
 from __future__ import annotations
 
+import os as _os
 import threading
 import time
-
-import os as _os
 
 IDLE_TIMEOUT = float(_os.environ.get("CORTEX_IDLE_TIMEOUT", "600"))  # default 10 min
 GRAPH_CACHE_TTL = 120.0  # seconds — avoids rebuilding 8000+ nodes.

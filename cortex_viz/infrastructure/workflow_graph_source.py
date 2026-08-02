@@ -25,13 +25,14 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
-from cortex_viz.infrastructure.config import CLAUDE_DIR
-from cortex_viz.infrastructure.file_io import read_text_file
 from cortex_viz.infrastructure import workflow_graph_source_jsonl as _jsonl
 from cortex_viz.infrastructure import workflow_graph_source_pg as _pg
+from cortex_viz.infrastructure.config import CLAUDE_DIR
+from cortex_viz.infrastructure.file_io import read_text_file
 from cortex_viz.shared.domain_mapping import resolve_cwd, resolve_domain
 from cortex_viz.shared.project_ids import (
     cwd_to_project_id,

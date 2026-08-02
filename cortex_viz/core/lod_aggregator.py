@@ -25,8 +25,8 @@ persists the emitted cells. Renderer-agnostic — datashader just sees points.
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Iterable
 from math import floor
-from typing import Iterable
 
 # World extent. Mirrors ``tile_renderer.WORLD_MIN / WORLD_MAX``; kept local so
 # this pure module imports nothing from the rendering path.

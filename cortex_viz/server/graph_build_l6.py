@@ -14,10 +14,9 @@ from __future__ import annotations
 import math
 import sys
 
-from cortex_viz.shared.hash import simple_hash
-
 from cortex_viz.server import graph_cache_state as state
 from cortex_viz.server.graph_wire import _place_around
+from cortex_viz.shared.hash import simple_hash
 
 # Per-project wall-clock ceiling for the L6 AST load (tree-sitter parse +
 # AP bridge round-trip). A project that exceeds this is marked ready and

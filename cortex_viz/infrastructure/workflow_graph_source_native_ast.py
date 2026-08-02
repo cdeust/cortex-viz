@@ -20,7 +20,8 @@ never correctness.
 
 from __future__ import annotations
 
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 
 class WorkflowGraphNativeASTSource:

@@ -47,7 +47,8 @@ from __future__ import annotations
 import collections
 import json
 import threading
-from typing import Any, Iterator
+from collections.abc import Iterator
+from typing import Any
 
 
 class GraphEventStream:
@@ -58,7 +59,7 @@ class GraphEventStream:
     JSON batches instead of binary slot frames.
     """
 
-    __slots__ = ("_buf", "_lock", "_cond", "_closed", "_max")
+    __slots__ = ("_buf", "_closed", "_cond", "_lock", "_max")
 
     def __init__(self, max_events: int = 100_000) -> None:
         self._buf: collections.deque = collections.deque(maxlen=max_events)
@@ -229,7 +230,7 @@ def format_event(index: int, event: dict) -> bytes:
     standard ``Last-Event-ID`` header on reconnect.
     """
     payload = json.dumps(event, separators=(",", ":"), default=_json_default)
-    return (f"id: {index}\nevent: batch\ndata: {payload}\n\n").encode("utf-8")
+    return (f"id: {index}\nevent: batch\ndata: {payload}\n\n").encode()
 
 
 def format_done(total_nodes: int, total_edges: int) -> bytes:
@@ -237,7 +238,7 @@ def format_done(total_nodes: int, total_edges: int) -> bytes:
         {"total_nodes": total_nodes, "total_edges": total_edges},
         separators=(",", ":"),
     )
-    return (f"event: done\ndata: {payload}\n\n").encode("utf-8")
+    return (f"event: done\ndata: {payload}\n\n").encode()
 
 
 def format_heartbeat() -> bytes:

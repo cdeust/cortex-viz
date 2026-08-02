@@ -198,7 +198,7 @@ def _full_content_as_adds(root: str, rel: str) -> tuple[list[dict], bool]:
     """Render an untracked file's whole content as additions."""
     abs_path = os.path.join(root, rel)
     try:
-        with open(abs_path, "r", encoding="utf-8", errors="replace") as fh:
+        with open(abs_path, encoding="utf-8", errors="replace") as fh:
             body = fh.read().splitlines()
     except OSError:
         return [], False
@@ -322,17 +322,17 @@ def diff_for_path(path: str) -> dict:
 
 
 __all__ = [
-    "resolve_repo_root",
-    "repo_root_and_relpath",
-    "_sandboxed_abs_path",
-    "_repo_root_of",
-    "diff_for_path",
     "_MAX_LINES",
+    "_full_content_as_adds",
     "_git",
     "_is_untracked",
-    "_parse_unified",
-    "_full_content_as_adds",
     "_last_commit_diff",
-    "_untracked_diff",
+    "_parse_unified",
+    "_repo_root_of",
     "_resolve_diff",
+    "_sandboxed_abs_path",
+    "_untracked_diff",
+    "diff_for_path",
+    "repo_root_and_relpath",
+    "resolve_repo_root",
 ]

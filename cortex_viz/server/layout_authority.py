@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import threading
 from collections import OrderedDict
-from typing import Optional
 
 from cortex_viz.server import layout_authority_log as _log
 from cortex_viz.server import layout_authority_pressure as _pressure
@@ -42,7 +41,6 @@ from cortex_viz.server.layout_authority_protocol import (
     NodeDelta,
     SlotAssignment,
 )
-
 
 # ── Tunables ─────────────────────────────────────────────────────────────
 
@@ -170,7 +168,7 @@ class LayoutAuthority:
         # 2026-05-27 on the rebased streaming branch.
         self._pending_symbols_count = 0
         # I5 buffer: ordered (src,tgt) -> EdgeDelta; oldest dropped on cap.
-        self._pending_edges: "OrderedDict[tuple[str, str], EdgeDelta]" = OrderedDict()
+        self._pending_edges: OrderedDict[tuple[str, str], EdgeDelta] = OrderedDict()
         # Counters surfaced via stats(); not load-bearing for correctness.
         self._slots_emitted = 0
         self._edges_emitted = 0
@@ -266,7 +264,7 @@ class LayoutAuthority:
 
     # ── Internal placement ─────────────────────────────────────────────
 
-    def _place_node(self, delta: NodeDelta) -> Optional[SlotAssignment]:
+    def _place_node(self, delta: NodeDelta) -> SlotAssignment | None:
         """Compute and register a slot. Returns None if buffered (I3)."""
         # Symbol awaiting file: buffer + return None.
         if delta.kind == "symbol":

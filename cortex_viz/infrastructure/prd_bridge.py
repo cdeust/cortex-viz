@@ -237,4 +237,4 @@ def read_prd_graph() -> dict[str, list]:
     return {"nodes": nodes, "edges": edges}
 
 
-__all__ = ["PRDBridge", "is_enabled", "read_prd_graph", "discover_prd_artifacts"]
+__all__ = ["PRDBridge", "discover_prd_artifacts", "is_enabled", "read_prd_graph"]

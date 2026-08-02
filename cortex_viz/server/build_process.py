@@ -128,7 +128,7 @@ def kill_current_build() -> None:
             _proc = None
 
 
-def _worker(q: "mp.Queue", url: str, domain_filter: str | None, epoch: int) -> None:
+def _worker(q: mp.Queue, url: str, domain_filter: str | None, epoch: int) -> None:
     """Child process: run the real build, forwarding progress + full-dict
     deltas over ``q`` (epoch-stamped) and the full final graph via a temp
     file."""
@@ -136,8 +136,10 @@ def _worker(q: "mp.Queue", url: str, domain_filter: str | None, epoch: int) -> N
         from cortex_viz.infrastructure.memory_read import MemoryReader
         from cortex_viz.server import (
             graph_build,
-            graph_cache_state as g_state,
             http_standalone,
+        )
+        from cortex_viz.server import (
+            graph_cache_state as g_state,
         )
 
         # Resolve AP for THIS child: _auto_enable_ap() only sets CORTEX_AP_*
@@ -170,7 +172,7 @@ def _worker(q: "mp.Queue", url: str, domain_filter: str | None, epoch: int) -> N
     q.put(("done", epoch, "ok"))
 
 
-def _drain(q: "mp.Queue", proc, epoch: int) -> None:
+def _drain(q: mp.Queue, proc, epoch: int) -> None:
     """Server process: apply forwarded messages to in-process state.
 
     Watchdog: q.get(timeout=15) bounds the wait. On Empty, if the child is

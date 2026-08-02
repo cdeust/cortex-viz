@@ -10,7 +10,6 @@ import json
 
 from cortex_viz.infrastructure import ap_graph_root
 
-
 # ── absolutize ──────────────────────────────────────────────────────
 
 

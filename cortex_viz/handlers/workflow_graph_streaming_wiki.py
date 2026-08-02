@@ -15,7 +15,8 @@ and infrastructure, never the reverse.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from cortex_viz.core.workflow_graph_wiki import (
     ingest_wiki_citation,
@@ -152,7 +153,7 @@ def ingest_wiki_memory_edges(
 
 
 __all__ = [
-    "ingest_wiki_pages_and_links",
     "ingest_wiki_citation_edges",
     "ingest_wiki_memory_edges",
+    "ingest_wiki_pages_and_links",
 ]

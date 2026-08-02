@@ -16,8 +16,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Iterator
 from concurrent.futures import TimeoutError as FutureTimeoutError
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import TYPE_CHECKING, Any
 
 from cortex_viz.errors import McpConnectionError
 
@@ -361,7 +362,7 @@ def _repo_relative_for_match(p: str) -> str:
 
 
 async def _symbol_batches_async(
-    bridge: "APBridge",
+    bridge: APBridge,
     graph_path: str,
     paths: list[str],
 ):

@@ -184,9 +184,9 @@ def load_wiki_session_links(pg_store) -> list[dict[str, Any]]:
 
 
 __all__ = [
-    "load_wiki_pages",
     "load_wiki_links",
     "load_wiki_memory_links",
     "load_wiki_page_sources",
+    "load_wiki_pages",
     "load_wiki_session_links",
 ]

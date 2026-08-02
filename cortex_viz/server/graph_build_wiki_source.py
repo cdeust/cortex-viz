@@ -32,7 +32,7 @@ skip-missing-endpoint contract mirrors ``core.workflow_graph_wiki.ingest_wiki_so
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 from cortex_viz.server import graph_cache_state as state
 

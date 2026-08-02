@@ -92,4 +92,4 @@ def match_activity_rows(
     return matches
 
 
-__all__ = ["resolve_source_target_ids", "match_activity_rows"]
+__all__ = ["match_activity_rows", "resolve_source_target_ids"]
