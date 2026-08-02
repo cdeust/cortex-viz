@@ -319,7 +319,7 @@
         // the same single-panel contract as the canvas/svg renderers.
         if (window.JUG && typeof JUG.emit === 'function') {
           var datum = { id: qt.ids[info.index], kind: qt.kinds[info.index] };
-          try { JUG.emit('graph:selectNode', datum); } catch (_) {}
+          try { JUG.emit('graph:selectNode', datum); } catch {}
         }
       },
       layers: [
@@ -347,7 +347,7 @@
 
     return {
       destroy: function () {
-        try { deckInstance.finalize(); } catch (_) {}
+        try { deckInstance.finalize(); } catch {}
         if (canvasHost.parentNode) canvasHost.parentNode.removeChild(canvasHost);
         hoverLabel.remove();
       },

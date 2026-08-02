@@ -20,7 +20,7 @@ CMV.setupZoom = function () {
           return 1;
         });
       }
-    } catch (e) { /* camera not ready */ }
+    } catch { /* camera not ready */ }
   }, 200);
 };
 

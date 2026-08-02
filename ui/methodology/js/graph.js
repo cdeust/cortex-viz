@@ -135,6 +135,6 @@ CMV.setupScene = function () {
       var scene = CMV.graph.scene();
       scene.fog = new THREE.FogExp2(canvasHex, 0.0006);
       // No scene lights — node markers use MeshBasicMaterial (unlit, flat).
-    } catch (e) { /* scene not ready */ }
+    } catch { /* scene not ready */ }
   }, 600);
 };

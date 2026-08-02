@@ -19,7 +19,6 @@
   var boardCursor = null;
   var boardLoading = false;
   var boardDone = false;
-  var boardPagesFetched = 0;
   var boardFetchToken = 0;
   var boardScrolledSinceFetch = false;
   var _boardObserver = null;  // track the active IntersectionObserver so we can disconnect before recreating
@@ -139,7 +138,6 @@
     boardCursor = null;
     boardDone = false;
     boardLoading = false;
-    boardPagesFetched = 0;
     boardFetchToken++;
     boardScrolledSinceFetch = true;  // allow the very first page
     currentData = { nodes: [], edges: [], links: [] };
@@ -179,7 +177,6 @@
         }
         boardCursor = data.next_cursor || null;
         boardDone = !boardCursor;
-        boardPagesFetched++;
         boardLoading = false;
         currentData = { nodes: boardAccum, edges: [], links: [] };
         rebuild();

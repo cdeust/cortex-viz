@@ -34,7 +34,7 @@
     try {
       var v = root.localStorage.getItem(STORAGE_KEY);
       return SURFACES.indexOf(v) !== -1 ? v : null;
-    } catch (_) {
+    } catch {
       return null; // storage blocked (private mode) — fall back to default
     }
   }
@@ -42,7 +42,7 @@
   function persist(surface) {
     try {
       root.localStorage.setItem(STORAGE_KEY, surface);
-    } catch (_) {
+    } catch {
       /* non-fatal: the attribute is still applied for this session */
     }
   }
@@ -64,7 +64,7 @@
         root.dispatchEvent(
           new CustomEvent(EVENT, { detail: { surface: surface, previous: previous } })
         );
-      } catch (_) {
+      } catch {
         /* CustomEvent unsupported — DOM/CSS still updated, only baked renderers miss it */
       }
     }

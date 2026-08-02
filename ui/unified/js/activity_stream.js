@@ -63,7 +63,7 @@
 
   function _onBatch(ev) {
     var data;
-    try { data = JSON.parse(ev.data); } catch (e) { return; }
+    try { data = JSON.parse(ev.data); } catch { return; }
     var nodes = (data.nodes || []).map(function (n) {
       return (n && typeof n === 'object') ? n : { id: String(n) };
     });
@@ -87,7 +87,7 @@
         if (!_galaxyLive()) { _buf.push({ nodes: d.nodes, edges: d.edges || [] }); return; }
         _append(d.nodes, d.edges || []);
       }).catch(function () {});
-    } catch (_) {}
+    } catch {}
   }
 
   function start() {
@@ -112,7 +112,7 @@
   }
 
   function stop() {
-    if (es) { try { es.close(); } catch (_) {} es = null; }
+    if (es) { try { es.close(); } catch {} es = null; }
   }
 
   window.JUG = window.JUG || {};

@@ -14,6 +14,60 @@ permissions:
   contents: read
 
 jobs:
+  # Required gate (issue #45). Ruff was configured in pyproject.toml but
+  # nothing ran it, which makes it a preference, not a standard. The rule
+  # set enforced here is `[tool.ruff.lint].select` — wider than ruff's
+  # default E4/E7/E9+F, which the tree already passed and which is not
+  # "maximally strict with warnings" (OpenSSF `warnings_strict`).
+  #
+  # `--output-format=github` turns each finding into a PR annotation on the
+  # offending line, so a contributor sees the violation in the diff rather
+  # than having to read the job log.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+      # `--extra dev`, not `--only-dev`: this project declares `dev` as a
+      # project EXTRA in [project.optional-dependencies], and `--only-dev`
+      # selects PEP 735 dependency-GROUPS, of which there are none here. It
+      # therefore installs no ruff, and `uv run` silently falls back to
+      # whatever ruff is on PATH — a different binary from the locked one,
+      # or none at all on a clean runner. Verified locally: --only-dev
+      # resolved to /opt/homebrew/bin/ruff 0.15.20 instead of the locked
+      # 0.15.22.
+      #
+      # `--all-extras` is not needed: ruff parses source, it never imports
+      # it, so the runtime + viz extras are wasted install time here.
+      - name: Install ruff from the lock
+        run: uv sync --locked --extra dev --python 3.12
+      - name: ruff check
+        run: uv run --no-sync ruff check --output-format=github .
+      # Separate step so a formatting-only failure is distinguishable from
+      # a rule violation at a glance in the checks list.
+      - name: ruff format --check
+        run: uv run --no-sync ruff format --check .
+
+  # Required gate for the browser UI. Narrow by design — see the rationale
+  # in eslint.config.mjs: vanilla script-tag JavaScript with hand-maintained
+  # load order, so the rules that pay are the cross-file ones (no-undef,
+  # no-implicit-globals), not style.
+  js-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: "npm"
+      - name: Install JS dependencies
+        run: npm ci
+      - name: Run ESLint
+        run: npm run lint
+
   test:
     runs-on: ubuntu-latest
     steps:

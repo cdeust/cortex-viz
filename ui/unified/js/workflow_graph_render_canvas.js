@@ -100,12 +100,12 @@
         // owner of the node-detail panel. The Trace view (trace.js) also
         // reacts to expand the clicked node's children.
         if (window.JUG && typeof JUG.emit === 'function') {
-          try { JUG.emit('graph:selectNode', n); } catch (_e) {}
+          try { JUG.emit('graph:selectNode', n); } catch {}
         }
       } else {
         selectedId = null;
         if (window.JUG && typeof JUG.emit === 'function') {
-          try { JUG.emit('graph:deselectNode'); } catch (_e) {}
+          try { JUG.emit('graph:deselectNode'); } catch {}
         }
       }
       draw();
@@ -324,7 +324,7 @@
       for (var i = 0; i < fctx.nodes.length; i++) {
         var n = fctx.nodes[i];
         try { if (pred(n, fctx)) filterKeep[n.id] = true; }
-        catch (_) { filterKeep[n.id] = true; }
+        catch { filterKeep[n.id] = true; }
       }
       draw();
     }
@@ -405,7 +405,7 @@
         if (!n) return;
         selectedId = id;
         if (window.JUG && typeof JUG.emit === 'function') {
-          try { JUG.emit('graph:selectNode', n); } catch (_e) {}
+          try { JUG.emit('graph:selectNode', n); } catch {}
         }
         draw();
       },

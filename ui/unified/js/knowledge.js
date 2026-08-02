@@ -10,7 +10,6 @@
   var currentSort = 'heat';
   var currentDomain = 'all';
   var searchQuery = '';
-  var expandedCardId = null;
 
   // Paged-fetch state. Reset on every show()/filter change. Each page
   // after the first is gated on a genuine user scroll.
@@ -22,6 +21,12 @@
   var pageDone = false;
   var lastFetchToken = 0;
   var scrolledSinceFetch = false;
+  // Per-page rollup counters. Declared here with their siblings: they were
+  // assigned bare in _resetAndFetch, which made them properties of window
+  // shared with every other view on the page.
+  var domainsSeen = Object.create(null);
+  var globalCount = 0;
+  var hotCount = 0;
   var _pageObserver = null;  // track the active IntersectionObserver so we can disconnect before recreating
 
   // Server-known filter facets. Loaded once on first show() so chips
@@ -828,7 +833,6 @@
 
   function openExpanded(mem, allMems) {
     closeExpanded();
-    expandedCardId = mem.id;
 
     var heat = mem.heat || 0;
     var storeType = mem.storeType === 'semantic' ? 'semantic' : 'episodic';
@@ -1011,7 +1015,6 @@
       if (panel._escHandler) window.removeEventListener('keydown', panel._escHandler);
       panel.remove();
     }
-    expandedCardId = null;
   }
 
   // The inspector docks to document.body, so any view can open it — the
@@ -1175,7 +1178,7 @@
           } else {
             rendered = '<pre class="kv-code"><code>' + esc(JSON.stringify(parsed, null, 2)) + '</code></pre>';
           }
-        } catch (e) {
+        } catch {
           rendered = '<pre class="kv-code"><code>' + esc(jsonRaw) + '</code></pre>';
         }
         html.push(rendered);

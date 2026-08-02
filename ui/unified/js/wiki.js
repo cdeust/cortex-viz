@@ -2,7 +2,6 @@
 // Professional knowledge base with tree sidebar and markdown rendering
 (function() {
   var container = null;
-  var visible = false;
   var pages = [];
   var activePath = '';
   var searchQuery = '';
@@ -48,13 +47,11 @@
   function show() {
     if (!container) return;
     container.style.display = 'block';
-    visible = true;
     if (pages.length === 0) fetchPages();
     else buildLayout();
   }
 
   function hide() {
-    visible = false;
     if (container) container.style.display = 'none';
     // Don't leave #graph-container forced-visible behind another lens.
     if (wikiMode === 'graph') exitGraphMode();
@@ -941,7 +938,7 @@
             // v9 / older — best-effort retry.
             setTimeout(function() { _attachMermaidLenses(bodyEl); }, 50);
           }
-        } catch (e) { /* mermaid optional; swallow failures */ }
+        } catch { /* mermaid optional; swallow failures */ }
       });
     }
 
@@ -957,7 +954,7 @@
           ],
           throwOnError: false
         });
-      } catch (e) { /* KaTeX optional; swallow failures */ }
+      } catch { /* KaTeX optional; swallow failures */ }
     }
 
     // Phase 9 — academic passes (section numbering, figure/equation
@@ -1831,7 +1828,7 @@
           var j = await resp.json();
           list = (j.files || []).map(function(f) { return f.path; });
         }
-      } catch (e) { return {}; }
+      } catch { return {}; }
       if (!list || list.length === 0) return {};
 
       var core = await _loadCitationJs();
@@ -1846,7 +1843,7 @@
           cite.data.forEach(function(entry) {
             if (entry.id) byKey[entry.id] = entry;
           });
-        } catch (e) { /* skip bad file */ }
+        } catch { /* skip bad file */ }
       }));
       _bibCache = byKey;
       return byKey;
@@ -1879,7 +1876,7 @@
       var cite = new Cite(entries);
       var html = cite.format('bibliography', { format: 'html', template: 'apa', lang: 'en-US' });
       return '<h2 id="references">References</h2>' + html;
-    } catch (e) {
+    } catch {
       // Fallback: plain list of raw ids
       return '<h2 id="references">References</h2><ul>' +
         Array.from(usedKeys).map(function(k) { return '<li>' + esc(k) + '</li>'; }).join('') +
@@ -2152,7 +2149,7 @@
             ],
             throwOnError: false
           });
-        } catch (e) { /* noop */ }
+        } catch { /* noop */ }
       }
     }
 

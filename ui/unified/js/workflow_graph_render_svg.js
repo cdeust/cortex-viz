@@ -112,7 +112,7 @@
       for (var i = 0; i < fctx.nodes.length; i++) {
         var n = fctx.nodes[i];
         try { if (pred(n, fctx)) keep[n.id] = true; }
-        catch (_) { keep[n.id] = true; }
+        catch { keep[n.id] = true; }
       }
       nodeSel.classed('wfg-filter-out', function (n) { return !keep[n.id]; });
       linkSel.classed('wfg-filter-out', function (e) {

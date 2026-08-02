@@ -80,7 +80,7 @@
   var _activeRenderer = null;
   function _repaintActiveRenderer() {
     if (_activeRenderer && typeof _activeRenderer.redraw === 'function') {
-      try { _activeRenderer.redraw(); } catch (_e) { /* non-fatal: next tick/interaction repaints anyway */ }
+      try { _activeRenderer.redraw(); } catch { /* non-fatal: next tick/interaction repaints anyway */ }
     }
   }
 

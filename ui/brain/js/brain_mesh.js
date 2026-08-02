@@ -43,7 +43,7 @@ window.BRAIN = window.BRAIN || {};
     var x = _probe.getContext('2d');
     x.clearRect(0, 0, 1, 1);
     x.fillStyle = '#000';
-    try { x.fillStyle = cssColor; } catch (e) { /* keep #000 */ }
+    try { x.fillStyle = cssColor; } catch { /* keep #000 */ }
     x.fillRect(0, 0, 1, 1);
     var d = x.getImageData(0, 0, 1, 1).data;
     return [d[0] / 255, d[1] / 255, d[2] / 255];

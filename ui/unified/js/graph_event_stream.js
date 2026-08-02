@@ -66,7 +66,7 @@
           label: stats.lastLabel,
           off: data.off, n_total: data.n_total, e_total: data.e_total,
         });
-      } catch (_) {}
+      } catch {}
     }
   }
 
@@ -79,7 +79,7 @@
       Math.round(elapsed) + ' ms'
     );
     if (callbacks.onDone) {
-      try { callbacks.onDone({ ...stats, elapsed_ms: elapsed }); } catch (_) {}
+      try { callbacks.onDone({ ...stats, elapsed_ms: elapsed }); } catch {}
     }
     stop();
   }
@@ -111,7 +111,7 @@
 
   function stop() {
     if (es) {
-      try { es.close(); } catch (_) {}
+      try { es.close(); } catch {}
       es = null;
       console.log('[stream] EventSource closed');
     }
