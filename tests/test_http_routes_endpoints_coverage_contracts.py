@@ -251,7 +251,8 @@ def test_basic_endpoints_report_success_and_errors(monkeypatch):
         endpoints, "get_graph_response", lambda store, path: [store, path]
     )
     endpoints.serve_graph(_Handler("/api/graph"), "db")
-    assert sent.pop() == ["db", "/api/graph"]
+    response = sent.pop()
+    assert response == ["db", "/api/graph"]
     monkeypatch.setattr(
         endpoints,
         "get_graph_response",
@@ -263,7 +264,8 @@ def test_basic_endpoints_report_success_and_errors(monkeypatch):
         http_dashboard_data, "build_dashboard_data", lambda store: {"db": store}
     )
     endpoints.serve_dashboard(_Handler(), "db")
-    assert sent.pop() == {"db": "db"}
+    response = sent.pop()
+    assert response == {"db": "db"}
     monkeypatch.setattr(
         http_dashboard_data,
         "build_dashboard_data",
@@ -275,7 +277,8 @@ def test_basic_endpoints_report_success_and_errors(monkeypatch):
         prd_bridge, "read_prd_graph", lambda: {"nodes": [1], "edges": [2]}
     )
     endpoints.serve_prd(_Handler())
-    assert sent.pop()["available"] is True
+    response = sent.pop()
+    assert response["available"] is True
     monkeypatch.setattr(
         prd_bridge,
         "read_prd_graph",
@@ -342,7 +345,8 @@ def test_slice_progress_and_phase_endpoints_parse_defaults_and_errors(monkeypatc
         lambda offset, limit: {"offset": offset, "limit": limit},
     )
     endpoints.serve_graph_slice(_Handler("/api/graph/slice?offset=bad&limit=7"))
-    assert sent.pop() == {"offset": 0, "limit": 7}
+    response = sent.pop()
+    assert response == {"offset": 0, "limit": 7}
 
     monkeypatch.setattr(
         graph_build, "ensure_build_started", lambda store: sent.append(store)
@@ -372,7 +376,8 @@ def test_slice_progress_and_phase_endpoints_parse_defaults_and_errors(monkeypatc
     endpoints.serve_graph_phase(
         _Handler("/api/graph/phase?name=L6%3ACortex&offset=5&limit=10")
     )
-    assert sent.pop() == {"name": "L6:Cortex", "offset": 5, "limit": 10}
+    response = sent.pop()
+    assert response == {"name": "L6:Cortex", "offset": 5, "limit": 10}
 
     monkeypatch.setattr(
         graph_appliers,
@@ -447,13 +452,16 @@ def test_lod_and_node_resolution_helpers(monkeypatch):
 def test_graph_node_and_discussion_endpoints(monkeypatch):
     sent, errors, _warming = _capture_endpoint_responses(monkeypatch)
     endpoints.serve_graph_node(_Handler("/api/graph/node"), None)
-    assert sent.pop() == {"error": "missing id"}
+    response = sent.pop()
+    assert response == {"error": "missing id"}
     endpoints.serve_graph_node(_Handler("/api/graph/node?id=lod%3A1%3A0%3A0"), None)
-    assert sent.pop()["member_count"] == 0
+    response = sent.pop()
+    assert response["member_count"] == 0
 
     monkeypatch.setattr(endpoints, "_resolve_lod_cell", lambda *_args: {"found": True})
     endpoints.serve_graph_node(_Handler("/api/graph/node?id=lod%3A1%3A0%3A0"), "db")
-    assert sent.pop() == {"found": True}
+    response = sent.pop()
+    assert response == {"found": True}
 
     monkeypatch.setattr(
         endpoints, "_resolve_node_record", lambda *_args: {"name": "node"}
@@ -464,7 +472,8 @@ def test_graph_node_and_discussion_endpoints(monkeypatch):
         lambda *_args: {"neighbors": [1], "total": 1, "next_offset": None},
     )
     endpoints.serve_graph_node(_Handler("/api/graph/node?id=file%3Ax"), "db")
-    assert sent.pop()["record"] == {"name": "node"}
+    response = sent.pop()
+    assert response["record"] == {"name": "node"}
 
     monkeypatch.setattr(
         endpoints,

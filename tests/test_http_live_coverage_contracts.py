@@ -63,24 +63,28 @@ def test_trace_domain_session_and_chain_endpoints(monkeypatch):
     sent, errors = _capture_trace(monkeypatch)
     monkeypatch.setattr(trace_source, "list_domains", lambda: [{"id": "domain:x"}])
     trace.serve_trace_domains(_Handler())
-    assert sent.pop()["meta"]["level"] == 0
+    response = sent.pop()
+    assert response["meta"]["level"] == 0
 
     trace.serve_trace_sessions(_Handler("/api/trace/sessions"))
-    assert sent.pop()["error"] == "missing domain"
+    response = sent.pop()
+    assert response["error"] == "missing domain"
     monkeypatch.setattr(
         trace_source,
         "list_sessions",
         lambda domain: {"nodes": [{"domain": domain}], "edges": []},
     )
     trace.serve_trace_sessions(_Handler("/api/trace/sessions?domain=domain%3Ax"))
-    assert sent.pop()["meta"] == {
+    response = sent.pop()
+    assert response["meta"] == {
         "schema": "trace.v1",
         "level": 1,
         "domain": "domain:x",
     }
 
     trace.serve_trace_chain(_Handler("/api/trace/chain"))
-    assert sent.pop()["error"] == "missing session"
+    response = sent.pop()
+    assert response["error"] == "missing session"
     monkeypatch.setattr(trace_source, "iter_session_events", lambda sid: [{"sid": sid}])
     monkeypatch.setattr(
         session_trace,
@@ -88,9 +92,11 @@ def test_trace_domain_session_and_chain_endpoints(monkeypatch):
         lambda events, sid, *, since: {"nodes": [sid, since], "edges": events},
     )
     trace.serve_trace_chain(_Handler("/api/trace/chain?session=s1&since=bad"))
-    assert sent.pop()["meta"]["since"] == 0
+    response = sent.pop()
+    assert response["meta"]["since"] == 0
     trace.serve_trace_chain(_Handler("/api/trace/chain?session=s1&since=3"))
-    assert sent.pop()["nodes"] == ["s1", 3]
+    response = sent.pop()
+    assert response["nodes"] == ["s1", 3]
 
     monkeypatch.setattr(
         trace_source,
@@ -151,28 +157,34 @@ def test_trace_git_helpers_file_and_impact_endpoints(tmp_path, monkeypatch):
     ]
 
     trace.serve_trace_file(_Handler("/api/trace/file"))
-    assert sent.pop()["error"] == "missing path"
+    response = sent.pop()
+    assert response["error"] == "missing path"
     monkeypatch.setattr(trace, "_git_history", lambda path: {"git": path})
     monkeypatch.setattr(trace, "_git_versions", lambda path: {"versions": path})
     monkeypatch.setattr(trace, "_ast_and_impact", lambda path: {"ast": path})
     trace.serve_trace_file(_Handler("/api/trace/file?path=a.py"))
     assert "ast" not in sent[-1]
     trace.serve_trace_file(_Handler("/api/trace/file?path=a.py&include=ast"))
-    assert sent.pop()["ast"] == {"ast": "a.py"}
+    response = sent.pop()
+    assert response["ast"] == {"ast": "a.py"}
     sent.pop()
 
     trace.serve_trace_impact(_Handler("/api/trace/impact"))
-    assert sent.pop()["reason"] == "missing path"
+    response = sent.pop()
+    assert response["reason"] == "missing path"
     monkeypatch.setattr(ap_bridge, "is_enabled", lambda: False)
     trace.serve_trace_impact(_Handler("/?path=a.py"))
-    assert sent.pop()["reason"] == "ap_disabled"
+    response = sent.pop()
+    assert response["reason"] == "ap_disabled"
     monkeypatch.setattr(ap_bridge, "is_enabled", lambda: True)
     monkeypatch.setattr(trace, "impact_for_path", lambda _path: None)
     trace.serve_trace_impact(_Handler("/?path=/repo/a.py"))
-    assert sent.pop()["reason"] == "not_indexed"
+    response = sent.pop()
+    assert response["reason"] == "not_indexed"
     monkeypatch.setattr(trace, "impact_for_path", lambda _path: {"upstream": [1]})
     trace.serve_trace_impact(_Handler("/?path=/repo/a.py"))
-    assert sent.pop()["available"] is True
+    response = sent.pop()
+    assert response["available"] is True
 
     monkeypatch.setattr(
         trace,
@@ -417,7 +429,8 @@ def test_sankey_and_stats_build_cache_and_report_errors(monkeypatch):
     assert sankey._sankey_timing(store)["a->b"]["avg_hours"] == 1.2
     assert sankey._sankey_stage_metrics(store)["labile"]["avg_heat"] == 1.235
     sankey.serve_sankey(_Handler(), store)
-    assert sent.pop()["total_memories"] == 10
+    response = sent.pop()
+    assert response["total_memories"] == 10
 
     monkeypatch.setattr(
         graph_discussions, "_compute_memory_vitals", lambda _store: {"ok": 1}
@@ -432,7 +445,8 @@ def test_sankey_and_stats_build_cache_and_report_errors(monkeypatch):
     sankey.serve_stats(_Handler(), store)
     first = sent.pop()
     sankey.serve_stats(_Handler(), store)
-    assert sent.pop() is first
+    response = sent.pop()
+    assert response is first
 
     broken = SimpleNamespace(
         _execute=lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("sankey"))

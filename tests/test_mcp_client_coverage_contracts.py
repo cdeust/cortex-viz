@@ -112,7 +112,7 @@ def test_resolve_pending_covers_result_error_and_ignored_messages():
 
         assert await result == {"ok": True}
         with pytest.raises(errors.McpConnectionError, match="Unknown error"):
-            await error
+            _ = await error
         assert already_done.result() == "kept"
 
     asyncio.run(exercise())
@@ -167,7 +167,7 @@ def test_read_loop_fails_pending_and_marks_disconnected(terminal, capsys):
         await reader.read_loop(client)
         assert client._connected is False
         with pytest.raises(errors.McpConnectionError, match=type(terminal).__name__):
-            await future
+            _ = await future
 
     asyncio.run(exercise())
     assert "reader" in capsys.readouterr().err
@@ -185,7 +185,7 @@ def test_read_loop_eof_and_cancelled_are_clean_terminal_paths():
         await reader.read_loop(client)
         assert not client._connected
         with pytest.raises(errors.McpConnectionError, match="EOF"):
-            await future
+            _ = await future
 
     asyncio.run(exercise(FakeStream([b""])))
     asyncio.run(exercise(FakeStream([asyncio.CancelledError()])))
@@ -256,7 +256,12 @@ def test_open_stderr_log_fails_open(monkeypatch):
         "mkdir",
         lambda *args, **kwargs: (_ for _ in ()).throw(OSError("readonly")),
     )
-    assert stderr.open_stderr_log({"command": "python3"}) is None
+    handle = stderr.open_stderr_log({"command": "python3"})
+    try:
+        assert handle is None
+    finally:
+        if handle is not None:
+            handle.close()
 
 
 def test_stderr_loop_mirrors_and_persists(monkeypatch, capsys):
@@ -468,7 +473,7 @@ def test_close_cancels_tasks_fails_pending_and_tolerates_dead_process():
         client.close()
         assert not client._connected
         with pytest.raises(errors.McpConnectionError, match="Client closed"):
-            await future
+            _ = await future
         assert client._proc is None
         assert client._idle_task is None
         assert client._reader_task is None
