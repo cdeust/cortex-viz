@@ -136,8 +136,7 @@ def _parse_memory_file(
         return None
 
     st = stat_file(file_path)
-    parsed = parse_yaml_frontmatter(content)
-    meta = parsed["meta"]
+    meta, body = parse_yaml_frontmatter(content)
 
     return {
         "file": file_name,
@@ -146,7 +145,7 @@ def _parse_memory_file(
         "name": meta.get("name") or file_name.replace(".md", ""),
         "description": meta.get("description") or "",
         "type": meta.get("type") or "unknown",
-        "body": parsed["body"],
+        "body": body,
         "modifiedAt": _format_timestamp(st, "st_mtime"),
         "createdAt": _format_timestamp(st, "st_ctime"),
     }

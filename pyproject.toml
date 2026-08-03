@@ -175,6 +175,7 @@ source = ["cortex_viz"]
 
 [tool.coverage.report]
 show_missing = true
+fail_under = 80
 
 [tool.mutmut]
 # Mutation testing (mutmut 3.x) — rules/coding-standards.md §12. Line/branch

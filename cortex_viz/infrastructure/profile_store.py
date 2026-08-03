@@ -86,10 +86,12 @@ def _migrate_legacy_if_present() -> bool:
     # bounded bulk operation per upgrade; subsequent session ends only
     # touch a single per-domain file.
     ensure_dir(DOMAINS_DIR)
+    written_domain_ids: list[str] = []
     for domain_id, profile in domains.items():
         if isinstance(domain_id, str) and isinstance(profile, dict):
             try:
                 write_json(_domain_path(domain_id), profile)
+                written_domain_ids.append(domain_id)
             except ValueError:
                 # Skip ids that fail the safety guard — they will surface
                 # at ``load_profile`` time if something depends on them.
@@ -99,7 +101,7 @@ def _migrate_legacy_if_present() -> bool:
         "version": legacy.get("version", 2),
         "updatedAt": legacy.get("updatedAt"),
         "globalStyle": legacy.get("globalStyle"),
-        "domain_ids": sorted(d for d in domains if isinstance(d, str) and "/" not in d),
+        "domain_ids": sorted(written_domain_ids),
     }
     write_json(INDEX_PATH, index)
     shutil.move(str(PROFILES_PATH), str(LEGACY_BACKUP_PATH))
@@ -201,11 +203,13 @@ def save_profiles(profiles: dict) -> None:
     if not isinstance(domains, dict):
         domains = {}
 
+    written_domain_ids: list[str] = []
     for domain_id, profile in domains.items():
         if not isinstance(domain_id, str) or not isinstance(profile, dict):
             continue
         try:
             write_json(_domain_path(domain_id), profile)
+            written_domain_ids.append(domain_id)
         except ValueError:
             continue
 
@@ -213,6 +217,6 @@ def save_profiles(profiles: dict) -> None:
         "version": profiles.get("version", 2),
         "updatedAt": profiles["updatedAt"],
         "globalStyle": profiles.get("globalStyle"),
-        "domain_ids": sorted(d for d in domains if isinstance(d, str) and "/" not in d),
+        "domain_ids": sorted(written_domain_ids),
     }
     write_json(INDEX_PATH, index)

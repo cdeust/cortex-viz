@@ -98,8 +98,10 @@ jobs:
       - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
       - name: Install package with test dependencies
         run: uv sync --locked --all-extras --python 3.12
-      - name: Run test suite
-        run: uv run --no-sync pytest
+      - name: Run test suite with 80% coverage gate
+        run: |
+          uv run --no-sync coverage run -m pytest
+          uv run --no-sync coverage report
         env:
           # Arms tests/test_optional_extras_present.py: with this set, an
           # extra that failed to install FAILS the job instead of silently
