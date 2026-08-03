@@ -31,7 +31,7 @@ below is about.
 
 Before issue #37, cortex-viz had **no release workflow at all**: 2.7.1 was
 cut by hand, so there was no build to trace an artifact back to. As of #37,
-every release is produced by `.github/workflows/release.yml` and nothing
+every release is produced by `.github/workflows/Release.yml` and nothing
 else, and it ships verifiable provenance:
 
 - **Build provenance**: the wheel, the sdist, the SBOM and the UI fingerprint
