@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/mcp-claude--code-blue.svg" alt="MCP">
+  <img src="https://img.shields.io/badge/MCP-Codex_%C2%B7_Gemini_%C2%B7_Claude-blue.svg" alt="Cross-platform MCP for Codex, Gemini CLI, and Claude Code">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License">
   <img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/version-2.7.1-brightgreen.svg" alt="Version 2.7.1">
@@ -16,7 +16,7 @@
 
 # cortex-viz
 
-**The visualization layer for [Cortex](https://github.com/cdeust/Cortex).** A standalone MCP that turns Cortex's memory store, your Claude Code session history, and your codebase graph into six live reading angles over the same data: a galaxy of every project, that same graph rendered inside a 3D anatomical brain, a per-session execution trace, a consolidation kanban, a curated knowledge browser, and a wiki. It reads Cortex's shared PostgreSQL store plus the `~/.claude` artifacts, and it **never writes a memory**: it renders, it never remembers. (It does keep its own derived graph/layout caches in that same database, listed under [Boundary](#boundary).)
+**The cross-platform visualization layer for [Cortex](https://github.com/cdeust/Cortex).** Codex, Gemini CLI, Claude Code, and any stdio MCP host can launch the same read-only server and browser UI. It turns Cortex's memory store, a host-neutral live activity stream, Claude Code's historical session archive, and your codebase graph into six live reading angles: a project galaxy, a 3D anatomical brain, an execution trace, a consolidation kanban, a curated knowledge browser, and a wiki. It **never writes a memory**: it renders, it never remembers. (It does keep its own derived graph/layout caches in the Cortex database, listed under [Boundary](#boundary).)
 
 Launch with the `open_visualization` tool (or `/cortex-visualize`). One launcher opens six reading angles; the default landing view is **Trace**.
 
@@ -26,7 +26,7 @@ The whole UI ships on the **AI Architect design system**: a paper-first reading 
 
 ## Getting Started
 
-The plugin marketplace is the supported install path. cortex-viz ships in the same `cortex-plugins` marketplace as Cortex:
+Claude Code users can install cortex-viz from the same `cortex-plugins` marketplace as Cortex:
 
 ```bash
 claude plugin marketplace add cdeust/Cortex
@@ -40,6 +40,9 @@ Restart your Claude Code session, then launch the visualizer:
 ```
 /cortex-visualize
 ```
+
+Codex, Gemini CLI, and other MCP hosts launch the same server as a plain stdio
+process; see [Other MCP hosts](#other-mcp-hosts) for the exact configuration.
 
 One launcher opens all six reading angles (Graph · Brain · Trace · Knowledge · Wiki · Board) in the browser, served live from the Cortex store, your session JSONL, the code graph, and git.
 
@@ -140,7 +143,9 @@ cortex-viz                          # or: python -m cortex_viz   (stdio MCP tran
 
 Set `DATABASE_URL` to the shared Cortex database. `open_visualization` launches the galaxy UI in the browser, bound to `127.0.0.1`.
 
-**Other MCP hosts.** Any MCP host can launch the server: it is a plain stdio process. From a clone after `pip install -e .`, register `{"command": "python3", "args": ["-m", "cortex_viz"]}` in your host's MCP config (Gemini CLI `~/.gemini/settings.json`, Cursor `.cursor/mcp.json`, Windsurf `~/.codeium/windsurf/mcp_config.json`, VS Code `.vscode/mcp.json` under `"servers"`, or Codex CLI: `codex mcp add cortex-viz -- python3 -m cortex_viz`) and the `open_visualization` tool opens the UI in the browser. The historical **Trace** archive still reads Claude Code JSONLs under `~/.claude/projects/`, but live activity is now host-neutral: a Codex, Gemini, or generic MCP adapter can POST the versioned schema below to the local `/api/activity` endpoint. The galaxy/brain/knowledge/wiki/board views still need a [Cortex](https://github.com/cdeust/Cortex) store to read.
+### Other MCP hosts
+
+Any MCP host can launch the server: it is a plain stdio process. From a clone after `pip install -e .`, register `{"command": "python3", "args": ["-m", "cortex_viz"]}` in your host's MCP config (Gemini CLI `~/.gemini/settings.json`, Cursor `.cursor/mcp.json`, Windsurf `~/.codeium/windsurf/mcp_config.json`, VS Code `.vscode/mcp.json` under `"servers"`, or Codex CLI: `codex mcp add cortex-viz -- python3 -m cortex_viz`) and the `open_visualization` tool opens the UI in the browser. The historical **Trace** archive still reads Claude Code JSONLs under `~/.claude/projects/`, but live activity is now host-neutral: a Codex, Gemini, or generic MCP adapter can POST the versioned schema below to the local `/api/activity` endpoint. The galaxy/brain/knowledge/wiki/board views still need a [Cortex](https://github.com/cdeust/Cortex) store to read.
 
 ### Host-neutral live activity
 

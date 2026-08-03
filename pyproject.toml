@@ -12,7 +12,7 @@ requires-python = ">=3.10"
 authors = [
     { name = "Clement Deust", email = "admin@ai-architect.tools" },
 ]
-keywords = ["mcp", "claude-code", "visualization", "graph", "cortex"]
+keywords = ["mcp", "codex", "gemini-cli", "claude-code", "visualization", "graph", "cortex"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
