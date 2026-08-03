@@ -34,6 +34,9 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
   `hypermnesia-mcp-viz`. This source change and the marketplace rename in
   `cdeust/Cortex#351` form one coordinated release and must not be published
   independently.
+- The PRD bridge now discovers only the canonical `ai-architect-mcp-spec`
+  Claude plugin and reports that publication identity in its API metadata and
+  current documentation. A deprecated `prd-spec-generator` install is ignored.
 - Synchronize committed assurance evidence with OpenSSF Best Practices Silver,
   verified v2.8.0 Sigstore attestations, 81% Python statement coverage, zero
   open CodeQL alerts, and post-Silver OpenSSF Scorecard 7.4.

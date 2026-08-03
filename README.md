@@ -253,7 +253,7 @@ Hypermnesia MCP Viz consumes Cortex's **artifacts on disk + PostgreSQL**, never 
 | Sessions / execution traces | `~/.claude/projects/*.jsonl` |
 | Cognitive profiles | `~/.claude/methodology/profiles.json` |
 | Codebase graph (AST symbols, impact) | [`automatised-pipeline`](https://github.com/cdeust/ai-automatised-pipeline) MCP (stdio) |
-| PRD document/section nodes | [`prd-spec-generator`](https://github.com/cdeust/ai-prd-generator) MCP + on-disk artifacts |
+| PRD document/section nodes | [`ai-architect-mcp-spec`](https://github.com/cdeust/ai-architect-mcp-spec) MCP + on-disk artifacts |
 | **Written** by Hypermnesia MCP Viz (its own tables, in the same PG database) | `workflow_graph_snapshot`, `workflow_graph_snapshot_scoped`, `workflow_graph_layout`, `workflow_graph_layout_lod` (derived graph and layout caches) and `session_activity` (live activity stream). Cortex's own memory tables are never written. |
 
 No `import mcp_server.*` is permitted anywhere in `cortex_viz/`: that invariant is the extraction's correctness check.

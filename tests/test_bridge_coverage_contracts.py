@@ -267,14 +267,25 @@ def test_prd_resolve_command_env_and_plugin(tmp_path, monkeypatch):
 
     monkeypatch.delenv("CORTEX_PRD_COMMAND")
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    root = tmp_path / "prd-plugin"
+    root = tmp_path / "spec-plugin"
     ensure = root / "bin" / "ensure-deps.sh"
     ensure.parent.mkdir(parents=True)
     ensure.write_text("#!/bin/sh")
     manifest = tmp_path / ".claude" / "plugins" / "installed_plugins.json"
     manifest.parent.mkdir(parents=True)
     manifest.write_text(
-        json.dumps({"plugins": {"prd-spec-generator@x": [{"installPath": str(root)}]}})
+        json.dumps(
+            {
+                "plugins": {
+                    "prd-spec-generator@legacy": [
+                        {"installPath": str(tmp_path / "legacy-plugin")}
+                    ],
+                    "ai-architect-mcp-spec@cortex-plugins": [
+                        {"installPath": str(root)}
+                    ],
+                }
+            }
+        )
     )
     resolved = prd._resolve_command()
     assert resolved["command"] == "bash"

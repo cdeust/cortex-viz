@@ -66,7 +66,7 @@ Cortex's live Python objects.
 | Live host activity | `POST /api/activity`, `docs/host-event-v1.schema.json` | append-only derived activity |
 | Cognitive profiles | `~/.claude/methodology/profiles.json` | read-only |
 | Codebase graph (AST symbols, impact) | [`automatised-pipeline`](https://github.com/cdeust/ai-automatised-pipeline) MCP | read-only, stdio |
-| PRD document nodes | [`prd-spec-generator`](https://github.com/cdeust/ai-prd-generator) MCP | read-only |
+| PRD document nodes | [`ai-architect-mcp-spec`](https://github.com/cdeust/ai-architect-mcp-spec) MCP | read-only |
 | File diffs and commit history | local `git` | read-only |
 
 **Degraded mode is explicit, never silent.** With no database reachable, the
