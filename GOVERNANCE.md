@@ -2,8 +2,9 @@
 
 cortex-viz has **one maintainer**. This document says so plainly rather than
 describing committees that do not exist, because a governance document that
-overstates the project is worse than none: it tells a user to expect a
-continuity that is not there.
+overstates the project is worse than none. It distinguishes continuity of the
+MIT-licensed project results from preservation of one GitHub repository's
+identity.
 
 ## Roles and responsibilities
 
@@ -35,27 +36,33 @@ unfixed vulnerabilities.
 ## Continuity, stated honestly
 
 **cortex-viz does not currently meet a bus factor of two.** One person holds
-repository admin, the release signing identity, and the marketplace pin. If
-that person became unavailable, the project could not create releases within a
-week, and nobody else could accept a pull request.
+repository admin and the marketplace pin.
 
-What partially mitigates this today:
+The project can nevertheless continue without that person's credentials. The
+complete source, history, tests, plugin manifests, release workflow, and design
+record are public under MIT. A successor can fork the repository, enable and
+manage Issues, accept pull requests into the fork, and publish a tagged release
+through the committed workflow under the fork's own GitHub OIDC identity. No
+original signing key, package-registry token, domain, private dependency, or
+legal assignment is required. Users can install from the successor's public
+repository and marketplace URL.
 
-- The repository is **public** and the code is **MIT licensed**, so the source
-  cannot become unavailable and anyone may fork and continue it.
-- The **full build path is committed**: `.github/workflows/release.yml` is the
-  only way a release is produced, so a fork inherits a working, attested
-  release pipeline rather than a hand-cut process that lived in one person's
-  shell history.
-- **Issue and pull request history is public**, so the reasoning behind the
-  design is recoverable without the maintainer.
+That supplies the three OpenSSF continuity capabilities within a week:
 
-What is **not** mitigated: nobody else can merge, release, or issue a security
-advisory under this repository. Adding a second maintainer with admin rights is
-tracked in [#48](https://github.com/cdeust/cortex-viz/issues/48) and is a
-prerequisite for the OpenSSF `access_continuity` and `bus_factor` criteria.
-Until it is closed, treat cortex-viz as a single-maintainer project and plan
-accordingly.
+1. fork the complete repository and enable its issue tracker;
+2. publish a continuity notice naming the new canonical repository;
+3. accept changes through the inherited CI-gated pull-request process; and
+4. create a semantic-version tag, let the inherited workflow attest the
+   artifacts under the fork identity, and publish the new install URL.
+
+Past releases remain independently verifiable through their SHA-256 companions
+and Sigstore attestations. What is **not** preserved without cooperation from
+the original account is this repository's URL, existing issue permissions,
+marketplace listing, or advisory channel. Adding a second maintainer with admin
+rights, tracked in [#48](https://github.com/cdeust/cortex-viz/issues/48), would
+preserve that identity and improve the `bus_factor` criterion. It is not
+required to continue the MIT-licensed project results and their issue,
+change-acceptance, and release process.
 
 ## Changing this document
 
