@@ -56,7 +56,7 @@ remediation in #49 are complete; they are no longer listed as open work.
   `.bestpractices.json`. Gold additionally needs a second maintainer and
   two-person review, which depends on
   [#48](https://github.com/cdeust/cortex-viz/issues/48).
-- **Raise the Scorecard score** from its 7.2 baseline. The remaining major
+- **Raise the Scorecard score** from its 7.4 baseline. The remaining major
   deductions are two-person code review, repository age/contributor diversity,
   and a branch-protection result that the Scorecard token cannot currently
   inspect; token permissions, dependency updates, SAST, fuzzing, packaging, and

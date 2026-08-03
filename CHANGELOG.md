@@ -16,7 +16,7 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 
 - Synchronize committed assurance evidence with OpenSSF Best Practices Silver,
   verified v2.8.0 Sigstore attestations, 81% Python statement coverage, zero
-  open CodeQL alerts, and OpenSSF Scorecard 7.2.
+  open CodeQL alerts, and post-Silver OpenSSF Scorecard 7.4.
 
 ## [2.8.0] - 2026-08-03
 

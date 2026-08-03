@@ -263,7 +263,7 @@ Stated so the boundary of the argument is legible:
 | JS test suite | Required CI on merged main, 2026-08-03 | 259 passed |
 | JS test strength | Stryker, scoped | Survivors triaged in `tests/js/MUTATION_NOTES.md` |
 | Static analysis | CodeQL, both languages, per push and weekly | Running, **zero open CodeQL alerts** |
-| Repository posture | OpenSSF Scorecard | **7.2** as of 2026-08-03; OpenSSF Best Practices **Silver** |
+| Repository posture | OpenSSF Scorecard | **7.4** as of 2026-08-03; OpenSSF Best Practices **Silver** |
 
 ## 8. Conclusion, and how far it goes
 

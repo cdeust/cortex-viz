@@ -223,7 +223,7 @@ No `import mcp_server.*` is permitted anywhere in `cortex_viz/`: that invariant 
 ### Achievements
 
 - **OpenSSF Best Practices Silver**: [project 13846](https://www.bestpractices.dev/projects/13846) earned Silver on 2026-08-03. Answers for every passing and Silver criterion are committed in [`.bestpractices.json`](.bestpractices.json) and audited against this repository rather than copied.
-- **OpenSSF Scorecard**: runs weekly ([`scorecard.yml`](.github/workflows/scorecard.yml)). Current score **7.2** (2026-08-03); the next run can incorporate the Silver badge and the latest dependency fix.
+- **OpenSSF Scorecard**: runs weekly ([`scorecard.yml`](.github/workflows/scorecard.yml)). Current score **7.4** (2026-08-03), including the Silver badge and zero known vulnerabilities.
 - **Build provenance**: all four v2.8.0 artifacts — wheel, source archive, CycloneDX SBOM, and UI manifest — have independently verified Sigstore-backed attestations. Verify any downloaded artifact with `gh attestation verify <file> --repo cdeust/cortex-viz`.
 
 ## Status
