@@ -1,18 +1,18 @@
 <p align="center">
-  <img src="docs/assets/banner.svg" alt="cortex-viz, the read-only visualization layer for Cortex: six live reading angles over your memory, sessions, and code, rendered but never remembered" width="100%"/>
+  <img src="docs/assets/banner.svg" alt="Hypermnesia MCP Viz, the read-only visualization layer for Cortex: six live reading angles over your memory, sessions, and code, rendered but never remembered" width="100%"/>
 </p>
 
 <!-- mcp-name: io.github.cdeust/hypermnesia-mcp-viz -->
 
 <p align="center">
-  <img src="docs/assets/cortex-trace-galaxy.png" alt="cortex-viz Trace galaxy on the paper surface: every Claude Code session is a tight phyllotaxis disk of its own prompt → action → file → memory chain, clustered around its domain's olive hub; the selected chain's disks render solid gold in place while the rest of the galaxy stays legible, and the mono status bar streams the exact counts (CHAIN · 108 STEPS · 6 537/6 537 nodes · 8 696/8 696 edges), never rounded." width="100%"/>
+  <img src="docs/assets/cortex-trace-galaxy.png" alt="Hypermnesia MCP Viz Trace galaxy on the paper surface: every Claude Code session is a tight phyllotaxis disk of its own prompt → action → file → memory chain, clustered around its domain's olive hub; the selected chain's disks render solid gold in place while the rest of the galaxy stays legible, and the mono status bar streams the exact counts (CHAIN · 108 STEPS · 6 537/6 537 nodes · 8 696/8 696 edges), never rounded." width="100%"/>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/MCP-Codex_%C2%B7_Gemini_%C2%B7_Claude-blue.svg" alt="Cross-platform MCP for Codex, Gemini CLI, and Claude Code">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License">
   <img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+">
-  <img src="https://img.shields.io/badge/version-2.8.0-brightgreen.svg" alt="Version 2.8.0">
+  <img src="https://img.shields.io/badge/version-3.0.0-brightgreen.svg" alt="Version 3.0.0">
   <a href="https://www.bestpractices.dev/projects/13846"><img src="https://www.bestpractices.dev/projects/13846/badge" alt="OpenSSF Best Practices"></a>
 </p>
 
@@ -56,11 +56,17 @@ claude plugin marketplace update cortex-plugins
 claude plugin install hypermnesia-mcp-viz@cortex-plugins
 ```
 
-The MCP/tool qualifier changes from `plugin:cortex-viz:*` to
-`plugin:hypermnesia-mcp-viz:*`; update permission allowlists, hooks, skills,
-agents, and host configuration that match the old prefix. The removed
-`cortex-viz` console command is not retained as an alias, so Cursor, Windsurf,
-VS Code, and other direct-process configurations must invoke
+Claude composes plugin tool names from the plugin manifest name, the
+`mcpServers` key, and the tool name. Update both old full names wherever they
+appear in permission allowlists, hooks, skills, or agents:
+
+- `mcp__plugin_cortex-viz_cortex-viz__open_visualization` <!-- mcp-prefix-allow-legacy -->
+  becomes `mcp__plugin_hypermnesia-mcp-viz_hypermnesia-mcp-viz__open_visualization`.
+- `mcp__plugin_cortex-viz_cortex-viz__get_methodology_graph` <!-- mcp-prefix-allow-legacy -->
+  becomes `mcp__plugin_hypermnesia-mcp-viz_hypermnesia-mcp-viz__get_methodology_graph`.
+
+The removed `cortex-viz` console command is not retained as an alias, so
+Cursor, Windsurf, VS Code, and other direct-process configurations must invoke
 `hypermnesia-mcp-viz` instead.
 
 > **Hypermnesia MCP Viz is a companion to [Cortex](https://github.com/cdeust/Cortex) that never writes a memory.** Install Cortex first (`claude plugin install hypermnesia-mcp@cortex-plugins`): the visualizer reads its shared PostgreSQL store, and writes only its own derived caches there ([Boundary](#boundary)). Point both at the same database: the `database_url` plugin setting defaults to `postgresql://127.0.0.1:5432/cortex`; set it to the same value you gave Cortex.
@@ -78,7 +84,7 @@ One launcher opens all six reading angles (Graph · Brain · Trace · Knowledge 
 
 ### Works without Cortex
 
-No Cortex, no PostgreSQL, no setup: cortex-viz is still useful on its own. The **Trace** view (the default landing view) reads only `~/.claude/projects/*.jsonl` and your local git: every Claude Code session becomes a navigable domain → session → prompt → action → file chain, with per-file diffs and commit history. If you use Claude Code, the data is already on your disk.
+No Cortex, no PostgreSQL, no setup: Hypermnesia MCP Viz is still useful on its own. The **Trace** view (the default landing view) reads only `~/.claude/projects/*.jsonl` and your local git: every Claude Code session becomes a navigable domain → session → prompt → action → file chain, with per-file diffs and commit history. If you use Claude Code, the data is already on your disk.
 
 - Just install the plugin and run `/cortex-visualize`. When Cortex's database isn't reachable, the server logs one line and starts in **no-DB mode** automatically: Trace is fully live; the five DB-backed views (Graph, Brain, Knowledge, Wiki, Board) appear greyed out with an install pointer instead of erroring.
 - To skip the database probe entirely, set `CORTEX_VIZ_NO_DB=1` (or pass `--no-db` when running the standalone server directly).
@@ -146,7 +152,7 @@ Five columns by consolidation stage (`labile` · `early_ltp` · `late_ltp` · `c
 
 - **Trace** *(default)*: the live execution-trace drill: collapsed domain hubs → sessions → the ordered prompt → action → file chain of what actually happened → a file's AST symbols, impact neighbourhood, and git history. Discussions and Cortex `remember`/`recall` ops are woven into the chain. Served live from session JSONL, the code graph, and git on every request (no snapshots, always current).
 - **Knowledge**: curated memory cards with the feeling (word + signed valence/arousal, never colour alone), the MEANING line and verbatim excerpt, stage/domain/HOT badges, and four measured meters in fixed order (heat · importance · valence · arousal; a zero shows an empty track, never hides); filter by domain, stage, or feeling with exact facet counts.
-- **Wiki**: the per-project knowledge base as a browsable Project → Kind → Pages tree with a dossier-style page reader: serif prose with numbered section heads and mono identifier chips, boxed status and kind badges, dated provenance, and an Edit · PDF · TEX · DOCX · HTML export strip. A CodeMirror split-pane editor with live preview sits behind Edit. (The wiki *content* is authored autonomously by [Cortex](https://github.com/cdeust/Cortex#the-autonomous-wiki); cortex-viz is its reading + editing surface.)
+- **Wiki**: the per-project knowledge base as a browsable Project → Kind → Pages tree with a dossier-style page reader: serif prose with numbered section heads and mono identifier chips, boxed status and kind badges, dated provenance, and an Edit · PDF · TEX · DOCX · HTML export strip. A CodeMirror split-pane editor with live preview sits behind Edit. (The wiki *content* is authored autonomously by [Cortex](https://github.com/cdeust/Cortex#the-autonomous-wiki); Hypermnesia MCP Viz is its reading + editing surface.)
 
 <p align="center">
 <img src="docs/assets/cortex-knowledge.png" width="100%" alt="Knowledge view, curated memory cards on the paper surface: each card carries its tool source, feeling word with signed valence/arousal deltas, MEANING line with verbatim path, stage badge (LABILE · EARLY-LTP), domain chip, HOT flag, four measured meters (heat, importance, valence, arousal), and capture provenance; the filter bar above states exact counts per domain, stage, and feeling" />
@@ -164,16 +170,44 @@ Hypermnesia MCP Viz is a cross-platform MCP server with a Claude Code plugin. Po
 
 **As a plugin**: ships the MCP server, the `/cortex-visualize` skill, and the live session-activity hooks. The bundled `scripts/launcher.py` bootstraps its own dependencies on first launch (no manual `pip` needed). Configure the DB via the plugin's `database_url` user-config (defaults to `postgresql://127.0.0.1:5432/cortex`).
 
-**As a raw MCP (v2.8.0 and later):**
+**As a raw MCP (v3.0.0 and later):**
 
 ```bash
 pip install "hypermnesia-mcp-viz[data,viz-tile]"   # optional PG and large-graph extras
 hypermnesia-mcp-viz                 # or: python -m cortex_viz (stdio MCP transport)
 ```
 
-If this repository was previously installed as an editable `cortex-viz`
-distribution, run `pip uninstall cortex-viz` before installing the canonical
-package so two distributions do not claim the same import package and script.
+The published `2.8.0` `hypermnesia-mcp-viz` distribution owned the legacy
+`cortex-viz` console shim; there was no separate Python distribution by that
+name. Upgrade with the same interpreter/environment that installed it, and the
+installer removes the old distribution-owned shim while installing `3.0.0`:
+
+```bash
+python3 -m pip install --upgrade "hypermnesia-mcp-viz>=3.0.0"
+```
+
+If `cortex-viz` still resolves, first locate every shim and ask Python which
+installed distribution owns that console entry point:
+
+```bash
+type -a cortex-viz
+python3 - <<'PY'
+from importlib import metadata
+
+owners = []
+for distribution in metadata.distributions():
+    if any(
+        entry.group == "console_scripts" and entry.name == "cortex-viz"
+        for entry in distribution.entry_points
+    ):
+        owners.append((distribution.metadata["Name"], distribution.version))
+print(owners or "no Python distribution owns cortex-viz in this interpreter")
+PY
+```
+
+Uninstall the reported distribution with that same interpreter, or remove a
+manually installed shell/file shim through the tool that created it when no
+distribution owns it. Do not guess a distribution name from the executable.
 
 Set `DATABASE_URL` to the shared Cortex database. `open_visualization` launches the galaxy UI in the browser, bound to `127.0.0.1`.
 
@@ -210,7 +244,7 @@ database schema.
 
 ## Boundary
 
-cortex-viz consumes Cortex's **artifacts on disk + PostgreSQL**, never Cortex's live Python objects:
+Hypermnesia MCP Viz consumes Cortex's **artifacts on disk + PostgreSQL**, never Cortex's live Python objects:
 
 | Data | Source |
 |---|---|
@@ -220,7 +254,7 @@ cortex-viz consumes Cortex's **artifacts on disk + PostgreSQL**, never Cortex's 
 | Cognitive profiles | `~/.claude/methodology/profiles.json` |
 | Codebase graph (AST symbols, impact) | [`automatised-pipeline`](https://github.com/cdeust/ai-automatised-pipeline) MCP (stdio) |
 | PRD document/section nodes | [`prd-spec-generator`](https://github.com/cdeust/ai-prd-generator) MCP + on-disk artifacts |
-| **Written** by cortex-viz (its own tables, in the same PG database) | `workflow_graph_snapshot`, `workflow_graph_snapshot_scoped`, `workflow_graph_layout`, `workflow_graph_layout_lod` (derived graph and layout caches) and `session_activity` (live activity stream). Cortex's own memory tables are never written. |
+| **Written** by Hypermnesia MCP Viz (its own tables, in the same PG database) | `workflow_graph_snapshot`, `workflow_graph_snapshot_scoped`, `workflow_graph_layout`, `workflow_graph_layout_lod` (derived graph and layout caches) and `session_activity` (live activity stream). Cortex's own memory tables are never written. |
 
 No `import mcp_server.*` is permitted anywhere in `cortex_viz/`: that invariant is the extraction's correctness check.
 
@@ -235,7 +269,7 @@ No `import mcp_server.*` is permitted anywhere in `cortex_viz/`: that invariant 
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute, the coding style, and the test requirement |
 | [GOVERNANCE.md](GOVERNANCE.md) | Who decides, who has which role, and how a fork can continue the project without original credentials |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Expected behaviour and how to report a problem |
-| [SECURITY.md](SECURITY.md) | What cortex-viz accesses, the supply-chain assurance, and how to report a vulnerability |
+| [SECURITY.md](SECURITY.md) | What Hypermnesia MCP Viz accesses, the supply-chain assurance, and how to report a vulnerability |
 | [PRIVACY.md](PRIVACY.md) | What is read, what is written, and what leaves your machine |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | The layers, the read contract, and the trust boundaries |
 | [docs/ASSURANCE_CASE.md](docs/ASSURANCE_CASE.md) | The threat model and why the security requirements are met, including where the argument is incomplete |

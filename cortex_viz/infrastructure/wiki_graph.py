@@ -34,7 +34,7 @@ v1 decision — see ``load_wiki_page_sources`` below and
 ``core.wiki_source_resolve.resolve_file_node_id``.
 
 No I/O beyond four read-only ``pg_store.query`` SELECTs — this module
-never INSERTs, UPDATEs, or DELETEs; cortex-viz is a read-only bridge
+never INSERTs, UPDATEs, or DELETEs; hypermnesia-mcp-viz is a read-only bridge
 over Cortex's shared Postgres store.
 """
 

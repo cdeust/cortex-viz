@@ -79,7 +79,7 @@ Model (fixed — do not change without a new ADR):
     link that happens to share no entity.
 
 No I/O beyond the single ``pg_store.query`` SELECT — this module never
-INSERTs, UPDATEs, or DELETEs; cortex-viz is a read-only bridge over
+INSERTs, UPDATEs, or DELETEs; hypermnesia-mcp-viz is a read-only bridge over
 Cortex's shared Postgres store.
 """
 

@@ -50,7 +50,7 @@
   "report_responses_status": "Met",
   "report_responses_justification": "Reports are responded to. Every issue opened in the last six months (#13, #17, #23, #31, #32, #35, #36, #37, #41) received a response and all nine were resolved and closed; none was left unacknowledged.",
   "enhancement_responses_status": "Met",
-  "enhancement_responses_justification": "Enhancement requests get an explicit answer rather than silence. #37 (supply chain) and #35 (JS test harness) were accepted and implemented. The distribution plan evolved explicitly: the Claude plugin remains cortex-viz, while PyPI Trusted Publishing and the MCP Registry use the available canonical identity hypermnesia-mcp-viz.",
+  "enhancement_responses_justification": "Enhancement requests get an explicit answer rather than silence. #37 (supply chain) and #35 (JS test harness) were accepted and implemented. The distribution plan evolved explicitly: the Claude plugin, Codex plugin, PyPI Trusted Publishing project, and MCP Registry now share the canonical identity hypermnesia-mcp-viz; the historical GitHub repository URL remains cdeust/cortex-viz.",
   "report_archive_status": "Met",
   "report_archive_justification": "Public, searchable, permanently addressable: https://github.com/cdeust/cortex-viz/issues?q=is%3Aissue",
   "vulnerability_report_process_status": "Met",

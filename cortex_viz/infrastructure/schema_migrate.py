@@ -16,7 +16,7 @@ Invocation is a direct call against the frozen contract:
 NOT go through ``scripts/launcher.py``: that script additionally routes
 through ``launcher_deps.ensure_deps`` (a bootstrap that can pip-install
 over the network) and commits this call to launcher.py's internal
-argv/env protocol, which Cortex has never frozen. cortex-viz's own venv
+argv/env protocol, which Cortex has never frozen. hypermnesia-mcp-viz's own venv
 already satisfies every import ``mcp_server.migrate`` needs (psycopg,
 psycopg-pool, pgvector, numpy — verified against the installed plugin's
 dependency set), so ``-m`` with ``cwd=plugin_root`` resolves the module
@@ -124,7 +124,7 @@ def run_schema_migration(
 ) -> MigrationResult:
     """Invoke ``mcp_server.migrate`` in the installed Cortex plugin.
 
-    Precondition: ``database_url`` is the same DSN cortex-viz already
+    Precondition: ``database_url`` is the same DSN hypermnesia-mcp-viz already
     reads its store from (schema state must match what the preflight
     just checked). Postcondition: no in-process import of Cortex code
     occurs — the migration runs in a fresh subprocess so an old plugin

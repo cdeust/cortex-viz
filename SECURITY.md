@@ -1,8 +1,8 @@
 # Security Policy
 
-## What cortex-viz accesses
+## What Hypermnesia MCP Viz accesses
 
-cortex-viz is a visualization bridge over Cortex's data that never writes a
+Hypermnesia MCP Viz is a visualization bridge over Cortex's data that never writes a
 memory, but it does three things that shape its threat model, stated plainly
 here:
 
@@ -16,7 +16,7 @@ here:
   build the graphs.
 - **It writes its own derived caches into that database.** Stated precisely,
   because an earlier version of this file said "does not write to that store"
-  and that was wrong: cortex-viz never writes a memory, entity, or
+  and that was wrong: Hypermnesia MCP Viz never writes a memory, entity, or
   relationship, but it does create and write five tables of its own,
   `workflow_graph_snapshot`, `workflow_graph_snapshot_scoped`,
   `workflow_graph_layout`, `workflow_graph_layout_lod`, and `session_activity`.
@@ -29,7 +29,7 @@ below is about.
 
 ## Supply-chain assurance
 
-Before issue #37, cortex-viz had **no release workflow at all**: 2.7.1 was
+Before issue #37, Hypermnesia MCP Viz had **no release workflow at all**: 2.7.1 was
 cut by hand, so there was no build to trace an artifact back to. As of #37,
 every release is produced by `.github/workflows/Release.yaml` and nothing
 else, and it ships verifiable provenance:
@@ -39,10 +39,10 @@ else, and it ships verifiable provenance:
   downloaded asset binds to this repository and workflow:
 
   ```bash
-  gh attestation verify cortex-viz-ui-manifest.sha256 --repo cdeust/cortex-viz
+  gh attestation verify hypermnesia-mcp-viz-ui-manifest.sha256 --repo cdeust/cortex-viz
   ```
 
-- **UI fingerprint**: `cortex-viz-ui-manifest.sha256` is a `sha256sum` of
+- **UI fingerprint**: `hypermnesia-mcp-viz-ui-manifest.sha256` is a `sha256sum` of
   every file under `ui/`, so the exact first-party JS your browser executes is
   pinned to the tagged commit and diffable against the previous release. It
   does **not** cover the three.js and 3d-force-graph bundles that four pages
@@ -50,7 +50,7 @@ else, and it ships verifiable provenance:
   Subresource Integrity hash, so they are outside this guarantee. Tracked in
   [#50](https://github.com/cdeust/cortex-viz/issues/50).
 
-- **SBOM**: `cortex-viz.cdx.json` (CycloneDX, from `uv.lock`) enumerates the
+- **SBOM**: `hypermnesia-mcp-viz.cdx.json` (CycloneDX, from `uv.lock`) enumerates the
   full Python dependency graph, including the `viz-tile` stack (datashader,
   pyarrow, numba/llvmlite).
 
@@ -60,10 +60,11 @@ else, and it ships verifiable provenance:
   (`codeql.yml`) and OpenSSF Scorecard (`scorecard.yml`) run on a schedule.
   The Scorecard number is a recorded baseline, not a badge.
 
-**Not published to PyPI.** `cortex-viz` is a marketplace plugin, not a
-`pip install` package (PyPI returns 404). The install path is the marketplace
-pin in Cortex's manifest, so a tag + GitHub Release does not reach installs by
-itself: the pin bump is the delivery step.
+**Published to PyPI as `hypermnesia-mcp-viz`.** The wheel and source archive
+are published through the release workflow's OIDC identity. Claude Code plugin
+installs still resolve through the marketplace pin in Cortex's manifest, so a
+tag + GitHub Release + PyPI publication does not update those installs by
+itself: the coordinated pin bump remains that channel's delivery step.
 
 **What this does NOT claim.** Provenance proves *who built the artifact and
 from which commit*, not that the source is free of defects; and it is worth
@@ -79,7 +80,7 @@ with the affected version/commit, reproduction steps, and impact.
 
 ### What happens next
 
-cortex-viz has a single maintainer (see `GOVERNANCE.md`), so these are the
+Hypermnesia MCP Viz has a single maintainer (see `GOVERNANCE.md`), so these are the
 commitments one person can actually keep, rather than a service level borrowed
 from a larger project:
 
@@ -118,7 +119,7 @@ actionable. Each entry states what the checker actually requires — read from
 
 | Check | Why it cannot reach maximum here | What would close it |
 |---|---|---|
-| **Code-Review** | Scores approved changesets. GitHub forbids approving your own pull request, and cortex-viz has one maintainer (`GOVERNANCE.md`), so the approved-changeset count is structurally 0/N. | A second maintainer with review rights. |
+| **Code-Review** | Scores approved changesets. GitHub forbids approving your own pull request, and Hypermnesia MCP Viz has one maintainer (`GOVERNANCE.md`), so the approved-changeset count is structurally 0/N. | A second maintainer with review rights. |
 | **Branch-Protection** | The top tiers (`checks/evaluation/branch_protection.go`, Tier 4–5) require a non-zero required-reviewer count and CODEOWNERS review. Setting `required_approving_review_count >= 1` solo would deadlock every merge — no one can approve. Protection IS enabled at the tiers that do not deadlock: no force-push, no deletion, PRs required. | Same as Code-Review: a second reviewer. |
 | **CII-Best-Practices** | `checks/evaluation/cii_best_practices.go` scores gold=10, silver=7, passing=5, in_progress=2; only **gold** is maximum. Gold requires `contributors_unassociated` — at least two significant contributors not associated with each other. | Two unassociated contributors. |
 | **Maintained** | Scores 0 while the repository is younger than 90 days. Purely a function of creation date; no change to the repository affects it. | Time. |

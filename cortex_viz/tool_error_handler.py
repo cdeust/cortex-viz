@@ -1,8 +1,8 @@
-"""Friendly error handling for cortex-viz MCP tool calls.
+"""Friendly error handling for hypermnesia-mcp-viz MCP tool calls.
 
 Minimal counterpart to Cortex's tool_error_handler: wraps a handler so MCP
 clients never see raw tracebacks, and offloads the (sync-DB-calling) handler
-body to a worker thread so it does not block the event loop. cortex-viz does
+body to a worker thread so it does not block the event loop. hypermnesia-mcp-viz does
 NOT bundle Cortex's per-tool admission semaphore or Prometheus metrics — the
 viz exposes a handful of read/launch tools, not the full memory surface, so
 that machinery is out of scope here.

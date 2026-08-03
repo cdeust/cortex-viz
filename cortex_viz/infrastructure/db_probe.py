@@ -1,6 +1,6 @@
-"""Startup decision: does this cortex-viz process have a Cortex database?
+"""Startup decision: does this hypermnesia-mcp-viz process have a Cortex database?
 
-cortex-viz delivers standalone value without Cortex: the Trace view reads
+hypermnesia-mcp-viz delivers standalone value without Cortex: Trace reads
 ``~/.claude/projects/*.jsonl`` + git live and never touches PostgreSQL.
 This module owns the single startup question the composition root
 (``server.http_standalone``) and the launch handler
@@ -85,7 +85,7 @@ def open_store_or_none():
         return reader
     except psycopg.Error as exc:
         print(
-            f"[cortex-viz] Cortex PostgreSQL unreachable at "
+            f"[hypermnesia-mcp-viz] Cortex PostgreSQL unreachable at "
             f"{_redact_url(reader.url)} ({type(exc).__name__}: {exc}) — "
             "serving in no-DB mode: the Trace view works fully from "
             "~/.claude session logs + git; Graph/Brain/Knowledge/Wiki/Board "

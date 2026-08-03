@@ -36,13 +36,13 @@ launch it freely even if the user hasn't installed Cortex.
 ### Launch the neural graph
 
 ```
-hypermnesia-mcp-viz:open_visualization({})
+mcp__plugin_hypermnesia-mcp-viz_hypermnesia-mcp-viz__open_visualization({})
 ```
 
 Or filter to a specific domain:
 
 ```
-hypermnesia-mcp-viz:open_visualization({ "domain": "cortex" })
+mcp__plugin_hypermnesia-mcp-viz_hypermnesia-mcp-viz__open_visualization({ "domain": "cortex" })
 ```
 
 Opens in the browser on a local 127.0.0.1 port. Features:
@@ -62,5 +62,5 @@ Opens in the browser on a local 127.0.0.1 port. Features:
 For custom visualization or analysis without opening the browser:
 
 ```
-hypermnesia-mcp-viz:get_methodology_graph({ "domain": "<optional filter>" })
+mcp__plugin_hypermnesia-mcp-viz_hypermnesia-mcp-viz__get_methodology_graph({ "domain": "<optional filter>" })
 ```

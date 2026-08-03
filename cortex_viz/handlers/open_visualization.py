@@ -330,7 +330,7 @@ def _schema_error_result(
     """
     message = (
         "Le schéma de la base Cortex est antérieur aux prérequis de "
-        "cortex-viz. Objets manquants : "
+        "hypermnesia-mcp-viz. Objets manquants : "
         + "; ".join(missing)
         + ". Migration automatique tentée et échouée : "
         + failure_detail

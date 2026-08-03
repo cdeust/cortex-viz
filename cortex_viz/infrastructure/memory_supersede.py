@@ -3,7 +3,7 @@
 One SELECT over the recorded ``memories.supersedes_id`` column — the
 lineage is WRITTEN by Cortex's supersede write path (``remember(
 supersedes_id)`` / ``supersede_atomic``, merged on Cortex main, PR #82);
-cortex-viz only reads what was recorded and never re-derives or
+hypermnesia-mcp-viz only reads what was recorded and never re-derives or
 mutates it. Uses the partial index ``idx_memories_supersedes``
 (``WHERE supersedes_id IS NOT NULL``) so the scan touches only the
 chain rows.
@@ -24,7 +24,7 @@ been marked stale — the ingestion's skip-missing-endpoint contract
 already drops edges whose old endpoint never made it into the graph.
 
 No I/O beyond the single ``pg_store.query`` SELECT — this module never
-INSERTs, UPDATEs, or DELETEs; cortex-viz is a read-only bridge over
+INSERTs, UPDATEs, or DELETEs; hypermnesia-mcp-viz is a read-only bridge over
 Cortex's shared Postgres store.
 """
 

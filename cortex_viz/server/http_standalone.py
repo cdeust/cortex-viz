@@ -99,7 +99,7 @@ def _get_store(no_db: bool):
     """Return the read-only viz store for this standalone process, or
     ``None`` when this process runs without a database.
 
-    The boundary cut (thin-viz): cortex-viz never instantiates Cortex's
+    The boundary cut (thin-viz): hypermnesia-mcp-viz never instantiates Cortex's
     MemoryStore (writes, schema init, embeddings, the full storage layer).
     It reads Cortex's shared PostgreSQL through MemoryReader, which exposes
     exactly the 14 read methods + dict-row `_conn` the viz routes consume.
@@ -112,7 +112,7 @@ def _get_store(no_db: bool):
     """
     if no_db:
         print(
-            "[cortex-viz] no-DB mode (explicit): serving the Trace view "
+            "[hypermnesia-mcp-viz] no-DB mode (explicit): serving the Trace view "
             "from ~/.claude session logs + git; DB-backed views disabled.",
             file=sys.stderr,
         )

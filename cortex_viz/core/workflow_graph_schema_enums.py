@@ -68,7 +68,7 @@ class EdgeKind(str, Enum):
     # newer memory points at the older fact it replaces). Produced by
     # ``infrastructure.memory_supersede.load_supersede_edges`` (reads
     # the recorded ``memories.supersedes_id`` column — Cortex's
-    # supersede write path owns the lineage, cortex-viz never
+    # supersede write path owns the lineage, hypermnesia-mcp-viz never
     # re-derives it) and ingested by
     # ``core.workflow_graph_supersede.ingest_supersede``. Distinct from
     # ASSOCIATES_WITH: an association is undirected co-evidence, a

@@ -1,4 +1,4 @@
-"""cortex-viz MCP server entry point.
+"""hypermnesia-mcp-viz MCP server entry point.
 
 A standalone visualization MCP for Cortex. Reads Cortex's shared PostgreSQL
 store (read-only, via MemoryReader) and the ~/.claude artifacts; serves the

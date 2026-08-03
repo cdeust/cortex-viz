@@ -1,7 +1,7 @@
 """Resolves a ``wiki.page_sources.source_path`` to the deterministic FILE
 node id the workflow graph would have minted for the same file (ADR-0051
 downstream consumer — see Cortex's ``pg_schema.py`` comment on
-``wiki.page_sources``: "Downstream consumer: cortex-viz wiki-page ->
+``wiki.page_sources``: "Downstream consumer: hypermnesia-mcp-viz wiki-page ->
 source-file edges").
 
 Problem this module solves

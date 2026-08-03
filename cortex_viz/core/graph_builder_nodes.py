@@ -23,7 +23,7 @@ Edge = dict[str, Any]
 
 # G7 (design gate): interactive points need DEEP paper values (L<=52%,
 # >=4.5:1) — the previous set was L64-82%, pale on cream (~1.1-2:1 on the
-# ~79k entity nodes these colour, cortex-viz Graph/Trace views). Re-targeted
+# ~79k entity nodes these colour, hypermnesia-mcp-viz Graph/Trace views). Re-targeted
 # to L50% at each entry's original hue (same H, C clamped to 0.10-0.155 —
 # the DS-deep convention already used by every other constant in this
 # module's sibling ``workflow_graph_palette.py``), computed via the OKLCH

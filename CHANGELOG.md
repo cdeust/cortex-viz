@@ -1,9 +1,11 @@
 # Changelog
 
-All notable changes to cortex-viz are documented in this file.
+All notable changes to Hypermnesia MCP Viz are documented in this file.
 Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in git history.
 
 ## [Unreleased]
+
+## [3.0.0] - 2026-08-04
 
 ### Security
 
@@ -16,15 +18,22 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 
 - **Breaking publication rename.** `hypermnesia-mcp-viz` is now the sole
   Claude Code plugin, MCP server, Python distribution, and console identity.
+  Because `2.8.0` was already published, removing the old plugin and console
+  identities ships as the SemVer-major `3.0.0` release rather than replacing
+  an immutable artifact in place.
   Existing Claude installs must run
   `claude plugin uninstall cortex-viz@cortex-plugins`, refresh
   `cortex-plugins`, and run
   `claude plugin install hypermnesia-mcp-viz@cortex-plugins`. Permission and
-  tool references must move from `plugin:cortex-viz:*` to
-  `plugin:hypermnesia-mcp-viz:*`; direct-process hosts must replace the removed
-  `cortex-viz` executable with `hypermnesia-mcp-viz`. This source change and
-  the marketplace rename in `cdeust/Cortex#351` form one coordinated release
-  and must not be published independently.
+  tool references must use Claude's composed names:
+  `mcp__plugin_cortex-viz_cortex-viz__open_visualization` becomes <!-- mcp-prefix-allow-legacy -->
+  `mcp__plugin_hypermnesia-mcp-viz_hypermnesia-mcp-viz__open_visualization`,
+  and `mcp__plugin_cortex-viz_cortex-viz__get_methodology_graph` becomes <!-- mcp-prefix-allow-legacy -->
+  `mcp__plugin_hypermnesia-mcp-viz_hypermnesia-mcp-viz__get_methodology_graph`.
+  Direct-process hosts must replace the removed `cortex-viz` executable with
+  `hypermnesia-mcp-viz`. This source change and the marketplace rename in
+  `cdeust/Cortex#351` form one coordinated release and must not be published
+  independently.
 - Synchronize committed assurance evidence with OpenSSF Best Practices Silver,
   verified v2.8.0 Sigstore attestations, 81% Python statement coverage, zero
   open CodeQL alerts, and post-Silver OpenSSF Scorecard 7.4.

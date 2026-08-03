@@ -38,6 +38,8 @@ KNOWN_MCP_PREFIXES: frozenset[str] = frozenset(
         # Cortex memory. plugin.json: name "hypermnesia-mcp", mcpServers key
         # "cortex". Renamed from "cortex" in v4.15.0 over a directory collision.
         "mcp__plugin_hypermnesia-mcp_cortex__",
+        # This plugin. Both halves come from .claude-plugin/plugin.json.
+        "mcp__plugin_hypermnesia-mcp-viz_hypermnesia-mcp-viz__",
     }
 )
 
@@ -131,6 +133,7 @@ def test_scan_is_not_vacuous() -> None:
     )
     assert seen, "no MCP prefix found anywhere; the regex or the root is wrong"
     assert "mcp__plugin_hypermnesia-mcp_cortex__" in seen
+    assert "mcp__plugin_hypermnesia-mcp-viz_hypermnesia-mcp-viz__" in seen
 
 
 @pytest.mark.parametrize(
