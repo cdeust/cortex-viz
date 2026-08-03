@@ -10,11 +10,15 @@
   <img src="https://img.shields.io/badge/MCP-Codex_%C2%B7_Gemini_%C2%B7_Claude-blue.svg" alt="Cross-platform MCP for Codex, Gemini CLI, and Claude Code">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License">
   <img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+">
-  <img src="https://img.shields.io/badge/version-2.7.1-brightgreen.svg" alt="Version 2.7.1">
+  <img src="https://img.shields.io/badge/version-2.8.0-brightgreen.svg" alt="Version 2.8.0">
   <a href="https://www.bestpractices.dev/projects/13846"><img src="https://www.bestpractices.dev/projects/13846/badge" alt="OpenSSF Best Practices"></a>
 </p>
 
-# cortex-viz
+# Cortex Viz
+
+**Cortex Viz is published to Python and MCP registries as `hypermnesia-mcp-viz`.**
+The product and Claude Code plugin remain `cortex-viz`, and the existing
+`cortex-viz` command remains a supported compatibility alias.
 
 **The cross-platform visualization layer for [Cortex](https://github.com/cdeust/Cortex).** Codex, Gemini CLI, Claude Code, and any stdio MCP host can launch the same read-only server and browser UI. It turns Cortex's memory store, a host-neutral live activity stream, Claude Code's historical session archive, and your codebase graph into six live reading angles: a project galaxy, a 3D anatomical brain, an execution trace, a consolidation kanban, a curated knowledge browser, and a wiki. It **never writes a memory**: it renders, it never remembers. (It does keep its own derived graph/layout caches in the Cortex database, listed under [Boundary](#boundary).)
 
@@ -137,7 +141,9 @@ cortex-viz is a Claude Code plugin (and a plain MCP server). Point it at the **s
 **As a raw MCP / for development:**
 
 ```bash
-pip install -e ".[data,viz-tile]"   # data = PG read path; viz-tile = igraph/datashader tiles (optional)
+pip install "hypermnesia-mcp-viz[data,viz-tile]"   # optional PG and large-graph extras
+hypermnesia-mcp-viz
+# Existing integrations can continue to use: cortex-viz
 cortex-viz                          # or: python -m cortex_viz   (stdio MCP transport)
 ```
 
@@ -145,7 +151,7 @@ Set `DATABASE_URL` to the shared Cortex database. `open_visualization` launches 
 
 ### Other MCP hosts
 
-Any MCP host can launch the server: it is a plain stdio process. From a clone after `pip install -e .`, register `{"command": "python3", "args": ["-m", "cortex_viz"]}` in your host's MCP config (Gemini CLI `~/.gemini/settings.json`, Cursor `.cursor/mcp.json`, Windsurf `~/.codeium/windsurf/mcp_config.json`, VS Code `.vscode/mcp.json` under `"servers"`, or Codex CLI: `codex mcp add cortex-viz -- python3 -m cortex_viz`) and the `open_visualization` tool opens the UI in the browser. The historical **Trace** archive still reads Claude Code JSONLs under `~/.claude/projects/`, but live activity is now host-neutral: a Codex, Gemini, or generic MCP adapter can POST the versioned schema below to the local `/api/activity` endpoint. The galaxy/brain/knowledge/wiki/board views still need a [Cortex](https://github.com/cdeust/Cortex) store to read.
+Any MCP host can launch the server: it is a plain stdio process. Install it with `pip install hypermnesia-mcp-viz`, then register `hypermnesia-mcp-viz` as the command in your host's MCP config. The compatibility command `cortex-viz` and the module form `python3 -m cortex_viz` are equivalent (Gemini CLI `~/.gemini/settings.json`, Cursor `.cursor/mcp.json`, Windsurf `~/.codeium/windsurf/mcp_config.json`, VS Code `.vscode/mcp.json` under `"servers"`, or Codex CLI: `codex mcp add cortex-viz -- hypermnesia-mcp-viz`). The `open_visualization` tool opens the UI in the browser. The historical **Trace** archive still reads Claude Code JSONLs under `~/.claude/projects/`, but live activity is now host-neutral: a Codex, Gemini, or generic MCP adapter can POST the versioned schema below to the local `/api/activity` endpoint. The galaxy/brain/knowledge/wiki/board views still need a [Cortex](https://github.com/cdeust/Cortex) store to read.
 
 ### Host-neutral live activity
 

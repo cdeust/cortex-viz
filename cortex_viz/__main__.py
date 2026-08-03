@@ -5,8 +5,8 @@ store (read-only, via MemoryReader) and the ~/.claude artifacts; serves the
 neural-graph galaxy UI and methodology map. Memory/recall/wiki tools remain in
 the Cortex MCP — this server is the visualization surface only.
 
-Run: ``python -m cortex_viz`` (stdio MCP transport), or the ``cortex-viz``
-console script.
+Run: ``python -m cortex_viz`` (stdio MCP transport), or either the canonical
+``hypermnesia-mcp-viz`` or compatibility ``cortex-viz`` console script.
 """
 
 from __future__ import annotations
@@ -16,11 +16,12 @@ import sys
 
 from fastmcp import FastMCP
 
+from cortex_viz.identity import DISTRIBUTION_NAME, VERSION
 from cortex_viz.server import mcp_tools
 
 mcp = FastMCP(
-    name="cortex-viz",
-    version="1.0.0",
+    name=DISTRIBUTION_NAME,
+    version=VERSION,
     instructions=(
         "Visualization MCP for Cortex. Call open_visualization to launch the "
         "neural-graph galaxy in the browser, or get_methodology_graph for the "

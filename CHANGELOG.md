@@ -6,6 +6,12 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 ## [Unreleased]
 
 ### Added
+- The canonical Python and MCP Registry distribution is now
+  `hypermnesia-mcp-viz` at version 2.8.0. Releases publish the wheel and source
+  archive to PyPI through Trusted Publishing, and `server.json` describes the
+  matching stdio package for the official MCP Registry. The Cortex Viz product,
+  Claude Code plugin, import package, and existing `cortex-viz` command remain
+  compatible; `hypermnesia-mcp-viz` is an additional canonical command.
 - A versioned, host-neutral live activity contract
   (`docs/host-event-v1.schema.json`) for Codex, Gemini, and generic MCP-host
   adapters. `POST /api/activity` normalizes it into the existing activity

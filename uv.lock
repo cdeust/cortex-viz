@@ -389,78 +389,6 @@ wheels = [
 ]
 
 [[package]]
-name = "cortex-viz"
-version = "2.7.1"
-source = { editable = "." }
-dependencies = [
-    { name = "fastmcp" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "pgvector" },
-    { name = "psycopg", extra = ["binary"] },
-    { name = "psycopg-pool" },
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-]
-
-[package.optional-dependencies]
-community = [
-    { name = "igraph" },
-    { name = "leidenalg" },
-]
-data = [
-    { name = "pgvector" },
-    { name = "psycopg", extra = ["binary"] },
-    { name = "psycopg-pool" },
-]
-dev = [
-    { name = "mutmut" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "pytest-timeout" },
-    { name = "ruff" },
-]
-viz-tile = [
-    { name = "cachetools" },
-    { name = "datashader" },
-    { name = "igraph" },
-    { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "pandas", version = "3.0.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "pillow" },
-    { name = "pyarrow" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "cachetools", marker = "extra == 'viz-tile'", specifier = ">=5.0" },
-    { name = "datashader", marker = "extra == 'viz-tile'", specifier = ">=0.16.3" },
-    { name = "fastmcp", specifier = ">=2.0.0" },
-    { name = "igraph", marker = "extra == 'community'", specifier = ">=0.11" },
-    { name = "igraph", marker = "extra == 'viz-tile'", specifier = ">=0.11" },
-    { name = "leidenalg", marker = "extra == 'community'", specifier = ">=0.10" },
-    { name = "mutmut", marker = "extra == 'dev'", specifier = ">=3.6.0" },
-    { name = "numpy", specifier = ">=1.24.0" },
-    { name = "pandas", marker = "extra == 'viz-tile'", specifier = ">=2.2" },
-    { name = "pgvector", specifier = ">=0.3" },
-    { name = "pgvector", marker = "extra == 'data'", specifier = ">=0.3" },
-    { name = "pillow", marker = "extra == 'viz-tile'", specifier = ">=12.3.0" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.1" },
-    { name = "psycopg", extras = ["binary"], marker = "extra == 'data'", specifier = ">=3.1" },
-    { name = "psycopg-pool", specifier = ">=3.2" },
-    { name = "psycopg-pool", marker = "extra == 'data'", specifier = ">=3.2" },
-    { name = "pyarrow", marker = "extra == 'viz-tile'", specifier = ">=15.0" },
-    { name = "pydantic", specifier = ">=2.0.0" },
-    { name = "pydantic-settings", specifier = ">=2.0.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0.0" },
-    { name = "pytest-timeout", marker = "extra == 'dev'", specifier = ">=2.3.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.15.0,<0.16.0" },
-]
-provides-extras = ["viz-tile", "data", "community", "dev"]
-
-[[package]]
 name = "coverage"
 version = "7.14.1"
 source = { registry = "https://pypi.org/simple" }
@@ -839,6 +767,78 @@ sdist = { url = "https://files.pythonhosted.org/packages/0f/4c/751061ffa58615a32
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d2/fd/6668e5aec43ab844de6fc74927e155a3b37bf40d7c3790e49fc0406b6578/httpx_sse-0.4.3-py3-none-any.whl", hash = "sha256:0ac1c9fe3c0afad2e0ebb25a934a59f4c7823b60792691f779fad2c5568830fc", size = 8960, upload-time = "2025-10-10T21:48:21.158Z" },
 ]
+
+[[package]]
+name = "hypermnesia-mcp-viz"
+version = "2.8.0"
+source = { editable = "." }
+dependencies = [
+    { name = "fastmcp" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "pgvector" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "psycopg-pool" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+]
+
+[package.optional-dependencies]
+community = [
+    { name = "igraph" },
+    { name = "leidenalg" },
+]
+data = [
+    { name = "pgvector" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "psycopg-pool" },
+]
+dev = [
+    { name = "mutmut" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "pytest-timeout" },
+    { name = "ruff" },
+]
+viz-tile = [
+    { name = "cachetools" },
+    { name = "datashader" },
+    { name = "igraph" },
+    { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "pandas", version = "3.0.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "pillow" },
+    { name = "pyarrow" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cachetools", marker = "extra == 'viz-tile'", specifier = ">=5.0" },
+    { name = "datashader", marker = "extra == 'viz-tile'", specifier = ">=0.16.3" },
+    { name = "fastmcp", specifier = ">=2.0.0" },
+    { name = "igraph", marker = "extra == 'community'", specifier = ">=0.11" },
+    { name = "igraph", marker = "extra == 'viz-tile'", specifier = ">=0.11" },
+    { name = "leidenalg", marker = "extra == 'community'", specifier = ">=0.10" },
+    { name = "mutmut", marker = "extra == 'dev'", specifier = ">=3.6.0" },
+    { name = "numpy", specifier = ">=1.24.0" },
+    { name = "pandas", marker = "extra == 'viz-tile'", specifier = ">=2.2" },
+    { name = "pgvector", specifier = ">=0.3" },
+    { name = "pgvector", marker = "extra == 'data'", specifier = ">=0.3" },
+    { name = "pillow", marker = "extra == 'viz-tile'", specifier = ">=12.3.0" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.1" },
+    { name = "psycopg", extras = ["binary"], marker = "extra == 'data'", specifier = ">=3.1" },
+    { name = "psycopg-pool", specifier = ">=3.2" },
+    { name = "psycopg-pool", marker = "extra == 'data'", specifier = ">=3.2" },
+    { name = "pyarrow", marker = "extra == 'viz-tile'", specifier = ">=15.0" },
+    { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "pydantic-settings", specifier = ">=2.0.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0.0" },
+    { name = "pytest-timeout", marker = "extra == 'dev'", specifier = ">=2.3.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.15.0,<0.16.0" },
+]
+provides-extras = ["viz-tile", "data", "community", "dev"]
 
 [[package]]
 name = "idna"

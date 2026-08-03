@@ -13,13 +13,11 @@ name: Release
 # cortex-viz releases ship to zero installs (Cortex #179) — a release workflow
 # that runs is necessary but not sufficient.
 #
-# NOT published to PyPI. `cortex-viz` returns 404 on PyPI (checked 2026-07-25),
-# and the plugin's install path is the marketplace, not `pip install cortex-viz`.
-# Issue #37 criterion 4 (PyPI Trusted Publishing) is therefore DROPPED with
-# this one-line justification (§13.1): there is no PyPI project to publish to,
-# so a Trusted-Publishing job would attest a channel nobody installs from. The
-# wheel + sdist are still built and attested and attached to the GitHub Release
-# as the concrete artifacts issue #37 says were missing.
+# The canonical distribution is published to PyPI as `hypermnesia-mcp-viz`
+# through Trusted Publishing. No long-lived PyPI token exists: the protected
+# `pypi` environment and id-token permission bind publication to this workflow,
+# repository, tag, and environment. The legacy `cortex-viz` console command is
+# carried inside the new distribution as a compatibility alias.
 
 on:
   push:
@@ -57,6 +55,9 @@ jobs:
     name: Build, fingerprint UI, SBOM, attest + GitHub Release
     needs: test
     runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/hypermnesia-mcp-viz
     permissions:
       contents: write       # create the release + upload assets
       id-token: write       # OIDC token Sigstore exchanges for a signing cert
@@ -80,6 +81,9 @@ jobs:
 
       - name: Build sdist and wheel
         run: uv build
+
+      - name: Verify distribution identity and compatibility entry points
+        run: python scripts/check_distribution_artifact.py
 
       # Fingerprint the browser-executed UI (issue #37 criterion 2). The 91 JS
       # files + HTML/CSS under ui/ are first-party STATIC assets — there is no
@@ -132,6 +136,9 @@ jobs:
             dist/*.tar.gz
             cortex-viz.cdx.json
             cortex-viz-ui-manifest.sha256
+
+      - name: Publish canonical distribution to PyPI with OIDC
+        uses: pypa/gh-action-pypi-publish@106e0b0b7c337fa67ed433972f777c6357f78598 # v1.13.0
 
       - name: Create GitHub Release with attested assets
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2

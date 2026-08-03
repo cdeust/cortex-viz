@@ -3,8 +3,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "cortex-viz"
-version = "2.7.1"
+name = "hypermnesia-mcp-viz"
+version = "2.8.0"
 description = "Visualization and graph MCP server for Cortex — neural graph, methodology map, workflow graph, and trace UI extracted from the Cortex memory engine"
 readme = "README.md"
 license = "MIT"
@@ -46,6 +46,7 @@ Repository = "https://github.com/cdeust/cortex-viz"
 
 [project.scripts]
 cortex-viz = "cortex_viz.__main__:main"
+hypermnesia-mcp-viz = "cortex_viz.__main__:main"
 
 [project.optional-dependencies]
 # CPU-only graph viz path — moved verbatim from the Cortex memory engine
