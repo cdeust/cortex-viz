@@ -145,10 +145,12 @@ unfindable. Both maps are now `Set`s. The claim rests on
 property names" — 5 tests, verified to fail against the object-backed
 implementation, so the property is pinned rather than merely currently-true.
 
-Open findings: **4 `js/incomplete-html-attribute-sanitization` (medium)**, in
-the same untriaged batch as §3.2 and covered by
-[#46](https://github.com/cdeust/cortex-viz/issues/46). This section does not
-yet carry a completed argument.
+The **4 `js/incomplete-html-attribute-sanitization` (medium)** findings were
+real quote-escaping defects. Both local escapers now encode the complete
+attribute set, and parsed-DOM regressions prove hostile values round-trip as
+data without creating event-handler attributes. CodeQL reports zero open
+findings after [#97](https://github.com/cdeust/cortex-viz/pull/97), completing
+the argument for this boundary.
 
 ### 3.4 Artifact and dependency integrity (A4)
 
@@ -172,17 +174,16 @@ yet carry a completed argument.
   lands against unchanged code and inaction never opens a pull request. OpenSSF
   Scorecard weekly.
 
-**Known gap.** No release has yet been produced by this workflow: 2.7.1 predates
-it by one day. The pipeline is in place and untested by a real tag. Tracked in
-[#47](https://github.com/cdeust/cortex-viz/issues/47).
+Release v2.8.0 exercised the entire path. On 2026-08-03 its wheel, sdist,
+CycloneDX SBOM, and UI manifest all matched their published checksums and all
+four passed `gh attestation verify` against `cdeust/cortex-viz`.
 
-**Known gap.** Dependency vulnerability monitoring was not automated until now;
-`.github/dependabot.yml` in this change adds it. A manual `npm audit` on
-2026-07-28 reported 19 advisories (2 critical, 7 high), **all in
-`devDependencies`** (the Stryker and vitest test harness). None are in the
-shipped wheel or in `ui/`: `package.json` declares no runtime dependencies at
-all. Remediation tracked in
-[#49](https://github.com/cdeust/cortex-viz/issues/49).
+Dependabot monitors both package ecosystems. `npm audit --package-lock-only`
+reported zero vulnerabilities on 2026-08-03 after updating the test-only
+`brace-expansion` dependency from affected 5.0.8 to fixed 5.0.9 for
+GHSA-rgw5-rvv9-x895 / CVE-2026-69152. `package.json` declares no runtime
+dependencies, so this JavaScript toolchain is not shipped in the Python wheel;
+the project remediates it anyway.
 
 ### 3.5 Local process reach (A5): accepted risk
 
@@ -213,7 +214,7 @@ respect to the Cortex store. Documented for the user in
 | **Injection (SQL)** | Countered. All store access is parameterised read-only queries through `psycopg`; no string-built SQL. |
 | **Injection (command)** | git is invoked with argument lists, never a shell string. |
 | **Path traversal (CWE-22)** | Countered. One containment guard behind every request-derived path (§3.2); the unbounded diff-endpoint read it uncovered is fixed and regression-tested; 10 `py/path-injection` alerts closed. |
-| **XSS (CWE-79)** | **Open findings**, see §3.3 and [#46](https://github.com/cdeust/cortex-viz/issues/46). |
+| **XSS (CWE-79)** | Countered at the known sinks. Complete attribute escaping plus parsed-DOM regressions closed the four real findings; CodeQL has zero open alerts (§3.3). |
 | **CSRF (CWE-352)** | Countered, `enforce_same_origin_write`. |
 | **DNS rebinding (CWE-346/350)** | Countered, `validate_host_header`. |
 | **Permissive CORS (CWE-942)** | Countered, origin allowlist. |
@@ -228,9 +229,9 @@ Stated so the boundary of the argument is legible:
 
 1. **Cortex itself.** cortex-viz reads Cortex's store. The integrity and
    confidentiality of that store are Cortex's assurance case, not this one.
-2. **The marketplace delivery channel.** The install path is a pin in Cortex's
-   plugin manifest, consumed by the Claude Code host. Neither the host nor the
-   marketplace is in scope here.
+2. **The optional Claude Code marketplace delivery channel.** It is one of
+   several host paths for this cross-platform MCP server; neither that host nor
+   its marketplace is in scope here.
 3. **The unpkg CDN fetch.** Four pages (`brain-viz.html`, `atom-viz.html`,
    `methodology-viz.html`) load three.js, OrbitControls, and 3d-force-graph
    from the public unpkg CDN at page load, disclosed in
@@ -243,8 +244,8 @@ Stated so the boundary of the argument is legible:
    [#50](https://github.com/cdeust/cortex-viz/issues/50); the other views are
    offline-safe.
 4. **Test-suite adequacy as a security control.** Python statement coverage is
-   **34%** measured 2026-07-28, and the JS harness cannot be measured at all by
-   v8 (see §7). The suites are a functional gate, not a security argument.
+   **81%** on merged main, and the independent JS suite exercises the browser
+   surface. Coverage remains a functional measurement, not a security argument.
 5. **Availability.** Denial of service against a local, user-launched,
    short-lived developer tool is not modelled.
 
@@ -253,17 +254,16 @@ Stated so the boundary of the argument is legible:
 | Control | Verified how | Result |
 |---|---|---|
 | Loopback binding, Host/Origin/CSRF guards | Source review, `cortex_viz/server/http_security.py` | Implemented |
-| Path containment | Source review of `serve_shared_asset` | Implemented at that site, **10 alerts untriaged repo-wide** |
-| DOM sanitisation | CodeQL | **6 alerts open** (2 high, 4 medium) |
-| Provenance, SBOM, fingerprint | Workflow review, `Release.yaml` | Implemented, **never exercised by a tag** |
+| Path containment | CodeQL plus traversal regressions | Shared symlink-aware guard used repo-wide; 10 findings closed |
+| DOM sanitisation | CodeQL plus parsed-DOM regressions | Real quote-escaping defects fixed; zero open CodeQL alerts |
+| Provenance, SBOM, fingerprint | v2.8.0 checksums plus `gh attestation verify` | All four primary release artifacts verified on 2026-08-03 |
 | Action pinning | Workflow review | All actions SHA-pinned |
-| Python test suite | `python -m pytest` on 2026-07-28 | 431 passed, 1 skipped |
-| Python statement coverage | `pytest --cov=cortex_viz` on 2026-07-28 | **34%** |
-| JS test suite | `npm test` on 2026-07-28 | 175 passed |
-| JS statement coverage | `vitest run --coverage` on 2026-07-28 | **Not measurable**: the harness loads UI files with `new Function(code)`, so v8 attributes zero lines to the source files and reports a false 0% |
+| Python test suite | Required CI on merged main, 2026-08-03 | 988 passed, 10 skipped |
+| Python statement coverage | `coverage run -m pytest` plus `coverage report` | **81%**: 11,674 statements, 2,272 missed; CI fails below 80% |
+| JS test suite | Required CI on merged main, 2026-08-03 | 259 passed |
 | JS test strength | Stryker, scoped | Survivors triaged in `tests/js/MUTATION_NOTES.md` |
-| Static analysis | CodeQL, both languages, per push and weekly | Running, **192 alerts open** |
-| Repository posture | OpenSSF Scorecard | **3.6** as of 2026-07-26 |
+| Static analysis | CodeQL, both languages, per push and weekly | Running, **zero open CodeQL alerts** |
+| Repository posture | OpenSSF Scorecard | **7.2** as of 2026-08-03; OpenSSF Best Practices **Silver** |
 
 ## 8. Conclusion, and how far it goes
 
@@ -272,14 +272,13 @@ server, A1) carries three independent controls with distinct failure modes, and
 the supply-chain boundary (A4) carries provenance, fingerprinting, an SBOM, and
 pinned actions. Those two arguments stand.
 
-Of the two boundaries that handle **untrusted data**, A2 (request-derived
-paths) now stands as well: every site goes through one containment guard, the
-findings are triaged to zero, and the one that was a real defect rather than an
-analyser artifact is fixed and regression-tested (§3.2). A3 (rendered content)
-does not: its static-analysis findings are still **untriaged**, so the argument
-for it is incomplete by this document's own standard. cortex-viz should be read
-as a **local, single-user developer tool with a credible but unfinished
-data-handling argument**, not as a hardened service.
+Both boundaries that handle **untrusted data** now stand. A2
+(request-derived paths) routes every site through one containment guard; its
+real defect is fixed and regression-tested (§3.2). A3 (rendered content) has
+complete attribute escaping at the known sinks, parsed-DOM regressions, and
+zero open CodeQL alerts (§3.3). cortex-viz should still be read as a **local,
+single-user developer tool**, not as a remotely exposed hardened service; the
+CDN scope limit in §6 remains explicit.
 
 This case is revisited when a trust boundary moves, when a finding is triaged,
 or at each release, whichever comes first.
