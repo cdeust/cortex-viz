@@ -5,6 +5,19 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 
 ## [Unreleased]
 
+### Security
+
+- Update the transitive test dependency `brace-expansion` from 5.0.8 to 5.0.9,
+  the first patched 5.x release for GHSA-rgw5-rvv9-x895 / CVE-2026-69152.
+  The package remains development-only and does not ship in the wheel;
+  `npm audit --package-lock-only` reports zero vulnerabilities.
+
+### Changed
+
+- Synchronize committed assurance evidence with OpenSSF Best Practices Silver,
+  verified v2.8.0 Sigstore attestations, 81% Python statement coverage, zero
+  open CodeQL alerts, and OpenSSF Scorecard 7.2.
+
 ## [2.8.0] - 2026-08-03
 
 ### Added

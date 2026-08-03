@@ -136,11 +136,11 @@ Five columns by consolidation stage (`labile` · `early_ltp` · `late_ltp` · `c
 
 ## Install
 
-cortex-viz is a Claude Code plugin (and a plain MCP server). Point it at the **same database as your Cortex install**: it reads Cortex's memories from that store and never writes them.
+cortex-viz is a cross-platform MCP server with an optional Claude Code plugin. Point it at the **same database as your Cortex install**: it reads Cortex's memories from that store and never writes them.
 
 **As a plugin**: ships the MCP server, the `/cortex-visualize` skill, and the live session-activity hooks. The bundled `scripts/launcher.py` bootstraps its own dependencies on first launch (no manual `pip` needed). Configure the DB via the plugin's `database_url` user-config (defaults to `postgresql://127.0.0.1:5432/cortex`).
 
-**As a raw MCP (after the v2.8.0 release):**
+**As a raw MCP (v2.8.0 and later):**
 
 ```bash
 pip install "hypermnesia-mcp-viz[data,viz-tile]"   # optional PG and large-graph extras
@@ -157,7 +157,7 @@ Set `DATABASE_URL` to the shared Cortex database. `open_visualization` launches 
 
 ### Other MCP hosts
 
-Any MCP host can launch the server: it is a plain stdio process. Once v2.8.0 is released, install it with `pip install hypermnesia-mcp-viz`, then register `hypermnesia-mcp-viz` as the command in your host's MCP config. The compatibility command `cortex-viz` and the module form `python3 -m cortex_viz` are equivalent (Gemini CLI `~/.gemini/settings.json`, Cursor `.cursor/mcp.json`, Windsurf `~/.codeium/windsurf/mcp_config.json`, VS Code `.vscode/mcp.json` under `"servers"`, or Codex CLI: `codex mcp add cortex-viz -- hypermnesia-mcp-viz`). The `open_visualization` tool opens the UI in the browser. Until that release, clone the repository and use the module form documented above. The historical **Trace** archive still reads Claude Code JSONLs under `~/.claude/projects/`, but live activity is now host-neutral: a Codex, Gemini, or generic MCP adapter can POST the versioned schema below to the local `/api/activity` endpoint. The galaxy/brain/knowledge/wiki/board views still need a [Cortex](https://github.com/cdeust/Cortex) store to read.
+Any MCP host can launch the server: it is a plain stdio process. Install it with `pip install hypermnesia-mcp-viz`, then register `hypermnesia-mcp-viz` as the command in your host's MCP config. The compatibility command `cortex-viz` and the module form `python3 -m cortex_viz` are equivalent (Gemini CLI `~/.gemini/settings.json`, Cursor `.cursor/mcp.json`, Windsurf `~/.codeium/windsurf/mcp_config.json`, VS Code `.vscode/mcp.json` under `"servers"`, or Codex CLI: `codex mcp add cortex-viz -- hypermnesia-mcp-viz`). The `open_visualization` tool opens the UI in the browser. The historical **Trace** archive still reads Claude Code JSONLs under `~/.claude/projects/`, but live activity is host-neutral: a Codex, Gemini, or generic MCP adapter can POST the versioned schema below to the local `/api/activity` endpoint. The galaxy/brain/knowledge/wiki/board views still need a [Cortex](https://github.com/cdeust/Cortex) store to read.
 
 ### Host-neutral live activity
 
@@ -211,7 +211,7 @@ No `import mcp_server.*` is permitted anywhere in `cortex_viz/`: that invariant 
 | Document | What it answers |
 |---|---|
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute, the coding style, and the test requirement |
-| [GOVERNANCE.md](GOVERNANCE.md) | Who decides, who has which role, and the continuity gap |
+| [GOVERNANCE.md](GOVERNANCE.md) | Who decides, who has which role, and how a fork can continue the project without original credentials |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Expected behaviour and how to report a problem |
 | [SECURITY.md](SECURITY.md) | What cortex-viz accesses, the supply-chain assurance, and how to report a vulnerability |
 | [PRIVACY.md](PRIVACY.md) | What is read, what is written, and what leaves your machine |
@@ -222,9 +222,9 @@ No `import mcp_server.*` is permitted anywhere in `cortex_viz/`: that invariant 
 
 ### Achievements
 
-- **OpenSSF Best Practices**: registered as [project 13846](https://www.bestpractices.dev/projects/13846), with the badge shown above. Answers for every passing and silver criterion are committed in [`.bestpractices.json`](.bestpractices.json), audited against this repository rather than copied, and the five silver blockers are listed there and in the [roadmap](docs/ROADMAP.md).
-- **OpenSSF Scorecard**: runs weekly ([`scorecard.yml`](.github/workflows/scorecard.yml)). Current score **3.6** (2026-07-26), recorded as a baseline rather than displayed as a badge.
-- **Build provenance**: every release artifact carries a Sigstore-backed attestation. Verify with `gh attestation verify <file> --repo cdeust/cortex-viz`.
+- **OpenSSF Best Practices Silver**: [project 13846](https://www.bestpractices.dev/projects/13846) earned Silver on 2026-08-03. Answers for every passing and Silver criterion are committed in [`.bestpractices.json`](.bestpractices.json) and audited against this repository rather than copied.
+- **OpenSSF Scorecard**: runs weekly ([`scorecard.yml`](.github/workflows/scorecard.yml)). Current score **7.2** (2026-08-03); the next run can incorporate the Silver badge and the latest dependency fix.
+- **Build provenance**: all four v2.8.0 artifacts — wheel, source archive, CycloneDX SBOM, and UI manifest — have independently verified Sigstore-backed attestations. Verify any downloaded artifact with `gh attestation verify <file> --repo cdeust/cortex-viz`.
 
 ## Status
 

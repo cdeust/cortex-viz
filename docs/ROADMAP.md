@@ -1,6 +1,6 @@
 # Roadmap
 
-_Last updated: 2026-07-28._
+_Last updated: 2026-08-03._
 
 cortex-viz is a single-maintainer project (see [GOVERNANCE.md](../GOVERNANCE.md)),
 so this roadmap states direction and known gaps rather than dated commitments.
@@ -17,17 +17,15 @@ fingerprint manifest, CodeQL for both languages, and OpenSSF Scorecard. The
 browser UI got its first test harness in
 [#35](https://github.com/cdeust/cortex-viz/issues/35).
 
-## Near term: close the assurance gaps
+## Near term: improve the bus factor
 
-These are the open items that the [assurance case](ASSURANCE_CASE.md) and the
-OpenSSF Best Practices answers name as incomplete. They come before new
-features.
+The 2026-08-03 assurance wave closed the CodeQL backlog (#46), exercised and
+independently verified the v2.8.0 release path (#47), raised Python statement
+coverage above the required 80% (#44), and earned OpenSSF Best Practices
+Silver. One continuity improvement remains before Gold is credible.
 
 | Work | Issue | Why it is first |
 |---|---|---|
-| Triage the 192 open CodeQL alerts, starting with the 10 `py/path-injection` and 2 `js/remote-property-injection` highs | [#46](https://github.com/cdeust/cortex-viz/issues/46) | Untriaged findings on the untrusted-data boundary are the one thing that keeps the assurance case incomplete |
-| Cut a release through `Release.yaml` so the attestation path is exercised | [#47](https://github.com/cdeust/cortex-viz/issues/47) | The pipeline exists but has not yet completed a tagged release |
-| Raise Python statement coverage from 34% toward 80%, and make JS coverage measurable at all | [#44](https://github.com/cdeust/cortex-viz/issues/44) | Both numbers are currently unusable as evidence |
 | Add a second maintainer with admin and release rights | [#48](https://github.com/cdeust/cortex-viz/issues/48) | Preserve the original repository identity and improve the bus factor beyond the documented MIT fork continuity path |
 
 The strict Ruff/ESLint gates in #45 and the JavaScript test-harness dependency
@@ -53,15 +51,16 @@ remediation in #49 are complete; they are no longer listed as open work.
 
 ## Longer term
 
-- **OpenSSF Best Practices silver**, then gold. cortex-viz is registered as
-  [project 13846](https://www.bestpractices.dev/projects/13846). The answers
-  and the current blockers are in `.bestpractices.json`; the two remaining
-  silver MUSTs are statement coverage (#44) and an exercised signed release
-  (#47). Gold additionally needs a second maintainer and two-person review,
-  which depends on
+- **OpenSSF Best Practices Gold.** cortex-viz [earned Silver on
+  2026-08-03](https://www.bestpractices.dev/projects/13846). The evidence is in
+  `.bestpractices.json`. Gold additionally needs a second maintainer and
+  two-person review, which depends on
   [#48](https://github.com/cdeust/cortex-viz/issues/48).
-- **Raise the Scorecard score** from its 3.6 baseline, principally branch
-  protection, token permissions, and the dependency-update tool.
+- **Raise the Scorecard score** from its 7.2 baseline. The remaining major
+  deductions are two-person code review, repository age/contributor diversity,
+  and a branch-protection result that the Scorecard token cannot currently
+  inspect; token permissions, dependency updates, SAST, fuzzing, packaging, and
+  pinned dependencies already score 10.
 
 ## Not planned
 
