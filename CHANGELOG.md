@@ -14,6 +14,17 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 
 ### Changed
 
+- **Breaking publication rename.** `hypermnesia-mcp-viz` is now the sole
+  Claude Code plugin, MCP server, Python distribution, and console identity.
+  Existing Claude installs must run
+  `claude plugin uninstall cortex-viz@cortex-plugins`, refresh
+  `cortex-plugins`, and run
+  `claude plugin install hypermnesia-mcp-viz@cortex-plugins`. Permission and
+  tool references must move from `plugin:cortex-viz:*` to
+  `plugin:hypermnesia-mcp-viz:*`; direct-process hosts must replace the removed
+  `cortex-viz` executable with `hypermnesia-mcp-viz`. This source change and
+  the marketplace rename in `cdeust/Cortex#351` form one coordinated release
+  and must not be published independently.
 - Synchronize committed assurance evidence with OpenSSF Best Practices Silver,
   verified v2.8.0 Sigstore attestations, 81% Python statement coverage, zero
   open CodeQL alerts, and post-Silver OpenSSF Scorecard 7.4.
@@ -24,9 +35,9 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 - The canonical Python and MCP Registry distribution is now
   `hypermnesia-mcp-viz` at version 2.8.0. Releases publish the wheel and source
   archive to PyPI through Trusted Publishing, and `server.json` describes the
-  matching stdio package for the official MCP Registry. The Cortex Viz product,
-  Claude Code plugin, import package, and existing `cortex-viz` command remain
-  compatible; `hypermnesia-mcp-viz` is an additional canonical command.
+  matching stdio package for the official MCP Registry. The Python import
+  package remains `cortex_viz`, but no `cortex-viz` publication or console
+  alias is emitted.
 - A versioned, host-neutral live activity contract
   (`docs/host-event-v1.schema.json`) for Codex, Gemini, and generic MCP-host
   adapters. `POST /api/activity` normalizes it into the existing activity

@@ -39,6 +39,30 @@ claude plugin marketplace add cdeust/Cortex
 claude plugin install hypermnesia-mcp-viz@cortex-plugins
 ```
 
+This install name becomes available in the Cortex marketplace only when this
+repository and the matching marketplace change in
+[`cdeust/Cortex#351`](https://github.com/cdeust/Cortex/pull/351) are released
+together. Maintainers must not publish either half of the rename on its own.
+
+### Migrating from `cortex-viz`
+
+Existing Claude Code installs are not aliases for the new plugin identity.
+Remove the old install, refresh the marketplace after the coordinated release,
+and install the canonical plugin:
+
+```bash
+claude plugin uninstall cortex-viz@cortex-plugins
+claude plugin marketplace update cortex-plugins
+claude plugin install hypermnesia-mcp-viz@cortex-plugins
+```
+
+The MCP/tool qualifier changes from `plugin:cortex-viz:*` to
+`plugin:hypermnesia-mcp-viz:*`; update permission allowlists, hooks, skills,
+agents, and host configuration that match the old prefix. The removed
+`cortex-viz` console command is not retained as an alias, so Cursor, Windsurf,
+VS Code, and other direct-process configurations must invoke
+`hypermnesia-mcp-viz` instead.
+
 > **Hypermnesia MCP Viz is a companion to [Cortex](https://github.com/cdeust/Cortex) that never writes a memory.** Install Cortex first (`claude plugin install hypermnesia-mcp@cortex-plugins`): the visualizer reads its shared PostgreSQL store, and writes only its own derived caches there ([Boundary](#boundary)). Point both at the same database: the `database_url` plugin setting defaults to `postgresql://127.0.0.1:5432/cortex`; set it to the same value you gave Cortex.
 
 Restart your Claude Code session, then launch the visualizer:

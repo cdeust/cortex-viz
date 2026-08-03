@@ -54,6 +54,18 @@ def test_only_canonical_console_name_is_published() -> None:
     assert "cortex-viz" not in scripts
 
 
+def test_breaking_plugin_migration_is_explicit() -> None:
+    readme = (ROOT / "README.md").read_text()
+    changelog = (ROOT / "CHANGELOG.md").read_text()
+
+    for text in (readme, changelog):
+        assert "claude plugin uninstall cortex-viz@cortex-plugins" in text
+        assert "plugin:cortex-viz:*" in text
+        assert "plugin:hypermnesia-mcp-viz:*" in text
+        assert "hypermnesia-mcp-viz" in text
+    assert "cdeust/Cortex#351" in changelog
+
+
 def test_artifact_guard_remains_active_under_python_optimization() -> None:
     guard_program = "; ".join(
         [
