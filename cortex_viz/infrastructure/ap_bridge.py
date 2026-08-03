@@ -37,6 +37,7 @@ _AP_TOOLS = frozenset(
         "search_codebase",
         "get_context",
         "get_symbol",
+        "get_processes",
         "get_impact",
         "detect_changes",
     }

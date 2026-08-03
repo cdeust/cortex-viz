@@ -121,14 +121,13 @@ def _find_ap_binary() -> str | None:
     if os.environ.get("CORTEX_AP_COMMAND"):
         return None  # caller explicitly configured it — leave alone
     try:
-        from cortex_viz.infrastructure.pipeline_discovery import (
-            discover_pipeline_command,
-        )
+        from cortex_viz.infrastructure.ap_bridge import _resolve_command
 
-        cmd = discover_pipeline_command()
+        config = _resolve_command()
     except Exception:
         return None
-    return cmd[0] if cmd else None
+    command = config.get("command") if isinstance(config, dict) else None
+    return str(command) if command else None
 
 
 def _ensure_ap_graph(dev_src: Path | None, env: dict) -> None:
