@@ -28,9 +28,10 @@ features.
 | Triage the 192 open CodeQL alerts, starting with the 10 `py/path-injection` and 2 `js/remote-property-injection` highs | [#46](https://github.com/cdeust/cortex-viz/issues/46) | Untriaged findings on the untrusted-data boundary are the one thing that keeps the assurance case incomplete |
 | Cut a release through `release.yml` so the attestation path is exercised | [#47](https://github.com/cdeust/cortex-viz/issues/47) | The pipeline exists but no tag has ever run through it |
 | Raise Python statement coverage from 34% toward 80%, and make JS coverage measurable at all | [#44](https://github.com/cdeust/cortex-viz/issues/44) | Both numbers are currently unusable as evidence |
-| Make `ruff` a required CI gate, after clearing the 486 default-rule violations | [#45](https://github.com/cdeust/cortex-viz/issues/45) | A coding standard nobody enforces is a preference |
-| Remediate the 19 `devDependencies` advisories in the JS test harness | [#49](https://github.com/cdeust/cortex-viz/issues/49) | None ship, but an unmaintained test harness rots |
-| Add a second maintainer with admin and release rights | [#48](https://github.com/cdeust/cortex-viz/issues/48) | The project cannot currently survive one person becoming unavailable |
+| Add a second maintainer with admin and release rights | [#48](https://github.com/cdeust/cortex-viz/issues/48) | Preserve the original repository identity and improve the bus factor beyond the documented MIT fork continuity path |
+
+The strict Ruff/ESLint gates in #45 and the JavaScript test-harness dependency
+remediation in #49 are complete; they are no longer listed as open work.
 
 ## Medium term
 
@@ -54,9 +55,10 @@ features.
 
 - **OpenSSF Best Practices silver**, then gold. cortex-viz is registered as
   [project 13846](https://www.bestpractices.dev/projects/13846). The answers
-  and the current blockers are in `.bestpractices.json`; the five silver MUSTs
-  still open are #44, #45, #47, and #48. Gold additionally needs a second
-  maintainer and two-person review, which also depends on
+  and the current blockers are in `.bestpractices.json`; the two remaining
+  silver MUSTs are statement coverage (#44) and an exercised signed release
+  (#47). Gold additionally needs a second maintainer and two-person review,
+  which depends on
   [#48](https://github.com/cdeust/cortex-viz/issues/48).
 - **Raise the Scorecard score** from its 3.6 baseline, principally branch
   protection, token permissions, and the dependency-update tool.
