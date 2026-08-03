@@ -37,13 +37,18 @@ def test_both_console_names_resolve_to_the_same_entry_point() -> None:
 
 
 def test_artifact_guard_remains_active_under_python_optimization() -> None:
+    guard_program = "; ".join(
+        [
+            "from scripts.check_distribution_artifact import require",
+            "require(False, 'optimization guard')",
+        ]
+    )
     result = subprocess.run(
         [
             sys.executable,
             "-O",
             "-c",
-            "from scripts.check_distribution_artifact import require; "
-            "require(False, 'optimization guard')",
+            guard_program,
         ],
         cwd=ROOT,
         capture_output=True,

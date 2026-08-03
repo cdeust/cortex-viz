@@ -83,7 +83,7 @@ jobs:
         run: uv build
 
       - name: Verify distribution identity and compatibility entry points
-        run: python scripts/check_distribution_artifact.py
+        run: python -m scripts.check_distribution_artifact
 
       # Fingerprint the browser-executed UI (issue #37 criterion 2). The 91 JS
       # files + HTML/CSS under ui/ are first-party STATIC assets — there is no
@@ -133,8 +133,9 @@ jobs:
             sha256sum "$f" | tee "$f.sha256"
           done
 
-      # Provenance BEFORE upload: binds each artifact digest to this workflow,
-      # commit and runner. Verify with
+      # Provenance before the GitHub Release upload binds each artifact digest
+      # to this workflow, commit and runner. PyPI publication happens above so
+      # dist/ is still free of checksum sidecars. Verify provenance with
       #   gh attestation verify <file> --repo cdeust/cortex-viz
       - name: Attest build provenance
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1

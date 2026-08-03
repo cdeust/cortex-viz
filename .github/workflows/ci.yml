@@ -112,7 +112,7 @@ jobs:
       - name: Build canonical distribution
         run: uv build
       - name: Verify distribution metadata and compatibility entry points
-        run: uv run --no-sync python scripts/check_distribution_artifact.py
+        run: uv run --no-sync python -m scripts.check_distribution_artifact
       - name: Validate official MCP Registry manifest
         run: |
           set -euxo pipefail
