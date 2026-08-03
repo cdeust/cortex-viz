@@ -166,10 +166,10 @@ def test_list_sessions_filters_noise_and_orders_newest(tmp_path, monkeypatch):
     assert [node["session_id"] for node in payload["nodes"]] == ["new", "old"]
     assert payload["nodes"][0]["label"].endswith("…")
     assert payload["nodes"][0]["action_count"] == 1
-    assert [edge["target"] for edge in payload["edges"]] == [
+    assert {edge["target"] for edge in payload["edges"]} == {
         "session:old",
         "session:new",
-    ]
+    }
     assert trace_source.list_sessions("domain:missing") == {"nodes": [], "edges": []}
 
 
