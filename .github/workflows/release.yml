@@ -118,6 +118,14 @@ jobs:
             sbom-requirements.txt --output-format JSON --output-file cortex-viz.cdx.json
           ls -la cortex-viz.cdx.json
 
+      # Publish while dist/ contains distributions only. The checksum step
+      # below adds *.sha256 sidecars that Twine rejects as unknown formats.
+      - name: Publish canonical distribution to PyPI with OIDC
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
+        with:
+          packages-dir: dist
+          skip-existing: true
+
       - name: Compute SHA-256 checksums for every release asset
         run: |
           set -euxo pipefail
@@ -136,9 +144,6 @@ jobs:
             dist/*.tar.gz
             cortex-viz.cdx.json
             cortex-viz-ui-manifest.sha256
-
-      - name: Publish canonical distribution to PyPI with OIDC
-        uses: pypa/gh-action-pypi-publish@106e0b0b7c337fa67ed433972f777c6357f78598 # v1.13.0
 
       - name: Create GitHub Release with attested assets
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2

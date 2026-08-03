@@ -66,9 +66,10 @@ remediation in #49 are complete; they are no longer listed as open work.
 ## Not planned
 
 - **A separate legacy `cortex-viz` PyPI distribution.** The canonical PyPI and
-  MCP Registry name is `hypermnesia-mcp-viz`; that package includes the legacy
-  `cortex-viz` command, so publishing a second distribution would split the
-  release identity without adding compatibility.
+  MCP Registry name is `hypermnesia-mcp-viz`, matching the published sibling
+  `hypermnesia-mcp`; that package includes the legacy `cortex-viz` command, so
+  publishing a second distribution would split the release identity without
+  adding compatibility.
 - **Writing to Cortex's memory tables.** cortex-viz renders, it never
   remembers. That boundary is the point of the extraction and is not up for
   negotiation.

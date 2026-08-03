@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -35,6 +36,24 @@ def test_both_console_names_resolve_to_the_same_entry_point() -> None:
     assert scripts["cortex-viz"] == scripts["hypermnesia-mcp-viz"]
 
 
+def test_artifact_guard_remains_active_under_python_optimization() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-O",
+            "-c",
+            "from scripts.check_distribution_artifact import require; "
+            "require(False, 'optimization guard')",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "optimization guard" in result.stderr
+
+
 def test_stdio_handshake_advertises_canonical_identity() -> None:
     async def exercise() -> None:
         client = MCPClient(
@@ -46,10 +65,8 @@ def test_stdio_handshake_advertises_canonical_identity() -> None:
         )
         try:
             await client.connect()
-            assert client.server_info == {
-                "name": DISTRIBUTION_NAME,
-                "version": VERSION,
-            }
+            assert client.server_info["name"] == DISTRIBUTION_NAME
+            assert client.server_info["version"] == VERSION
             assert "open_visualization" in client.list_tools()
         finally:
             client.close()

@@ -2,6 +2,8 @@
   <img src="docs/assets/banner.svg" alt="cortex-viz, the read-only visualization layer for Cortex: six live reading angles over your memory, sessions, and code, rendered but never remembered" width="100%"/>
 </p>
 
+<!-- mcp-name: io.github.cdeust/hypermnesia-mcp-viz -->
+
 <p align="center">
   <img src="docs/assets/cortex-trace-galaxy.png" alt="cortex-viz Trace galaxy on the paper surface: every Claude Code session is a tight phyllotaxis disk of its own prompt → action → file → memory chain, clustered around its domain's olive hub; the selected chain's disks render solid gold in place while the rest of the galaxy stays legible, and the mono status bar streams the exact counts (CHAIN · 108 STEPS · 6 537/6 537 nodes · 8 696/8 696 edges), never rounded." width="100%"/>
 </p>
@@ -138,7 +140,7 @@ cortex-viz is a Claude Code plugin (and a plain MCP server). Point it at the **s
 
 **As a plugin**: ships the MCP server, the `/cortex-visualize` skill, and the live session-activity hooks. The bundled `scripts/launcher.py` bootstraps its own dependencies on first launch (no manual `pip` needed). Configure the DB via the plugin's `database_url` user-config (defaults to `postgresql://127.0.0.1:5432/cortex`).
 
-**As a raw MCP / for development:**
+**As a raw MCP (after the v2.8.0 release):**
 
 ```bash
 pip install "hypermnesia-mcp-viz[data,viz-tile]"   # optional PG and large-graph extras
@@ -147,11 +149,15 @@ hypermnesia-mcp-viz
 cortex-viz                          # or: python -m cortex_viz   (stdio MCP transport)
 ```
 
+If this repository was previously installed as an editable `cortex-viz`
+distribution, run `pip uninstall cortex-viz` before installing the canonical
+package so two distributions do not claim the same import package and script.
+
 Set `DATABASE_URL` to the shared Cortex database. `open_visualization` launches the galaxy UI in the browser, bound to `127.0.0.1`.
 
 ### Other MCP hosts
 
-Any MCP host can launch the server: it is a plain stdio process. Install it with `pip install hypermnesia-mcp-viz`, then register `hypermnesia-mcp-viz` as the command in your host's MCP config. The compatibility command `cortex-viz` and the module form `python3 -m cortex_viz` are equivalent (Gemini CLI `~/.gemini/settings.json`, Cursor `.cursor/mcp.json`, Windsurf `~/.codeium/windsurf/mcp_config.json`, VS Code `.vscode/mcp.json` under `"servers"`, or Codex CLI: `codex mcp add cortex-viz -- hypermnesia-mcp-viz`). The `open_visualization` tool opens the UI in the browser. The historical **Trace** archive still reads Claude Code JSONLs under `~/.claude/projects/`, but live activity is now host-neutral: a Codex, Gemini, or generic MCP adapter can POST the versioned schema below to the local `/api/activity` endpoint. The galaxy/brain/knowledge/wiki/board views still need a [Cortex](https://github.com/cdeust/Cortex) store to read.
+Any MCP host can launch the server: it is a plain stdio process. Once v2.8.0 is released, install it with `pip install hypermnesia-mcp-viz`, then register `hypermnesia-mcp-viz` as the command in your host's MCP config. The compatibility command `cortex-viz` and the module form `python3 -m cortex_viz` are equivalent (Gemini CLI `~/.gemini/settings.json`, Cursor `.cursor/mcp.json`, Windsurf `~/.codeium/windsurf/mcp_config.json`, VS Code `.vscode/mcp.json` under `"servers"`, or Codex CLI: `codex mcp add cortex-viz -- hypermnesia-mcp-viz`). The `open_visualization` tool opens the UI in the browser. Until that release, clone the repository and use the module form documented above. The historical **Trace** archive still reads Claude Code JSONLs under `~/.claude/projects/`, but live activity is now host-neutral: a Codex, Gemini, or generic MCP adapter can POST the versioned schema below to the local `/api/activity` endpoint. The galaxy/brain/knowledge/wiki/board views still need a [Cortex](https://github.com/cdeust/Cortex) store to read.
 
 ### Host-neutral live activity
 
