@@ -1,16 +1,16 @@
 ---
 name: cortex-visualize
-description: "Launch the interactive Cortex neural-graph visualization (the cortex-viz MCP). Use when the user says 'show visualization', 'show me the graph', 'visualize memories', 'show memory map', 'open neural graph', 'cortex-visualize', or when a visual overview of the memory system, codebase graph, or session trace would help."
+description: "Launch the interactive Cortex neural-graph visualization (the hypermnesia-mcp-viz MCP). Use when the user says 'show visualization', 'show me the graph', 'visualize memories', 'show memory map', 'open neural graph', 'cortex-visualize', or when a visual overview of the memory system, codebase graph, or session trace would help."
 ---
 
-# Visualize — Interactive Neural Graph (cortex-viz)
+# Visualize — Interactive Neural Graph (hypermnesia-mcp-viz)
 
 ## Keywords
 visualize, graph, neural graph, memory map, show memories, visual overview, entity graph, methodology graph, codebase graph, session trace, show profile, galaxy
 
 ## Overview
 
-Launch the interactive browser-based neural graph served by the **cortex-viz**
+Launch the interactive browser-based neural graph served by the **hypermnesia-mcp-viz**
 MCP. It reads Cortex's shared PostgreSQL store (read-only) plus your `~/.claude`
 session history and wiki, and opens six reading angles over the same data:
 **Trace** (default), **Graph** (the galaxy), **Knowledge**, **Wiki**, **Board**,
@@ -19,10 +19,11 @@ and **Pipeline**.
 **Use this skill when:** the user wants a visual overview, is exploring the
 knowledge/codebase graph, or needs to present or screenshot Cortex's state.
 
-**Requires:** the `cortex-viz` MCP. If its tools are not available, tell the
-user to install cortex-viz (https://github.com/cdeust/cortex-viz).
+**Requires:** the `hypermnesia-mcp-viz` MCP. If its tools are not available,
+tell the user to install `hypermnesia-mcp-viz`
+(https://github.com/cdeust/cortex-viz).
 
-**Works without Cortex:** cortex-viz does NOT require the Cortex memory
+**Works without Cortex:** hypermnesia-mcp-viz does NOT require the Cortex memory
 engine to be useful. When Cortex's PostgreSQL is unreachable (or
 `CORTEX_VIZ_NO_DB=1` is set) the server starts in no-DB mode: the **Trace**
 view — the per-session execution drill over `~/.claude` session logs + git —
@@ -35,13 +36,13 @@ launch it freely even if the user hasn't installed Cortex.
 ### Launch the neural graph
 
 ```
-cortex-viz:open_visualization({})
+hypermnesia-mcp-viz:open_visualization({})
 ```
 
 Or filter to a specific domain:
 
 ```
-cortex-viz:open_visualization({ "domain": "cortex" })
+hypermnesia-mcp-viz:open_visualization({ "domain": "cortex" })
 ```
 
 Opens in the browser on a local 127.0.0.1 port. Features:
@@ -61,5 +62,5 @@ Opens in the browser on a local 127.0.0.1 port. Features:
 For custom visualization or analysis without opening the browser:
 
 ```
-cortex-viz:get_methodology_graph({ "domain": "<optional filter>" })
+hypermnesia-mcp-viz:get_methodology_graph({ "domain": "<optional filter>" })
 ```

@@ -1,9 +1,8 @@
-"""Canonical technical identity for the Cortex Viz distribution.
+"""Canonical publication identity for Hypermnesia MCP Viz.
 
-The human-facing product and Claude plugin remain ``Cortex Viz`` /
-``cortex-viz``. The PyPI and official MCP Registry identity is the secured
-Cortex-family name below. Cross-manifest tests bind these constants to
-pyproject.toml, server.json, and the plugin version.
+PyPI, MCP Registry, Claude Code, Codex, Gemini, release artifacts, and console
+entry points all use this single identity. The Python import package remains
+``cortex_viz`` and the source repository keeps its historical URL.
 """
 
 DISTRIBUTION_NAME = "hypermnesia-mcp-viz"

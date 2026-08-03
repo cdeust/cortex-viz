@@ -20,20 +20,38 @@ def test_source_manifests_share_one_versioned_identity() -> None:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text())
     server = json.loads((ROOT / "server.json").read_text())
     plugin = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text())
+    claude_marketplace = json.loads(
+        (ROOT / ".claude-plugin" / "marketplace.json").read_text()
+    )
+    codex = json.loads((ROOT / ".codex-plugin" / "plugin.json").read_text())
+    codex_marketplace = json.loads(
+        (ROOT / ".agents" / "plugins" / "marketplace.json").read_text()
+    )
+    gemini = json.loads((ROOT / "gemini-extension.json").read_text())
 
     assert project["project"]["name"] == DISTRIBUTION_NAME
     assert project["project"]["version"] == VERSION
     assert server["name"] == MCP_REGISTRY_ID
     assert server["version"] == VERSION
     assert plugin["version"] == VERSION
-    assert plugin["name"] == "cortex-viz"
+    assert plugin["name"] == DISTRIBUTION_NAME
+    assert DISTRIBUTION_NAME in plugin["mcpServers"]
+    assert claude_marketplace["name"] == f"{DISTRIBUTION_NAME}-marketplace"
+    assert claude_marketplace["plugins"][0]["name"] == DISTRIBUTION_NAME
+    assert codex["name"] == DISTRIBUTION_NAME
+    assert DISTRIBUTION_NAME in codex["mcpServers"]
+    assert codex_marketplace["name"] == f"{DISTRIBUTION_NAME}-marketplace"
+    assert codex_marketplace["plugins"][0]["name"] == DISTRIBUTION_NAME
+    assert gemini["name"] == DISTRIBUTION_NAME
+    assert gemini["version"] == VERSION
+    assert DISTRIBUTION_NAME in gemini["mcpServers"]
 
 
-def test_both_console_names_resolve_to_the_same_entry_point() -> None:
+def test_only_canonical_console_name_is_published() -> None:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text())
     scripts = project["project"]["scripts"]
     assert scripts["hypermnesia-mcp-viz"] == "cortex_viz.__main__:main"
-    assert scripts["cortex-viz"] == scripts["hypermnesia-mcp-viz"]
+    assert "cortex-viz" not in scripts
 
 
 def test_artifact_guard_remains_active_under_python_optimization() -> None:

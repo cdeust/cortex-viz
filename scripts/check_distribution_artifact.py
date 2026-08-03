@@ -42,11 +42,7 @@ def main() -> None:
     require(project["project"]["name"] == DISTRIBUTION_NAME, "project name drifted")
     require(project["project"]["version"] == VERSION, "project version drifted")
     require(
-        project["project"]["scripts"]
-        == {
-            "cortex-viz": EXPECTED_ENTRY_POINT,
-            "hypermnesia-mcp-viz": EXPECTED_ENTRY_POINT,
-        },
+        project["project"]["scripts"] == {"hypermnesia-mcp-viz": EXPECTED_ENTRY_POINT},
         "console entry points drifted",
     )
 
@@ -68,7 +64,7 @@ def main() -> None:
     )
 
     plugin = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text())
-    require(plugin["name"] == "cortex-viz", "display/plugin compatibility changed")
+    require(plugin["name"] == DISTRIBUTION_NAME, "Claude plugin identity drifted")
     require(plugin["version"] == VERSION, "Claude plugin version drifted")
 
     readme = (ROOT / "README.md").read_text()
@@ -84,10 +80,7 @@ def main() -> None:
         entry_points.read_string(wheel_member(wheel, ".dist-info/entry_points.txt"))
         require(
             dict(entry_points["console_scripts"])
-            == {
-                "cortex-viz": EXPECTED_ENTRY_POINT,
-                "hypermnesia-mcp-viz": EXPECTED_ENTRY_POINT,
-            },
+            == {"hypermnesia-mcp-viz": EXPECTED_ENTRY_POINT},
             "wheel console entry points drifted",
         )
 

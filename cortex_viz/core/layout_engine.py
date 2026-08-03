@@ -64,7 +64,7 @@ def layout(
     except ImportError as exc:
         raise ImportError(
             "igraph is required for layout — install the 'viz-tile' extra: "
-            "pip install cortex-viz[viz-tile]"
+            "pip install hypermnesia-mcp-viz[viz-tile]"
         ) from exc
 
     if not node_ids:

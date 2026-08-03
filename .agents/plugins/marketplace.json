@@ -1,0 +1,20 @@
+{
+  "name": "hypermnesia-mcp-viz-marketplace",
+  "interface": {
+    "displayName": "Hypermnesia MCP Viz"
+  },
+  "plugins": [
+    {
+      "name": "hypermnesia-mcp-viz",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

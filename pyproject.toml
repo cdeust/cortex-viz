@@ -45,7 +45,6 @@ Homepage = "https://github.com/cdeust/cortex-viz"
 Repository = "https://github.com/cdeust/cortex-viz"
 
 [project.scripts]
-cortex-viz = "cortex_viz.__main__:main"
 hypermnesia-mcp-viz = "cortex_viz.__main__:main"
 
 [project.optional-dependencies]
@@ -67,11 +66,11 @@ viz-tile = [
     # project already requires. source: osv.dev, resolved 2026-07-28.
     "Pillow>=12.3.0",
 ]
-# The viz read contract: cortex-viz reads Cortex's PG store + ~/.claude
+# The viz read contract: hypermnesia-mcp-viz reads Cortex's PG store + ~/.claude
 # artifacts directly. These read-path drivers were PROMOTED to core
 # ``dependencies`` (see the note there) because the server cannot start
-# without them. This extra is kept as a back-compat alias so existing
-# ``cortex-viz[data]`` install commands / lockfiles still resolve.
+# without them. The ``data`` extra remains as an idempotent feature selector
+# for host manifests that explicitly request the PostgreSQL read path.
 data = [
     "psycopg[binary]>=3.1",
     "psycopg-pool>=3.2",

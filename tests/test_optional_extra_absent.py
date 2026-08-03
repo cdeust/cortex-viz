@@ -84,7 +84,7 @@ def test_render_tile_png_names_the_extra_when_datashader_is_absent(monkeypatch):
         tile_renderer.render_tile_png([("memory:1", 0.0, 0.0, "memory")], z=0, x=0, y=0)
 
     assert "viz-tile" in str(excinfo.value)
-    assert "pip install cortex-viz[viz-tile]" in str(excinfo.value)
+    assert "pip install hypermnesia-mcp-viz[viz-tile]" in str(excinfo.value)
 
 
 def test_empty_tile_png_reports_the_missing_pillow(monkeypatch):
