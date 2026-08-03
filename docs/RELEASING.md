@@ -11,7 +11,7 @@ Before the first release, create a pending Trusted Publisher for the
 
 - Owner: `cdeust`
 - Repository: `cortex-viz`
-- Workflow: `release.yml`
+- Workflow: `Release.yml`
 - Environment: `pypi`
 
 No long-lived PyPI API token is used. The release job obtains an OpenID Connect

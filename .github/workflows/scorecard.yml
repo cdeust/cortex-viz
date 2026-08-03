@@ -5,7 +5,7 @@ name: OpenSSF Scorecard
 # cdeust/automatised-pipeline (AP #66/#77), so the pinned action SHAs and the
 # report-only policy are maintained in one place. Scorecard grades repo-level
 # posture and is language-agnostic — SBOM and build provenance stay per-repo
-# in release.yml because their toolchains differ.
+# in Release.yml because their toolchains differ.
 #
 # The first score is a BASELINE recorded as-is (§8); it deliberately does not
 # gate a PR — a contributor cannot fix repo-level policy inside their diff.

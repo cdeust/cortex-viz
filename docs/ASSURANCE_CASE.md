@@ -152,7 +152,7 @@ yet carry a completed argument.
 
 ### 3.4 Artifact and dependency integrity (A4)
 
-- **One build path.** `.github/workflows/release.yml` is the only way a release
+- **One build path.** `.github/workflows/Release.yml` is the only way a release
   is produced. Before it existed, 2.7.1 was cut by hand, so there was no build
   to trace an artifact to.
 - **Build provenance.** The wheel, sdist, SBOM, and UI manifest each carry a
@@ -255,7 +255,7 @@ Stated so the boundary of the argument is legible:
 | Loopback binding, Host/Origin/CSRF guards | Source review, `cortex_viz/server/http_security.py` | Implemented |
 | Path containment | Source review of `serve_shared_asset` | Implemented at that site, **10 alerts untriaged repo-wide** |
 | DOM sanitisation | CodeQL | **6 alerts open** (2 high, 4 medium) |
-| Provenance, SBOM, fingerprint | Workflow review, `release.yml` | Implemented, **never exercised by a tag** |
+| Provenance, SBOM, fingerprint | Workflow review, `Release.yml` | Implemented, **never exercised by a tag** |
 | Action pinning | Workflow review | All actions SHA-pinned |
 | Python test suite | `python -m pytest` on 2026-07-28 | 431 passed, 1 skipped |
 | Python statement coverage | `pytest --cov=cortex_viz` on 2026-07-28 | **34%** |

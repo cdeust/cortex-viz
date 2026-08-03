@@ -26,7 +26,7 @@ features.
 | Work | Issue | Why it is first |
 |---|---|---|
 | Triage the 192 open CodeQL alerts, starting with the 10 `py/path-injection` and 2 `js/remote-property-injection` highs | [#46](https://github.com/cdeust/cortex-viz/issues/46) | Untriaged findings on the untrusted-data boundary are the one thing that keeps the assurance case incomplete |
-| Cut a release through `release.yml` so the attestation path is exercised | [#47](https://github.com/cdeust/cortex-viz/issues/47) | The pipeline exists but no tag has ever run through it |
+| Cut a release through `Release.yml` so the attestation path is exercised | [#47](https://github.com/cdeust/cortex-viz/issues/47) | The pipeline exists but has not yet completed a tagged release |
 | Raise Python statement coverage from 34% toward 80%, and make JS coverage measurable at all | [#44](https://github.com/cdeust/cortex-viz/issues/44) | Both numbers are currently unusable as evidence |
 | Add a second maintainer with admin and release rights | [#48](https://github.com/cdeust/cortex-viz/issues/48) | Preserve the original repository identity and improve the bus factor beyond the documented MIT fork continuity path |
 
