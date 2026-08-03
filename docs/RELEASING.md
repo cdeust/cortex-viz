@@ -24,7 +24,7 @@ identity through the `pypi` GitHub environment.
    Codex, and Gemini manifests, the Claude marketplace metadata/pin, the lock
    file, the README badge, and CHANGELOG carry the same release version.
    `python -m scripts.check_distribution_artifact` checks the source surfaces,
-   requires `GITHUB_REF_NAME` to equal `v<version>` during a tagged release,
+   requires `GITHUB_REF_NAME` to equal `v<version>` when `GITHUB_REF_TYPE=tag`,
    and validates the built wheel after `uv build`; the release workflow runs
    that same gate before publication.
 2. Promote the `## [Unreleased]` CHANGELOG entries to `## [<version>] - <date>`

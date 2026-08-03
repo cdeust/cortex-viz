@@ -88,12 +88,17 @@ def require_source_identity() -> None:
 
 def require_release_tag() -> None:
     """Reject a tag whose immutable version disagrees with the artifacts."""
+    # GitHub exposes PR refs such as ``107/merge`` through GITHUB_REF_NAME;
+    # GITHUB_REF_TYPE is the authoritative branch-vs-tag discriminator.
+    # https://docs.github.com/actions/reference/workflows-and-actions/variables
+    if os.environ.get("GITHUB_REF_TYPE") != "tag":
+        return
     tag = os.environ.get("GITHUB_REF_NAME")
-    if tag:
-        require(
-            tag == f"v{VERSION}",
-            f"release tag {tag} does not match project version {VERSION}",
-        )
+    require(bool(tag), "tag workflow did not provide GITHUB_REF_NAME")
+    require(
+        tag == f"v{VERSION}",
+        f"release tag {tag} does not match project version {VERSION}",
+    )
 
 
 def require_wheel_identity() -> None:

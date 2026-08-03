@@ -123,6 +123,7 @@ def test_artifact_guard_remains_active_under_python_optimization() -> None:
 
 def test_release_guard_rejects_tag_version_mismatch() -> None:
     env = os.environ.copy()
+    env["GITHUB_REF_TYPE"] = "tag"
     env["GITHUB_REF_NAME"] = "v0.0.0"
     result = subprocess.run(
         [sys.executable, "-m", "scripts.check_distribution_artifact"],
@@ -134,6 +135,24 @@ def test_release_guard_rejects_tag_version_mismatch() -> None:
     )
     assert result.returncode != 0
     assert "release tag v0.0.0 does not match project version" in result.stderr
+
+
+def test_release_guard_ignores_branches_and_accepts_the_matching_tag(
+    monkeypatch,
+) -> None:
+    from scripts.check_distribution_artifact import require_release_tag
+
+    monkeypatch.delenv("GITHUB_REF_TYPE", raising=False)
+    monkeypatch.delenv("GITHUB_REF_NAME", raising=False)
+    require_release_tag()
+
+    monkeypatch.setenv("GITHUB_REF_TYPE", "branch")
+    monkeypatch.setenv("GITHUB_REF_NAME", "107/merge")
+    require_release_tag()
+
+    monkeypatch.setenv("GITHUB_REF_TYPE", "tag")
+    monkeypatch.setenv("GITHUB_REF_NAME", f"v{VERSION}")
+    require_release_tag()
 
 
 def test_stdio_handshake_advertises_canonical_identity() -> None:

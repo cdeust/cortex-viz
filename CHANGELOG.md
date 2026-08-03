@@ -37,6 +37,9 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 - The PRD bridge now discovers only the canonical `ai-architect-mcp-spec`
   Claude plugin and reports that publication identity in its API metadata and
   current documentation. A deprecated `prd-spec-generator` install is ignored.
+- The artifact guard distinguishes GitHub tag runs from branch and pull-request
+  refs before enforcing the immutable release version, so normal PR CI is not
+  rejected for its `<number>/merge` ref name.
 - Synchronize committed assurance evidence with OpenSSF Best Practices Silver,
   verified v2.8.0 Sigstore attestations, 81% Python statement coverage, zero
   open CodeQL alerts, and post-Silver OpenSSF Scorecard 7.4.
