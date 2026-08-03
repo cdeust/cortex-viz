@@ -1,7 +1,7 @@
 name: Release
 
 # Filename casing is part of PyPI's Trusted Publisher identity. Keep this file
-# as `Release.yml` to match the verified publisher record exactly.
+# as `Release.yaml` to match the verified publisher record exactly.
 
 # Issue #37. Until now cortex-viz had NO release workflow: 2.7.1 was cut by
 # hand, so there was no committed, reproducible build path and therefore no

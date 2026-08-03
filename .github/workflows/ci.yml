@@ -9,7 +9,7 @@ on:
 # workflow that runs untrusted pull-request code, that hands a writable token
 # to any fork that opens a PR. Nothing here writes: both jobs check out,
 # install, and run tests. Any job that needs more must widen it at the JOB
-# level (Release.yml is the worked example), never here.
+# level (Release.yaml is the worked example), never here.
 permissions:
   contents: read
 

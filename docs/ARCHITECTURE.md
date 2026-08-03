@@ -115,7 +115,7 @@ Four boundaries, in order of exposure:
 
 There is no compilation step. `hatchling` builds a wheel and an sdist from
 source, and `ui/` ships as static data inside the wheel.
-`.github/workflows/Release.yml` is the only path that produces a release: it
+`.github/workflows/Release.yaml` is the only path that produces a release: it
 tests, builds, fingerprints `ui/`, emits a CycloneDX SBOM from `uv.lock`,
 computes checksums, and attests build provenance for every artifact before
 uploading them.
