@@ -13,13 +13,11 @@ name: Release
 # cortex-viz releases ship to zero installs (Cortex #179) — a release workflow
 # that runs is necessary but not sufficient.
 #
-# NOT published to PyPI. `cortex-viz` returns 404 on PyPI (checked 2026-07-25),
-# and the plugin's install path is the marketplace, not `pip install cortex-viz`.
-# Issue #37 criterion 4 (PyPI Trusted Publishing) is therefore DROPPED with
-# this one-line justification (§13.1): there is no PyPI project to publish to,
-# so a Trusted-Publishing job would attest a channel nobody installs from. The
-# wheel + sdist are still built and attested and attached to the GitHub Release
-# as the concrete artifacts issue #37 says were missing.
+# The canonical distribution is published to PyPI as `hypermnesia-mcp-viz`
+# through Trusted Publishing. No long-lived PyPI token exists: the protected
+# `pypi` environment and id-token permission bind publication to this workflow,
+# repository, tag, and environment. The legacy `cortex-viz` console command is
+# carried inside the new distribution as a compatibility alias.
 
 on:
   push:
@@ -57,6 +55,9 @@ jobs:
     name: Build, fingerprint UI, SBOM, attest + GitHub Release
     needs: test
     runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/hypermnesia-mcp-viz
     permissions:
       contents: write       # create the release + upload assets
       id-token: write       # OIDC token Sigstore exchanges for a signing cert
@@ -80,6 +81,9 @@ jobs:
 
       - name: Build sdist and wheel
         run: uv build
+
+      - name: Verify distribution identity and compatibility entry points
+        run: python -m scripts.check_distribution_artifact
 
       # Fingerprint the browser-executed UI (issue #37 criterion 2). The 91 JS
       # files + HTML/CSS under ui/ are first-party STATIC assets — there is no
@@ -114,6 +118,14 @@ jobs:
             sbom-requirements.txt --output-format JSON --output-file cortex-viz.cdx.json
           ls -la cortex-viz.cdx.json
 
+      # Publish while dist/ contains distributions only. The checksum step
+      # below adds *.sha256 sidecars that Twine rejects as unknown formats.
+      - name: Publish canonical distribution to PyPI with OIDC
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
+        with:
+          packages-dir: dist
+          skip-existing: true
+
       - name: Compute SHA-256 checksums for every release asset
         run: |
           set -euxo pipefail
@@ -121,8 +133,9 @@ jobs:
             sha256sum "$f" | tee "$f.sha256"
           done
 
-      # Provenance BEFORE upload: binds each artifact digest to this workflow,
-      # commit and runner. Verify with
+      # Provenance before the GitHub Release upload binds each artifact digest
+      # to this workflow, commit and runner. PyPI publication happens above so
+      # dist/ is still free of checksum sidecars. Verify provenance with
       #   gh attestation verify <file> --repo cdeust/cortex-viz
       - name: Attest build provenance
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1

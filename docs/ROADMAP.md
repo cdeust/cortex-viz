@@ -8,7 +8,7 @@ Anything with an issue number is tracked; anything without one is an intention.
 
 ## Where the project is
 
-Current version **2.7.1**. All six views (Graph, Brain, Trace, Knowledge, Wiki,
+Current version **2.8.0**. All six views (Graph, Brain, Trace, Knowledge, Wiki,
 Board) are bridged to live data. The galaxy builds end to end at 75k+ nodes and
 the 3D brain streams the full graph into a cortical mesh. Trace works with no
 database at all. The supply-chain wave ([#37](https://github.com/cdeust/cortex-viz/issues/37))
@@ -65,9 +65,11 @@ remediation in #49 are complete; they are no longer listed as open work.
 
 ## Not planned
 
-- **PyPI publication.** `cortex-viz` returns 404 on PyPI and the install path
-  is the plugin marketplace. A PyPI package would attest a channel nobody
-  installs from.
+- **A separate legacy `cortex-viz` PyPI distribution.** The canonical PyPI and
+  MCP Registry name is `hypermnesia-mcp-viz`, matching the published sibling
+  `hypermnesia-mcp`; that package includes the legacy `cortex-viz` command, so
+  publishing a second distribution would split the release identity without
+  adding compatibility.
 - **Writing to Cortex's memory tables.** cortex-viz renders, it never
   remembers. That boundary is the point of the extraction and is not up for
   negotiation.

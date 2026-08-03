@@ -1,0 +1,22 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.cdeust/hypermnesia-mcp-viz",
+  "description": "Read-only visualization for Cortex memory, knowledge, sessions, traces, and codebase graphs.",
+  "repository": {
+    "url": "https://github.com/cdeust/cortex-viz",
+    "source": "github"
+  },
+  "version": "2.8.0",
+  "websiteUrl": "https://ai-architect.tools/cortex",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "hypermnesia-mcp-viz",
+      "version": "2.8.0",
+      "runtimeHint": "python",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
