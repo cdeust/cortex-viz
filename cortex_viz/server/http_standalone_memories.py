@@ -3,7 +3,7 @@
 GET /api/memories         — keyset-paged, filterable memory list
 GET /api/memories/facets  — aggregate filter facets (chips)
 
-These read the shared Cortex Postgres directly (cortex-viz is the live bridge,
+These read the shared Cortex Postgres directly (hypermnesia-mcp-viz is the live bridge,
 not a 410 stub). All SQL lives in ``infrastructure.memory_browse``; this module
 is the thin composition root that parses the query string and serializes.
 """

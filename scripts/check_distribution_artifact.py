@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import configparser
 import json
+import os
 import sys
 import zipfile
 from email.parser import Parser
@@ -37,16 +38,13 @@ def wheel_member(wheel: zipfile.ZipFile, suffix: str) -> str:
     return wheel.read(matches[0]).decode("utf-8")
 
 
-def main() -> None:
+def require_source_identity() -> None:
+    """Check every source manifest before opening a built artifact."""
     project = tomllib.loads((ROOT / "pyproject.toml").read_text())
     require(project["project"]["name"] == DISTRIBUTION_NAME, "project name drifted")
     require(project["project"]["version"] == VERSION, "project version drifted")
     require(
-        project["project"]["scripts"]
-        == {
-            "cortex-viz": EXPECTED_ENTRY_POINT,
-            "hypermnesia-mcp-viz": EXPECTED_ENTRY_POINT,
-        },
+        project["project"]["scripts"] == {"hypermnesia-mcp-viz": EXPECTED_ENTRY_POINT},
         "console entry points drifted",
     )
 
@@ -67,13 +65,44 @@ def main() -> None:
         "MCP Registry package declaration drifted",
     )
 
-    plugin = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text())
-    require(plugin["name"] == "cortex-viz", "display/plugin compatibility changed")
-    require(plugin["version"] == VERSION, "Claude plugin version drifted")
+    versioned_manifests = {
+        "Claude plugin": ROOT / ".claude-plugin" / "plugin.json",
+        "Codex plugin": ROOT / ".codex-plugin" / "plugin.json",
+        "Gemini extension": ROOT / "gemini-extension.json",
+    }
+    for label, path in versioned_manifests.items():
+        manifest = json.loads(path.read_text())
+        require(manifest["name"] == DISTRIBUTION_NAME, f"{label} identity drifted")
+        require(manifest["version"] == VERSION, f"{label} version drifted")
+
+    marketplace = json.loads((ROOT / ".claude-plugin" / "marketplace.json").read_text())
+    require(marketplace["metadata"]["version"] == VERSION, "marketplace drifted")
+    require(marketplace["plugins"][0]["version"] == VERSION, "plugin pin drifted")
 
     readme = (ROOT / "README.md").read_text()
     require(f"version-{VERSION}-brightgreen" in readme, "README badge drifted")
     require(f'alt="Version {VERSION}"' in readme, "README badge alt drifted")
+    changelog = (ROOT / "CHANGELOG.md").read_text()
+    require(f"## [{VERSION}]" in changelog, "CHANGELOG release section drifted")
+
+
+def require_release_tag() -> None:
+    """Reject a tag whose immutable version disagrees with the artifacts."""
+    # GitHub exposes PR refs such as ``107/merge`` through GITHUB_REF_NAME;
+    # GITHUB_REF_TYPE is the authoritative branch-vs-tag discriminator.
+    # https://docs.github.com/actions/reference/workflows-and-actions/variables
+    if os.environ.get("GITHUB_REF_TYPE") != "tag":
+        return
+    tag = os.environ.get("GITHUB_REF_NAME")
+    require(bool(tag), "tag workflow did not provide GITHUB_REF_NAME")
+    require(
+        tag == f"v{VERSION}",
+        f"release tag {tag} does not match project version {VERSION}",
+    )
+
+
+def require_wheel_identity() -> None:
+    """Check the built wheel metadata and its only console entry point."""
 
     with zipfile.ZipFile(require_one_wheel()) as wheel:
         metadata = Parser().parsestr(wheel_member(wheel, ".dist-info/METADATA"))
@@ -84,13 +113,15 @@ def main() -> None:
         entry_points.read_string(wheel_member(wheel, ".dist-info/entry_points.txt"))
         require(
             dict(entry_points["console_scripts"])
-            == {
-                "cortex-viz": EXPECTED_ENTRY_POINT,
-                "hypermnesia-mcp-viz": EXPECTED_ENTRY_POINT,
-            },
+            == {"hypermnesia-mcp-viz": EXPECTED_ENTRY_POINT},
             "wheel console entry points drifted",
         )
 
+
+def main() -> None:
+    require_source_identity()
+    require_release_tag()
+    require_wheel_identity()
     print(f"distribution identity OK: {DISTRIBUTION_NAME} {VERSION}")
 
 

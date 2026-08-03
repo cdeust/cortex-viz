@@ -1,0 +1,15 @@
+{
+  "name": "hypermnesia-mcp-viz",
+  "version": "3.0.0",
+  "description": "Read-only visualization and graph MCP for Cortex, packaged for Gemini CLI.",
+  "mcpServers": {
+    "hypermnesia-mcp-viz": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "hypermnesia-mcp-viz",
+        "hypermnesia-mcp-viz"
+      ]
+    }
+  }
+}

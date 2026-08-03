@@ -1,8 +1,8 @@
-"""Phase 5 acceptance: the cortex-viz MCP app builds and registers its tools.
+"""Phase 5 acceptance: the hypermnesia-mcp-viz app registers its MCP tools.
 
 Verifies the FastMCP entry point wires the visualization tools without needing
 a live database (tool registration is import-time; handler execution is not
-exercised here). This is the "cortex-viz MCP loads" half of the extraction's
+exercised here). This is the "hypermnesia-mcp-viz MCP loads" half of the extraction's
 acceptance bar.
 """
 

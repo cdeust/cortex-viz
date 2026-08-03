@@ -142,7 +142,7 @@ def serve_graph_full(handler, store) -> None:
 def serve_prd(handler, store=None) -> None:
     """GET /api/prd — PRD document/section nodes from discovered artifacts.
 
-    The third bridge's view (prd-spec-generator). Returns
+    The third bridge's view (ai-architect-mcp-spec). Returns
     ``{nodes, edges, available}`` from any ``prd-output/<run>/`` PRDs found on
     disk. ``available`` is False with an empty graph when no PRD has been
     generated yet (the stateless pipeline keeps no standing store) — the UI
@@ -158,7 +158,7 @@ def serve_prd(handler, store=None) -> None:
                 "available": bool(frag["nodes"]),
                 "nodes": frag["nodes"],
                 "edges": frag["edges"],
-                "meta": {"schema": "prd.v1", "source": "prd-spec-generator"},
+                "meta": {"schema": "prd.v1", "source": "ai-architect-mcp-spec"},
             },
         )
     except Exception as e:

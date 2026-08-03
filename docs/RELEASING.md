@@ -1,8 +1,9 @@
 # Releasing
 
-Releases use the canonical distribution identity `hypermnesia-mcp-viz`. The
-GitHub repository, Cortex Viz product name, Claude Code plugin name, Python
-import package, and `cortex-viz` compatibility command do not change.
+Releases use the canonical product, plugin, MCP server, Python distribution,
+and console identity `hypermnesia-mcp-viz`. The Python import package remains
+`cortex_viz`, and the historical GitHub repository URL remains
+`cdeust/cortex-viz`; neither is a published compatibility identity.
 
 ## One-time PyPI setup
 
@@ -19,10 +20,13 @@ identity through the `pypi` GitHub environment.
 
 ## Release flow
 
-1. Ensure `pyproject.toml`, `cortex_viz/identity.py`, `server.json`, the Claude
-   plugin manifest, and the README badge carry the same release version.
-   `python -m scripts.check_distribution_artifact` proves all five agree after
-   `uv build`; it is the same gate CI and the release workflow run.
+1. Ensure `pyproject.toml`, `cortex_viz/identity.py`, `server.json`, the Claude,
+   Codex, and Gemini manifests, the Claude marketplace metadata/pin, the lock
+   file, the README badge, and CHANGELOG carry the same release version.
+   `python -m scripts.check_distribution_artifact` checks the source surfaces,
+   requires `GITHUB_REF_NAME` to equal `v<version>` when `GITHUB_REF_TYPE=tag`,
+   and validates the built wheel after `uv build`; the release workflow runs
+   that same gate before publication.
 2. Promote the `## [Unreleased]` CHANGELOG entries to `## [<version>] - <date>`
    and leave `## [Unreleased]` in place, empty, for the next cycle. No gate
    enforces this, and the section is the human-readable release record.
@@ -37,4 +41,4 @@ identity through the `pypi` GitHub environment.
    resolve through that manifest, so until it is bumped the release reaches zero
    installs no matter how green the tag build was. That is the failure mode
    recorded in Cortex #179, which cost six zetetic-team-subagents releases and
-   two cortex-viz releases. The release is not done until this step lands.
+   two visualization releases. The release is not done until this step lands.

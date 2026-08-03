@@ -279,6 +279,10 @@ def test_basic_endpoints_report_success_and_errors(monkeypatch):
     endpoints.serve_prd(_Handler())
     response = sent.pop()
     assert response["available"] is True
+    assert response["meta"] == {
+        "schema": "prd.v1",
+        "source": "ai-architect-mcp-spec",
+    }
     monkeypatch.setattr(
         prd_bridge,
         "read_prd_graph",

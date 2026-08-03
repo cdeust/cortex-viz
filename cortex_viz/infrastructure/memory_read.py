@@ -1,4 +1,4 @@
-"""Read-only PostgreSQL reader — the cortex-viz ↔ Cortex data contract.
+"""Read-only PostgreSQL reader — the hypermnesia-mcp-viz ↔ Cortex contract.
 
 This module severs the ONLY hard code-coupling that remained between the
 visualization stack and the Cortex memory engine: the standalone HTTP server

@@ -1,12 +1,12 @@
-"""cortex-viz MCP server entry point.
+"""hypermnesia-mcp-viz MCP server entry point.
 
 A standalone visualization MCP for Cortex. Reads Cortex's shared PostgreSQL
 store (read-only, via MemoryReader) and the ~/.claude artifacts; serves the
 neural-graph galaxy UI and methodology map. Memory/recall/wiki tools remain in
 the Cortex MCP — this server is the visualization surface only.
 
-Run: ``python -m cortex_viz`` (stdio MCP transport), or either the canonical
-``hypermnesia-mcp-viz`` or compatibility ``cortex-viz`` console script.
+Run: ``python -m cortex_viz`` (stdio MCP transport), or the canonical
+``hypermnesia-mcp-viz`` console script.
 """
 
 from __future__ import annotations

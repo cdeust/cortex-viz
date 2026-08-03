@@ -3,24 +3,24 @@ name: Release
 # Filename casing is part of PyPI's Trusted Publisher identity. Keep this file
 # as `Release.yaml` to match the verified publisher record exactly.
 
-# Issue #37. Until now cortex-viz had NO release workflow: 2.7.1 was cut by
+# Issue #37. Until now Hypermnesia MCP Viz had NO release workflow: 2.7.1 was cut by
 # hand, so there was no committed, reproducible build path and therefore no
 # artifact to attest. This workflow is the build that was missing — it is now
 # the ONLY way a release is produced, and provenance layers on top of it.
 #
-# Delivery reality (do not confuse with "released"): cortex-viz is consumed
+# Delivery reality (do not confuse with "released"): hypermnesia-mcp-viz is consumed
 # through Anthropic's plugin marketplace, PINNED in Cortex's marketplace
 # manifest. Tagging + this GitHub Release do not reach installs by themselves;
 # the release checklist still ENDS with bumping that pin. This is the same
 # pin-gate lesson that let six zetetic-team-subagents releases and two
-# cortex-viz releases ship to zero installs (Cortex #179) — a release workflow
+# hypermnesia-mcp-viz releases ship to zero installs (Cortex #179) — a release workflow
 # that runs is necessary but not sufficient.
 #
 # The canonical distribution is published to PyPI as `hypermnesia-mcp-viz`
 # through Trusted Publishing. No long-lived PyPI token exists: the protected
 # `pypi` environment and id-token permission bind publication to this workflow,
-# repository, tag, and environment. The legacy `cortex-viz` console command is
-# carried inside the new distribution as a compatibility alias.
+# repository, tag, and environment. The canonical console command is
+# `hypermnesia-mcp-viz`; no deprecated publication alias is emitted.
 
 on:
   push:
@@ -85,7 +85,7 @@ jobs:
       - name: Build sdist and wheel
         run: uv build
 
-      - name: Verify distribution identity and compatibility entry points
+      - name: Verify canonical distribution identity and entry point
         run: python -m scripts.check_distribution_artifact
 
       # Fingerprint the browser-executed UI (issue #37 criterion 2). The 91 JS
@@ -100,9 +100,9 @@ jobs:
           set -euxo pipefail
           find ui -type f -print0 \
             | LC_ALL=C sort -z \
-            | xargs -0 sha256sum > cortex-viz-ui-manifest.sha256
-          echo "UI files fingerprinted: $(wc -l < cortex-viz-ui-manifest.sha256)"
-          head -5 cortex-viz-ui-manifest.sha256
+            | xargs -0 sha256sum > hypermnesia-mcp-viz-ui-manifest.sha256
+          echo "UI files fingerprinted: $(wc -l < hypermnesia-mcp-viz-ui-manifest.sha256)"
+          head -5 hypermnesia-mcp-viz-ui-manifest.sha256
 
       # CycloneDX SBOM from uv.lock (issue #37 criterion 5). This covers the
       # Python dependency graph, including the viz-tile stack (datashader,
@@ -118,8 +118,8 @@ jobs:
             --format requirements-txt > sbom-requirements.txt
           wc -l sbom-requirements.txt
           uv tool run --from cyclonedx-bom cyclonedx-py requirements \
-            sbom-requirements.txt --output-format JSON --output-file cortex-viz.cdx.json
-          ls -la cortex-viz.cdx.json
+            sbom-requirements.txt --output-format JSON --output-file hypermnesia-mcp-viz.cdx.json
+          ls -la hypermnesia-mcp-viz.cdx.json
 
       # Publish while dist/ contains distributions only. The checksum step
       # below adds *.sha256 sidecars that Twine rejects as unknown formats.
@@ -132,7 +132,7 @@ jobs:
       - name: Compute SHA-256 checksums for every release asset
         run: |
           set -euxo pipefail
-          for f in dist/* cortex-viz.cdx.json cortex-viz-ui-manifest.sha256; do
+          for f in dist/* hypermnesia-mcp-viz.cdx.json hypermnesia-mcp-viz-ui-manifest.sha256; do
             sha256sum "$f" | tee "$f.sha256"
           done
 
@@ -146,8 +146,8 @@ jobs:
           subject-path: |
             dist/*.whl
             dist/*.tar.gz
-            cortex-viz.cdx.json
-            cortex-viz-ui-manifest.sha256
+            hypermnesia-mcp-viz.cdx.json
+            hypermnesia-mcp-viz-ui-manifest.sha256
 
       - name: Create GitHub Release with attested assets
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
@@ -158,8 +158,8 @@ jobs:
             dist/*.whl
             dist/*.tar.gz
             dist/*.sha256
-            cortex-viz.cdx.json
-            cortex-viz.cdx.json.sha256
-            cortex-viz-ui-manifest.sha256
-            cortex-viz-ui-manifest.sha256.sha256
+            hypermnesia-mcp-viz.cdx.json
+            hypermnesia-mcp-viz.cdx.json.sha256
+            hypermnesia-mcp-viz-ui-manifest.sha256
+            hypermnesia-mcp-viz-ui-manifest.sha256.sha256
           fail_on_unmatched_files: true

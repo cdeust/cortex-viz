@@ -1,8 +1,8 @@
-"""Bridge to the ``prd-spec-generator`` sibling MCP (the third live source).
+"""Bridge to the ``ai-architect-mcp-spec`` sibling MCP (the third live source).
 
-prd-spec-generator is a STATELESS reducer: it turns a feature description into a
-9-file Markdown PRD on demand and keeps no persistent queryable graph. So this
-bridge has two halves, both degrading gracefully to empty (mirroring
+ai-architect-mcp-spec is a STATELESS reducer: it turns a feature description
+into a 9-file Markdown PRD on demand and keeps no persistent queryable graph.
+So this bridge has two halves, both degrading gracefully to empty (mirroring
 ``ap_bridge`` when AP has no graph):
 
   1. A connectable MCPClient (``PRDBridge``) for read-only liveness/config
@@ -47,10 +47,10 @@ _PRD_SECTIONS = {
 
 
 def _resolve_command() -> dict | None:
-    """Resolve the MCP-client config for prd-spec-generator.
+    """Resolve the MCP-client config for ai-architect-mcp-spec.
 
     Priority: ``CORTEX_PRD_COMMAND`` env (JSON ``{command,args,env}``) → the
-    active ``prd-spec-generator@*`` entry in ``installed_plugins.json`` (launch
+    active ``ai-architect-mcp-spec@*`` entry in ``installed_plugins.json`` (launch
     via ``bash <installPath>/bin/ensure-deps.sh <installPath>`` with the
     PRD_GEN_* env the plugin's ``.mcp.json`` declares). Returns None when no
     install is found (graceful degradation).
@@ -68,7 +68,7 @@ def _resolve_command() -> dict | None:
         data = json.loads(installed.read_text(encoding="utf-8"))
         plugins = data.get("plugins", {}) if isinstance(data, dict) else {}
         for key, entries in plugins.items():
-            if not key.startswith("prd-spec-generator@"):
+            if not key.startswith("ai-architect-mcp-spec@"):
                 continue
             if not isinstance(entries, list) or not entries:
                 continue

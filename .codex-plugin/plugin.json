@@ -1,0 +1,47 @@
+{
+  "name": "hypermnesia-mcp-viz",
+  "version": "3.0.0",
+  "description": "Read-only visualization and graph MCP for Cortex, packaged for Codex.",
+  "author": {
+    "name": "Clement Deust",
+    "email": "admin@ai-architect.tools",
+    "url": "https://github.com/cdeust"
+  },
+  "homepage": "https://github.com/cdeust/cortex-viz",
+  "repository": "https://github.com/cdeust/cortex-viz",
+  "license": "MIT",
+  "keywords": [
+    "visualization",
+    "graph",
+    "mcp",
+    "codex",
+    "cortex"
+  ],
+  "skills": "./skills/",
+  "mcpServers": {
+    "hypermnesia-mcp-viz": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "hypermnesia-mcp-viz",
+        "hypermnesia-mcp-viz"
+      ]
+    }
+  },
+  "interface": {
+    "displayName": "Hypermnesia MCP Viz",
+    "shortDescription": "Inspect Cortex memory and graph state",
+    "longDescription": "Open a read-only memory galaxy, methodology map, workflow graph, wiki browser, and execution trace over the shared Cortex store.",
+    "developerName": "Clement Deust",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read",
+      "Interactive"
+    ],
+    "websiteURL": "https://github.com/cdeust/cortex-viz",
+    "defaultPrompt": [
+      "Open the Cortex memory visualization.",
+      "Show the methodology graph for this project."
+    ]
+  }
+}

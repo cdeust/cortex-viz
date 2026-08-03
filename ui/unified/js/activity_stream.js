@@ -75,7 +75,7 @@
   }
 
   // One-shot fetch of PRD document/section nodes (third bridge,
-  // prd-spec-generator). Empty until a PRD is generated, then the nodes
+  // ai-architect-mcp-spec). Empty until a PRD is generated, then the nodes
   // appear in the graph. Best-effort; never blocks the activity stream.
   function _loadPrd() {
     try {

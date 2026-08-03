@@ -5,7 +5,7 @@ tree-sitter to enrich the codebase graph with symbol depth for files the
 automatised-pipeline (AP) hasn't indexed. That local parser is a full
 subsystem (``ast_extractors*`` + ``codebase_*``, 12 modules) whose job AP
 already does. Per the thin-viz extraction decision (do not duplicate Cortex
-subsystems; delegate to the sibling MCP), cortex-viz does NOT bundle the local
+subsystems; delegate to the sibling MCP), hypermnesia-mcp-viz does NOT bundle the local
 parser — codebase symbols come from AP via ``workflow_graph_source_ast``.
 
 This stub preserves the interface so ``handlers/workflow_graph`` imports and
@@ -28,7 +28,7 @@ class WorkflowGraphNativeASTSource:
     """Interface-compatible no-op. Local AST enrichment is delegated to AP."""
 
     def load_symbols(self, file_paths: Iterable[str]) -> list[dict[str, Any]]:
-        # Local tree-sitter parsing is not bundled in cortex-viz; AP supplies
+        # Local tree-sitter parsing is not bundled in hypermnesia-mcp-viz; AP supplies
         # codebase symbols via workflow_graph_source_ast.
         return []
 

@@ -77,7 +77,7 @@ def serve_db_unavailable(handler, feature: str) -> None:
             "error": "db_unavailable",
             "feature": feature,
             "detail": (
-                "cortex-viz is running in no-DB mode (Trace only). "
+                "hypermnesia-mcp-viz is running in no-DB mode (Trace only). "
                 f"Install Cortex ({CORTEX_INSTALL_URL}) and point "
                 "DATABASE_URL at its PostgreSQL to enable this view."
             ),

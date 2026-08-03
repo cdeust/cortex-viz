@@ -3,7 +3,7 @@
 Split out of ``http_standalone.py`` (was 554 lines) to respect the
 500-line file limit. Holds the GET dispatch (``_route_unified_get``), the
 wiki DB-op path map, and the 410-Gone helper for memory-domain features
-that live in the Cortex MCP, not cortex-viz. Composition-root glue — every
+that live in the Cortex MCP, not hypermnesia-mcp-viz. Composition-root glue — every
 endpoint body is in a sibling module; this only routes.
 """
 
@@ -34,7 +34,7 @@ from cortex_viz.server.http_standalone_static import (
 def _feature_moved(handler, feature: str, use_instead: str) -> None:
     """Reply 410 Gone for a tab whose data lives in the Cortex memory MCP.
 
-    cortex-viz is the visualization MCP; memory-browser / wiki / causal-chain
+    hypermnesia-mcp-viz is the visualization MCP; memory-browser / wiki / causal-chain
     are memory-domain features served by Cortex. This keeps the boundary
     honest instead of silently 404-ing or importing the subsystem back in.
     """
@@ -44,7 +44,7 @@ def _feature_moved(handler, feature: str, use_instead: str) -> None:
             "feature": feature,
             "detail": (
                 f"'{feature}' is a Cortex memory feature, not bundled in "
-                f"cortex-viz. Use {use_instead} via the Cortex MCP."
+                f"hypermnesia-mcp-viz. Use {use_instead} via the Cortex MCP."
             ),
         }
     ).encode()
@@ -190,7 +190,7 @@ def _route_unified_get(
         return
     if path_no_qs == "/api/memories":
         # Keyset-paged memory browser (Knowledge + Board views), read straight
-        # from the shared Cortex PG — cortex-viz is the live bridge.
+        # from the shared Cortex PG — hypermnesia-mcp-viz is the live bridge.
         from cortex_viz.server.http_standalone_memories import serve_memories
 
         serve_memories(handler, store)

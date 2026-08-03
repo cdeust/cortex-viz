@@ -1,6 +1,6 @@
-"""MCP tool registration for the cortex-viz server.
+"""MCP tool registration for the hypermnesia-mcp-viz server.
 
-Registers the visualization tools whose handlers live in cortex-viz:
+Registers the visualization tools whose handlers live in hypermnesia-mcp-viz:
   * open_visualization   — launch the bundled neural-graph UI (galaxy view).
   * get_methodology_graph — return methodology-map graph data.
 
@@ -20,7 +20,7 @@ from cortex_viz.tool_error_handler import safe_handler
 
 
 def register(mcp: FastMCP) -> None:
-    """Register cortex-viz tools on the FastMCP instance."""
+    """Register hypermnesia-mcp-viz tools on the FastMCP instance."""
     _register_open_visualization(mcp)
     _register_get_methodology_graph(mcp)
 

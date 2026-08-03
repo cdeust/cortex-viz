@@ -1,9 +1,11 @@
 # Changelog
 
-All notable changes to cortex-viz are documented in this file.
+All notable changes to Hypermnesia MCP Viz are documented in this file.
 Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in git history.
 
 ## [Unreleased]
+
+## [3.0.0] - 2026-08-04
 
 ### Security
 
@@ -14,6 +16,30 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 
 ### Changed
 
+- **Breaking publication rename.** `hypermnesia-mcp-viz` is now the sole
+  Claude Code plugin, MCP server, Python distribution, and console identity.
+  Because `2.8.0` was already published, removing the old plugin and console
+  identities ships as the SemVer-major `3.0.0` release rather than replacing
+  an immutable artifact in place.
+  Existing Claude installs must run
+  `claude plugin uninstall cortex-viz@cortex-plugins`, refresh
+  `cortex-plugins`, and run
+  `claude plugin install hypermnesia-mcp-viz@cortex-plugins`. Permission and
+  tool references must use Claude's composed names:
+  `mcp__plugin_cortex-viz_cortex-viz__open_visualization` becomes <!-- mcp-prefix-allow-legacy -->
+  `mcp__plugin_hypermnesia-mcp-viz_hypermnesia-mcp-viz__open_visualization`,
+  and `mcp__plugin_cortex-viz_cortex-viz__get_methodology_graph` becomes <!-- mcp-prefix-allow-legacy -->
+  `mcp__plugin_hypermnesia-mcp-viz_hypermnesia-mcp-viz__get_methodology_graph`.
+  Direct-process hosts must replace the removed `cortex-viz` executable with
+  `hypermnesia-mcp-viz`. This source change and the marketplace rename in
+  `cdeust/Cortex#351` form one coordinated release and must not be published
+  independently.
+- The PRD bridge now discovers only the canonical `ai-architect-mcp-spec`
+  Claude plugin and reports that publication identity in its API metadata and
+  current documentation. A deprecated `prd-spec-generator` install is ignored.
+- The artifact guard distinguishes GitHub tag runs from branch and pull-request
+  refs before enforcing the immutable release version, so normal PR CI is not
+  rejected for its `<number>/merge` ref name.
 - Synchronize committed assurance evidence with OpenSSF Best Practices Silver,
   verified v2.8.0 Sigstore attestations, 81% Python statement coverage, zero
   open CodeQL alerts, and post-Silver OpenSSF Scorecard 7.4.
@@ -24,9 +50,9 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 - The canonical Python and MCP Registry distribution is now
   `hypermnesia-mcp-viz` at version 2.8.0. Releases publish the wheel and source
   archive to PyPI through Trusted Publishing, and `server.json` describes the
-  matching stdio package for the official MCP Registry. The Cortex Viz product,
-  Claude Code plugin, import package, and existing `cortex-viz` command remain
-  compatible; `hypermnesia-mcp-viz` is an additional canonical command.
+  matching stdio package for the official MCP Registry. The Python import
+  package remains `cortex_viz`, but no `cortex-viz` publication or console
+  alias is emitted.
 - A versioned, host-neutral live activity contract
   (`docs/host-event-v1.schema.json`) for Codex, Gemini, and generic MCP-host
   adapters. `POST /api/activity` normalizes it into the existing activity

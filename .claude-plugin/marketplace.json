@@ -1,0 +1,35 @@
+{
+  "name": "hypermnesia-mcp-viz-marketplace",
+  "owner": {
+    "name": "Clement Deust",
+    "email": "admin@ai-architect.tools"
+  },
+  "metadata": {
+    "description": "Hypermnesia MCP Viz — the read-only visualization companion for Cortex",
+    "version": "3.0.0"
+  },
+  "plugins": [
+    {
+      "name": "hypermnesia-mcp-viz",
+      "source": "./",
+      "description": "Live memory galaxy, methodology map, workflow graph, wiki browser, and execution trace over the shared Cortex store.",
+      "version": "3.0.0",
+      "author": {
+        "name": "Clement Deust",
+        "email": "admin@ai-architect.tools"
+      },
+      "homepage": "https://github.com/cdeust/cortex-viz",
+      "repository": "https://github.com/cdeust/cortex-viz",
+      "license": "MIT",
+      "keywords": [
+        "visualization",
+        "graph",
+        "mcp",
+        "claude-code",
+        "cortex",
+        "knowledge-graph"
+      ],
+      "category": "productivity"
+    }
+  ]
+}
