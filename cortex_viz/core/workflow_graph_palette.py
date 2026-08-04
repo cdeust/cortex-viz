@@ -57,7 +57,7 @@ MCP_COLOR = "#474CA4"  # oklch(46% 0.14 277) — indigo, MCP servers (distinct f
 # same DEEP band (L50%) as this module's constants 2026-07-05 (G7 fix —
 # previously L64-82%, ~1.1-2:1 on the ~79k entity nodes).
 
-# Symbol kinds produced by the ``automatised-pipeline`` AST bridge
+# Symbol kinds produced by the ``ai-architect-mcp-codebase`` AST bridge
 # (ADR-0046). Sit inside the Authorship / structural hue range so a
 # symbol cluster reads as "code you wrote" rather than something new.
 SYMBOL_COLORS: dict[str, str] = {

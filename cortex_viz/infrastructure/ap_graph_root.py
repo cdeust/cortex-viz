@@ -1,4 +1,4 @@
-"""Resolve the absolute source root an automatised-pipeline (AP) graph was
+"""Resolve the absolute source root an ai-architect-mcp-codebase (AP) graph was
 indexed from.
 
 Why this exists
@@ -17,7 +17,7 @@ needs the root AP indexed.
 Two sources, in precedence order
 ================================
 1. **Sidecar** ``<graph_dir>/meta.json`` — ``{"root": "<abs source path>"}``,
-   written by AP next to the graph at index time (see automatised-pipeline
+   written by AP next to the graph at index time (see ai-architect-mcp-codebase
    ``do_index_codebase`` / ``do_analyze_codebase``). Canonical and exact: it is
    the very path AP relativised against, so ``join(root, ap_relative)`` is
    byte-identical to the file AP walked. Present only for graphs indexed by an

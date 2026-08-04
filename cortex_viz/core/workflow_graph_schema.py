@@ -71,7 +71,7 @@ class WorkflowNode(BaseModel):
     event: str | None = None
     subagent_type: str | None = None
     created_at: str | None = None
-    # AST-derived fields (ADR-0046, populated by the automatised-pipeline
+    # AST-derived fields (ADR-0046, populated by the ai-architect-mcp-codebase
     # bridge). ``symbol_type`` is one of function/class/module/import;
     # ``signature`` is the source-captured function signature;
     # ``language`` is rust/python/typescript; ``line`` is 1-based source

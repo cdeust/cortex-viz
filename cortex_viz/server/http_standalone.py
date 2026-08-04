@@ -242,7 +242,7 @@ def _auto_enable_ap() -> None:
         else:
             import shutil as _sh
 
-            bin_path = _sh.which("automatised-pipeline")
+            bin_path = _sh.which("ai-architect-mcp-codebase")
     if bin_path is None and not os.environ.get("CORTEX_AP_COMMAND"):
         return
     if bin_path and not os.environ.get("CORTEX_AP_COMMAND"):

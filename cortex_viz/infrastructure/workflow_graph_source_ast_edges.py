@@ -24,14 +24,14 @@ if TYPE_CHECKING:
 
 
 # The exact rel tables AP's schema creates, transcribed from
-# ``automatised-pipeline`` ``src/graph_store.rs`` ``REL_TABLES`` — the
+# ``ai-architect-mcp-codebase`` ``src/graph_store.rs`` ``REL_TABLES`` — the
 # authoritative, static list of every relationship table AP's LadybugDB graph
 # can contain. Each entry is (semantic_kind, table, src_label, dst_label,
 # has_provenance).
 #
 # Why an explicit list instead of a Cartesian product over label kinds:
 #   * AP's query_graph guard FORBIDS the ``CALL`` keyword
-#     (automatised-pipeline src/main.rs:FORBIDDEN_CYPHER_KEYWORDS), so the
+#     (ai-architect-mcp-codebase src/main.rs:FORBIDDEN_CYPHER_KEYWORDS), so the
 #     engine's catalog (``CALL show_tables()``) is unreachable — we cannot
 #     discover tables at runtime and must mirror the schema statically.
 #   * The prior code enumerated the full Cartesian product of label kinds
@@ -200,7 +200,7 @@ async def _edge_batches_async(
                 if not (_match(src_file) and _match(dst_file)):
                     continue
             # AP stores ``resolution_method`` wrapped in literal
-            # single quotes (see ``automatised-pipeline``
+            # single quotes (see ``ai-architect-mcp-codebase``
             # resolver.rs:183 — ``format!("'{method}'")``), so the
             # value comes back INCLUDING quotes. Strip them here at
             # the infrastructure boundary. Remove this strip once

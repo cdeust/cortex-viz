@@ -23,8 +23,8 @@ stack, which is why prior single-fix attempts only moved the freeze around.
 ```python
 with state._apply_lock:
     old = state._graph_cache["data"] if state._graph_cache else None
-    new_nodes = list(old["nodes"]) if old else []   # full shallow copy
-    new_edges = list(old["edges"]) if old else []   # full shallow copy
+    new_nodes = list(old["nodes"]) if old else []  # full shallow copy
+    new_edges = list(old["edges"]) if old else []  # full shallow copy
     ...
     state._graph_cache = {"data": cur, "domain_filter": None}
 ```

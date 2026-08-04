@@ -13,6 +13,7 @@ import os
 import shutil
 
 from cortex_viz.errors import McpConnectionError
+from cortex_viz.infrastructure.upstream_identity import ALLOWED_UPSTREAM_COMMANDS
 
 # Allowlisted MCP server commands. Only these binaries may be spawned.
 # Config-supplied commands are validated against this list to prevent
@@ -25,10 +26,12 @@ ALLOWED_COMMANDS = frozenset(
         "python3",
         "cortex",
         "mcp-server",
-        # automatised-pipeline ships a compiled Rust MCP binary; the
-        # bridge resolves it from installed_plugins.json and invokes it
-        # directly (not via node). source: ap_bridge._resolve_command.
-        "automatised-pipeline",
+        # The codebase-intelligence server ships a compiled Rust MCP binary;
+        # the bridge resolves it from installed_plugins.json and invokes it
+        # directly (not via node). Names come from upstream_identity so this
+        # allowlist cannot drift from the resolver that feeds it.
+        # source: ap_bridge._resolve_command.
+        *ALLOWED_UPSTREAM_COMMANDS,
     }
 )
 

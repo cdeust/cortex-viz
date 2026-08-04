@@ -193,7 +193,7 @@ def build_workflow_graph(
     # the WebGL renderer sees every indexed symbol on the first
     # ``/api/graph`` fetch. Two sources feed the L6 ring:
     #
-    #   1. AP (automatised-pipeline, when enabled) — 5-layer resolver
+    #   1. AP (ai-architect-mcp-codebase, when enabled) — 5-layer resolver
     #      with LSP, macro expansion, stdlib indexing. Broad and deep
     #      but requires a prior re-index.
     #   2. Native in-house tree-sitter (always available) — parses the

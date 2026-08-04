@@ -79,7 +79,7 @@ def _repos_under(item: Path) -> list[RepoInfo]:
     """The checkouts reachable from one dev-root entry.
 
     Either the entry is itself a checkout, or it is an org directory
-    (e.g. ``anthropic/ai-automatised-pipeline``) whose children are —
+    (e.g. ``anthropic/ai-architect-mcp-codebase``) whose children are —
     which is the second of the two levels ``_discover_repos`` scans.
     """
     if (item / ".git").is_dir():

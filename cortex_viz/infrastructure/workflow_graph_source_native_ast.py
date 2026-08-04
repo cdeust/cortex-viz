@@ -2,7 +2,7 @@
 
 In Cortex, ``WorkflowGraphNativeASTSource`` parses source files locally with
 tree-sitter to enrich the codebase graph with symbol depth for files the
-automatised-pipeline (AP) hasn't indexed. That local parser is a full
+ai-architect-mcp-codebase (AP) hasn't indexed. That local parser is a full
 subsystem (``ast_extractors*`` + ``codebase_*``, 12 modules) whose job AP
 already does. Per the thin-viz extraction decision (do not duplicate Cortex
 subsystems; delegate to the sibling MCP), hypermnesia-mcp-viz does NOT bundle the local

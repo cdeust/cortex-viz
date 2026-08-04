@@ -1,5 +1,5 @@
 """Unit tests for ``infrastructure.ap_graph_root`` — resolving the absolute
-source root an automatised-pipeline graph was indexed from, so L6 can key AST
+source root an ai-architect-mcp-codebase graph was indexed from, so L6 can key AST
 FILE nodes by the same absolute scheme the rest of the graph uses (VOLET ①,
 mem 4262203).
 """
