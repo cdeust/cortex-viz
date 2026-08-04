@@ -11,9 +11,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from cortex_viz.infrastructure import upstream_identity
 from cortex_viz.infrastructure import ap_bridge as ap
-from cortex_viz.infrastructure import memory_config
+from cortex_viz.infrastructure import memory_config, upstream_identity
 from cortex_viz.infrastructure import prd_bridge as prd
 
 
@@ -174,9 +173,9 @@ def test_ap_bridge_connect_call_retry_and_close(monkeypatch, capsys):
         client = FakeMCPClient.instances[-1]
         assert client.config["callTimeoutMs"] == 0
         assert client._extra_allowed_commands == {
-                "node",
-                *upstream_identity.ALLOWED_UPSTREAM_COMMANDS,
-            }
+            "node",
+            *upstream_identity.ALLOWED_UPSTREAM_COMMANDS,
+        }
         assert await bridge.connect()
         assert bridge.available
 

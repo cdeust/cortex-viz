@@ -37,7 +37,7 @@ LEGACY_BINARIES = ("automatised-pipeline",)
 #: first so a stale install can never win over a current one.
 PLUGIN_KEY_BINARIES = (
     (f"{CANONICAL_PLUGIN_KEY.split('@')[0]}@", CANONICAL_BINARY),
-    *zip(LEGACY_PLUGIN_KEY_PREFIXES, LEGACY_BINARIES),
+    *zip(LEGACY_PLUGIN_KEY_PREFIXES, LEGACY_BINARIES, strict=True),
 )
 
 BINARY_NAMES = (CANONICAL_BINARY, *LEGACY_BINARIES)

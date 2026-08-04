@@ -11,12 +11,11 @@ import json
 import os
 import shutil
 import subprocess
-
-from cortex_viz.infrastructure.upstream_identity import CANONICAL_BINARY
 import sys
 import urllib.request
 from pathlib import Path
 
+from cortex_viz.infrastructure.upstream_identity import CANONICAL_BINARY
 from cortex_viz.server import viz_instance
 
 # Port assignments — one per server type. The ``methodology``

@@ -20,16 +20,15 @@ from __future__ import annotations
 
 import asyncio
 import os
-
-from cortex_viz.infrastructure.upstream_identity import (
-    ALLOWED_UPSTREAM_COMMANDS,
-    PLUGIN_KEY_BINARIES,
-)
 import sys
 from typing import Any
 
 from cortex_viz.errors import McpConnectionError
 from cortex_viz.infrastructure.mcp_client import MCPClient
+from cortex_viz.infrastructure.upstream_identity import (
+    ALLOWED_UPSTREAM_COMMANDS,
+    PLUGIN_KEY_BINARIES,
+)
 
 _AP_TOOLS = frozenset(
     {

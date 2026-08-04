@@ -10,11 +10,10 @@ from __future__ import annotations
 
 import asyncio
 import os
-
-from cortex_viz.infrastructure.upstream_identity import ALLOWED_UPSTREAM_COMMANDS
 import shutil
 
 from cortex_viz.errors import McpConnectionError
+from cortex_viz.infrastructure.upstream_identity import ALLOWED_UPSTREAM_COMMANDS
 
 # Allowlisted MCP server commands. Only these binaries may be spawned.
 # Config-supplied commands are validated against this list to prevent
