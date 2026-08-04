@@ -1,4 +1,4 @@
-"""Bridge to the ``automatised-pipeline`` sibling MCP server (ADR-0046).
+"""Bridge to the ``ai-architect-mcp-codebase`` sibling MCP server (ADR-0046).
 
 AP is a Rust MCP server that indexes codebases into a property graph
 (tree-sitter → LadybugDB → Louvain → BM25 + TF-IDF + RRF) and exposes
@@ -20,6 +20,11 @@ from __future__ import annotations
 
 import asyncio
 import os
+
+from cortex_viz.infrastructure.upstream_identity import (
+    ALLOWED_UPSTREAM_COMMANDS,
+    PLUGIN_KEY_BINARIES,
+)
 import sys
 from typing import Any
 
@@ -165,7 +170,7 @@ def _resolve_command() -> dict | None:
          set up by Cortex's silent installer (pipeline_installer.py).
          Basename ``mcp-server`` matches the MCPClient allowlist.
       3. Installed-plugin resolution — read ``installed_plugins.json`` for
-         the ACTIVE ``automatised-pipeline`` install and invoke its compiled
+         the ACTIVE ``ai-architect-mcp-codebase`` install and invoke its compiled
          Rust binary at ``<installPath>/target/release/automatised-pipeline``.
          This is the SAME source of truth the plugin's own ``.mcp.json``
          launcher uses, so it picks the active version (e.g. 0.2.0 over a
@@ -209,17 +214,20 @@ def _resolve_command() -> dict | None:
     try:
         data = json.loads(installed.read_text(encoding="utf-8"))
         plugins = data.get("plugins", {}) if isinstance(data, dict) else {}
-        for key, entries in plugins.items():
-            if not key.startswith("automatised-pipeline@"):
-                continue
-            if not isinstance(entries, list) or not entries:
-                continue
-            install_path = entries[0].get("installPath")
-            if not install_path:
-                continue
-            binary = Path(install_path) / "target" / "release" / "automatised-pipeline"
-            if binary.is_file() and os.access(binary, os.X_OK):
-                return {"command": str(binary), "args": []}
+        # Canonical key first: a pre-v0.9.0 install stays resolvable, but a
+        # current one must never lose to it.
+        for key_prefix, binary_name in PLUGIN_KEY_BINARIES:
+            for key, entries in plugins.items():
+                if not key.startswith(key_prefix):
+                    continue
+                if not isinstance(entries, list) or not entries:
+                    continue
+                install_path = entries[0].get("installPath")
+                if not install_path:
+                    continue
+                binary = Path(install_path) / "target" / "release" / binary_name
+                if binary.is_file() and os.access(binary, os.X_OK):
+                    return {"command": str(binary), "args": []}
     except (OSError, ValueError, KeyError, IndexError, TypeError, AttributeError):
         # A malformed manifest entry only means this candidate is not the AP
         # binary; the caller falls through to None and the next discovery route.
@@ -287,12 +295,12 @@ class APBridge:
                 cfg = {**cfg, "callTimeoutMs": 0}
                 self._client = MCPClient(cfg)
                 # AP's binary is not in the default allowlist.
-                # ``automatised-pipeline`` is the bin name shipped by
-                # cdeust/automatised-pipeline ≥ v0.0.7; ``node`` is for
+                # The upstream binary names come from upstream_identity so
+                # this set cannot drift from the resolver; ``node`` is for
                 # the plugin-cache resolution path.
                 self._client._extra_allowed_commands = {
                     "node",
-                    "automatised-pipeline",
+                    *ALLOWED_UPSTREAM_COMMANDS,
                 }
                 await self._client.connect()
                 self._connected = True

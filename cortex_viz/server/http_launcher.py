@@ -11,6 +11,8 @@ import json
 import os
 import shutil
 import subprocess
+
+from cortex_viz.infrastructure.upstream_identity import CANONICAL_BINARY
 import sys
 import urllib.request
 from pathlib import Path
@@ -106,7 +108,7 @@ def _detect_dev_source() -> Path | None:
 
 
 def _find_ap_binary() -> str | None:
-    """Locate the automatised-pipeline binary the user actually installed.
+    """Locate the ai-architect-mcp-codebase binary the user actually installed.
 
     Delegates to ``discover_pipeline_command`` — the SAME resolver the
     pipeline uses — so the viz spawns the exact marketplace-installed AP
@@ -172,7 +174,7 @@ def _ensure_ap_graph(dev_src: Path | None, env: dict) -> None:
     try:
         subprocess.Popen(  # noqa: S603
             [
-                bin_path or "automatised-pipeline",
+                bin_path or CANONICAL_BINARY,
             ],
             stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL,
@@ -318,7 +320,7 @@ def launch_server(server_type: str) -> str:
         )
 
     # ADR-0046 — always-on AST enrichment in the served graph. Detects
-    # an installed automatised-pipeline binary, sets the feature flag,
+    # an installed ai-architect-mcp-codebase binary, sets the feature flag,
     # and launches a background index of the current project so the
     # spawned server reads symbol/edge data on its first /api/graph
     # call. Safe no-op when AP isn't available.

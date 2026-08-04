@@ -5,7 +5,7 @@ edges (ADR-0051) must resolve against the COMPLETE FILE-node set, but FILE
 nodes arrive in TWO waves — tool-touched files at the baseline (Phase 1b/1d)
 and AST-indexed files at L6 (``graph_build_l6``). The baseline's Phase 1d
 ``ingest_wiki_source_edges`` therefore only reaches tool-touched files;
-AST-only files (indexed by automatised-pipeline but never touched by a Claude
+AST-only files (indexed by ai-architect-mcp-codebase but never touched by a Claude
 tool) do not exist yet when it runs.
 
 This pass re-resolves every ``wiki.page_sources`` row against the cumulative

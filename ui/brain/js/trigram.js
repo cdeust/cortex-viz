@@ -11,7 +11,7 @@
 //   2. Indexing tokenizer (indexWords/uniqueWords/wordTrigrams/scoreNode) —
 //      used to build the brain-view node search index. Same alnum-run word
 //      splitting as pg_trgm, PLUS a camelCase split, because labels/paths are
-//      identifiers (precedent: automatised-pipeline src/search/vector.rs
+//      identifiers (precedent: ai-architect-mcp-codebase src/search/vector.rs
 //      tokenizes symbols on `_`, `::`, camelCase).
 //
 // Loadable both via importScripts (Web Worker) and require() (Node, for the

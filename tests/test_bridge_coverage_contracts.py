@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from cortex_viz.infrastructure import upstream_identity
 from cortex_viz.infrastructure import ap_bridge as ap
 from cortex_viz.infrastructure import memory_config
 from cortex_viz.infrastructure import prd_bridge as prd
@@ -131,7 +132,7 @@ def test_ap_resolve_command_env_symlink_and_plugin(tmp_path, monkeypatch):
 
     bin_path.unlink()
     install = tmp_path / "plugin"
-    binary = install / "target" / "release" / "automatised-pipeline"
+    binary = install / "target" / "release" / "ai-architect-mcp-codebase"
     binary.parent.mkdir(parents=True)
     binary.write_text("binary")
     binary.chmod(0o755)
@@ -142,7 +143,7 @@ def test_ap_resolve_command_env_symlink_and_plugin(tmp_path, monkeypatch):
             {
                 "plugins": {
                     "other@x": [{"installPath": "/ignored"}],
-                    "automatised-pipeline@x": [{"installPath": str(install)}],
+                    "ai-architect-mcp-codebase@x": [{"installPath": str(install)}],
                 }
             }
         )
@@ -172,7 +173,10 @@ def test_ap_bridge_connect_call_retry_and_close(monkeypatch, capsys):
         assert await bridge.connect()
         client = FakeMCPClient.instances[-1]
         assert client.config["callTimeoutMs"] == 0
-        assert client._extra_allowed_commands == {"node", "automatised-pipeline"}
+        assert client._extra_allowed_commands == {
+                "node",
+                *upstream_identity.ALLOWED_UPSTREAM_COMMANDS,
+            }
         assert await bridge.connect()
         assert bridge.available
 

@@ -29,7 +29,7 @@ class NodeKind(str, Enum):
     ENTITY = "entity"
     MCP = "mcp"
     # SYMBOL — function / class / module / import extracted from the
-    # AST by the ``automatised-pipeline`` sibling plugin (ADR-0046).
+    # AST by the ``ai-architect-mcp-codebase`` sibling plugin (ADR-0046).
     # ``symbol_type`` on the node body carries the sub-kind.
     SYMBOL = "symbol"
     # WIKI — a wiki.pages row (Cortex's durable documentation surface,
@@ -81,7 +81,7 @@ class EdgeKind(str, Enum):
     DISCUSSION_RAN_COMMAND = "discussion_ran_command"
     COMMAND_TOUCHED_FILE = "command_touched_file"
     INVOKED_MCP = "invoked_mcp"
-    # AST edges produced by the ``automatised-pipeline`` bridge
+    # AST edges produced by the ``ai-architect-mcp-codebase`` bridge
     # (ADR-0046). All source-symbols must resolve to a SYMBOL node;
     # targets resolve to a SYMBOL (CALLS, MEMBER_OF) or a FILE
     # (DEFINED_IN) or a SYMBOL import (IMPORTS).

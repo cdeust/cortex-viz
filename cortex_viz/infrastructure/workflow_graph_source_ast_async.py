@@ -259,7 +259,7 @@ def _as_list(payload: Any) -> list[dict]:
 
 # AP's node labels carrying symbol semantics. Derived from
 # stage-3 tree-sitter extractors; see
-# ``automatised-pipeline/src/clustering.rs`` for the canonical list.
+# ``ai-architect-mcp-codebase/src/clustering.rs`` for the canonical list.
 _SYMBOL_LABELS = (
     # Core — Rust + Python (original set)
     "Function",

@@ -65,7 +65,7 @@ Cortex's live Python objects.
 | Archived sessions and execution traces | `~/.claude/projects/*.jsonl` | read-only |
 | Live host activity | `POST /api/activity`, `docs/host-event-v1.schema.json` | append-only derived activity |
 | Cognitive profiles | `~/.claude/methodology/profiles.json` | read-only |
-| Codebase graph (AST symbols, impact) | [`automatised-pipeline`](https://github.com/cdeust/ai-automatised-pipeline) MCP | read-only, stdio |
+| Codebase graph (AST symbols, impact) | [`ai-architect-mcp-codebase`](https://github.com/cdeust/ai-architect-mcp-codebase) MCP | read-only, stdio |
 | PRD document nodes | [`ai-architect-mcp-spec`](https://github.com/cdeust/ai-architect-mcp-spec) MCP | read-only |
 | File diffs and commit history | local `git` | read-only |
 
