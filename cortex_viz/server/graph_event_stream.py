@@ -185,28 +185,18 @@ class GraphEventStream:
 
 
 # ── Process-wide singleton ──────────────────────────────────────────
-# One stream per process. A new build resets it (see reset()); active
-# subscribers observe close-of-stream and reconnect, which is exactly
-# the behaviour SSE clients implement by default.
+# One stream per process. Callers reach it through get_stream() and use the
+# GraphEventStream API directly (``activity_stream`` is the worked example);
+# there are deliberately no module-level emit/close/reset forwarders. Three
+# such wrappers existed and had never had a caller in this repository's
+# history, and once ``emit`` gained ``event_meta`` the wrapper silently
+# dropped it — a second, subtly weaker door onto the same stream.
 
 _stream = GraphEventStream()
 
 
 def get_stream() -> GraphEventStream:
     return _stream
-
-
-def emit(label: str, nodes: list, edges: list, *, chunk: int = 1000) -> int:
-    return _stream.emit(label, nodes, edges, chunk=chunk)
-
-
-def close() -> None:
-    _stream.close()
-
-
-def reset() -> None:
-    global _stream
-    _stream.reset()
 
 
 # ── SSE wire helpers ────────────────────────────────────────────────

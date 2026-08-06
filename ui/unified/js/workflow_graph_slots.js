@@ -536,7 +536,10 @@
       // initial x/y seeding happens in mount() from the parent file's
       // position, then the force simulation does the layout work.
     });
-    if (isTrace && radiusOf) {
+    // radiusOf is required, not optional: prepareTopology is the sole caller
+    // and always supplies it. Guarding on it would make "collisions silently
+    // unresolved" a reachable-looking degraded mode that no caller can enter.
+    if (isTrace) {
       resolveTraceCollisions(nodes, domains, anchors, domainOf, slotOf, radiusOf);
     }
     return slotOf;

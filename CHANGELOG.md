@@ -20,6 +20,14 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
   resolved to, on stderr. An interactive run used to exit silently, which is
   indistinguishable from discovery being broken.
 
+### Removed
+- The unused module-level `emit`, `close` and `reset` forwarders in
+  `cortex_viz.server.graph_event_stream`. Nothing in this repository's history
+  ever called them, and `emit` did not forward the new `event_meta` argument
+  its `GraphEventStream` counterpart accepts, so it was a second and weaker
+  door onto the same stream. `get_stream()` plus the `GraphEventStream` API is
+  the single supported path, as `cortex_viz.server.activity_stream` shows.
+
 ### Fixed
 - The activity-capture hook no longer raises when
   `~/.cache/cortex/viz-server.json` decodes to something other than a mapping
