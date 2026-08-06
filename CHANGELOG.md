@@ -6,6 +6,11 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 ## [Unreleased]
 
 ### Added
+- `MCPClient.aclose()`, an awaitable teardown that terminates the child and then
+  waits for it to exit, escalating to `SIGKILL` after a 5 s grace period. The
+  synchronous `close()` can only request the exit; it cannot reap. Every async
+  caller (both bridges, the handshake-failure and idle-timeout paths, and the
+  stdio handshake test) now awaits `aclose()`.
 - Trace streams observed session activity while a session stays expanded:
   prompts, tool and MCP calls, files, commands, skills, subagents, web/API and
   database operations. Topology is rebuilt incrementally without remounting the
@@ -29,6 +34,18 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
   the single supported path, as `cortex_viz.server.activity_stream` shows.
 
 ### Fixed
+- A leaked asyncio subprocess transport (#113). `close()` left the child
+  terminating and its transport alive, so a caller that closed its event loop
+  immediately afterwards — which `asyncio.run` does on return — left the
+  transport to be finalized against a dead loop. `__del__` then raised
+  `RuntimeError: Event loop is closed`, which the interpreter swallows, so the
+  whole suite reported it as a single warning attributed to an unrelated
+  graph-build test. Awaiting the reap closes the transport while its loop is
+  still alive, and leaves no zombie for a caller that opens many short-lived
+  clients.
+- The test suite now fails on `PytestUnraisableExceptionWarning` instead of
+  printing it. An exception inside `__del__` cannot fail a test by itself, so
+  this class of resource leak was structurally invisible.
 - The activity-capture hook no longer raises when
   `~/.cache/cortex/viz-server.json` decodes to something other than a mapping
   (a JSON list, string, or number). `.get` on that value raised an uncaught
