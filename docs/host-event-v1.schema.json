@@ -39,6 +39,10 @@
       "enum": [
         "prompt",
         "tool_call",
+        "mcp_call",
+        "api_call",
+        "db_read",
+        "db_write",
         "file_read",
         "file_edit",
         "file_write",
@@ -79,6 +83,38 @@
       "then": {
         "required": [
           "input_summary"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "const": "mcp_call"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "tool"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "enum": [
+              "api_call",
+              "db_read",
+              "db_write"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "artifact"
         ]
       }
     },

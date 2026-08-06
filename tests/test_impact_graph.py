@@ -33,3 +33,16 @@ def test_downstream_symbol_edges_point_out_of_the_edited_file():
     edge = next(e for e in frag["edges"] if e["kind"] == "uses")
     assert edge["source"] == fid
     assert edge["target"] == "symbol:mod::dep"
+
+
+def test_reverse_dependency_file_uses_canonical_id_and_keeps_real_path():
+    reverse_path = "/Users/dev/repo/caller.py"
+    frag = impact_to_graph(
+        "/Users/dev/repo/foo.py",
+        {"depended_on_by": [{"file": reverse_path}]},
+    )
+
+    reverse = next(node for node in frag["nodes"] if node.get("path") == reverse_path)
+    assert reverse["id"] == NodeIdFactory.file_id(reverse_path)
+    edge = next(edge for edge in frag["edges"] if edge["source"] == reverse["id"])
+    assert edge["target"] == NodeIdFactory.file_id("/Users/dev/repo/foo.py")

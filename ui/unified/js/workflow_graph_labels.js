@@ -32,6 +32,8 @@
     symbol:     'Code item',
     entity:     'Thing mentioned',
     mcp:        'External tool',
+    api:        'API endpoint',
+    database:   'Database target',
   };
 
   // One-line intros used in the plain-language description sentence.
@@ -48,6 +50,8 @@
     symbol:     'a piece of code inside a file',
     entity:     'something mentioned across memories',
     mcp:        'an external tool Claude can call',
+    api:        'an API endpoint the AI called',
+    database:   'a database target the AI read or wrote',
   };
 
   // ── Symbol sub-types ─────────────────────────────────────────────────
@@ -104,6 +108,15 @@
     discussion_ran_command:   'ran command',
     command_touched_file:     'touched file',
     invoked_mcp:              'called external tool',
+    did:                      'performed',
+    use:                      'used',
+    call:                     'called',
+    read:                     'read',
+    edit:                     'edited',
+    write:                    'wrote',
+    run:                      'ran',
+    spawn:                    'spawned',
+    fetch:                    'fetched',
     defined_in:               'lives in file',
     calls:                    'uses',
     imports:                  'brings in',

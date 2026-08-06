@@ -11,6 +11,27 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
   synchronous `close()` can only request the exit; it cannot reap. Every async
   caller (both bridges, the handshake-failure and idle-timeout paths, and the
   stdio handshake test) now awaits `aclose()`.
+- Trace streams observed session activity while a session stays expanded:
+  prompts, tool and MCP calls, files, commands, skills, subagents, web/API and
+  database operations. Topology is rebuilt incrementally without remounting the
+  canvas or resetting the camera, historical work is revealed progressively, and
+  layout animation is coalesced under rapid clicks and streaming. New effects
+  emerge beside their immediate causal parent rather than treating every branch
+  edge (`read`, `edit`, `run`, `discusses`) as temporal spine progression, which
+  had expanded frequently reused targets outside the readable session cluster:
+  on a real PostgreSQL fixture of 631 nodes / 958 edges the maximum session
+  radius drops from 1007.14 px to 353.96 px.
+- Running the activity-capture hook by hand now names the endpoint discovery
+  resolved to, on stderr. An interactive run used to exit silently, which is
+  indistinguishable from discovery being broken.
+
+### Removed
+- The unused module-level `emit`, `close` and `reset` forwarders in
+  `cortex_viz.server.graph_event_stream`. Nothing in this repository's history
+  ever called them, and `emit` did not forward the new `event_meta` argument
+  its `GraphEventStream` counterpart accepts, so it was a second and weaker
+  door onto the same stream. `get_stream()` plus the `GraphEventStream` API is
+  the single supported path, as `cortex_viz.server.activity_stream` shows.
 
 ### Fixed
 - A leaked asyncio subprocess transport (#113). `close()` left the child
@@ -34,12 +55,25 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
   (`coverage_model.js` 98.8%, `workflow_graph_lod.js` 100%,
   `ui/brain/js/edges.js` 96.0%). The suite was always testing these; the
   instrument could not see it. `coverage.include` is widened from 8 curated
-  files to the 21 the suite actually loads. Report-only, no threshold.
+  files to the 30 the suite actually loads, which now reports the Trace surface
+  too (`workflow_graph_trace_layout.js` 99.0%, `activity_stream.js` 86.8%,
+  `workflow_graph.js` 80.9%, `workflow_graph_slots.js` 80.1%, `trace.js` 64.0%)
+  and lifts the total to 40.1% lines. Report-only, no threshold.
 - `npm run test:coverage` no longer fails. The trigram 300k-label scan asserts
   a 500 ms bound, and V8 instrumentation roughly doubles it (1079 ms measured),
   so that one assertion is unmeasurable under coverage. It now reports a named
   skip instead, and still runs unconditionally in `npm test`, which is the CI
   gate.
+- The activity-capture hook no longer raises when
+  `~/.cache/cortex/viz-server.json` decodes to something other than a mapping
+  (a JSON list, string, or number). `.get` on that value raised an uncaught
+  `AttributeError`, breaking the hook's never-raise contract with the host on a
+  corrupt registry; every unusable-registry shape now falls through to the next
+  candidate endpoint.
+- A registry or `CORTEX_VIZ_PORT` value of `0` or below is no longer accepted as
+  a port. A negative value produced the unusable endpoint
+  `http://127.0.0.1:-1/api/activity` and spent part of the hook's 0.5 s budget
+  on it.
 
 ### Security
 - Update `cryptography` from 49.0.0 to 50.0.0, the first release patched for

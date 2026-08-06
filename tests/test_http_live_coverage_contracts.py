@@ -219,12 +219,12 @@ class _Stream:
         self.events = list(events)
         self.emitted = []
 
-    def emit(self, *args):
-        self.emitted.append(args)
+    def emit(self, *args, **kwargs):
+        self.emitted.append(args + ((kwargs,) if kwargs else ()))
 
     def subscribe(self, *, since, timeout):
         assert timeout == 15.0
-        yield from self.events
+        yield from ((idx, event) for idx, event in self.events if idx >= since)
 
     def stats(self):
         return {"count": 4}
@@ -302,7 +302,9 @@ def test_activity_ingest_paths(monkeypatch):
         "id": 7,
         "action": "read",
     }
-    assert stream.emitted == [("activity", [1], [2])]
+    assert stream.emitted == [
+        ("activity", [1], [2], {"event_meta": {"activity_id": 7}})
+    ]
 
     monkeypatch.setattr(
         activity_store,
@@ -332,20 +334,29 @@ def test_activity_replay_tail_and_stream_lifecycle(monkeypatch):
         graph_event_stream, "format_event", lambda idx, _event: f"id:{idx}\n".encode()
     )
     handler = _Handler()
-    assert activity._replay_log(handler, "db", 1)
+    assert activity._replay_log(handler, "db", 1) == (True, 2)
     assert handler.wfile.getvalue() == b"id:2\n"
     broken = _Handler()
     broken.wfile = _BrokenWriter()
-    assert not activity._replay_log(broken, "db", 1)
+    assert activity._replay_log(broken, "db", 1) == (False, 1)
     assert activity._write_or_stop(handler, b"ok")
     assert not activity._write_or_stop(broken, b"no")
 
-    stream = _Stream(events=[(3, {"event": 1})])
+    # The event replayed from PostgreSQL (activity_id=2) is also present in
+    # the pre-replay buffer. It must be skipped; the event committed during
+    # replay (activity_id=3) must be delivered exactly once with its durable
+    # PostgreSQL id, never the unrelated in-memory deque index.
+    stream = _Stream(
+        events=[
+            (3, {"event": "replayed", "activity_id": 2}),
+            (4, {"event": "during-replay", "activity_id": 3}),
+        ]
+    )
     monkeypatch.setattr(activity_stream, "stream", lambda: stream)
     monkeypatch.setattr(graph_event_stream, "format_heartbeat", lambda: b"heartbeat")
     writes = iter([True, False])
     monkeypatch.setattr(activity, "_write_or_stop", lambda *_args: next(writes))
-    activity._tail_live(handler, 0)
+    activity._tail_live(handler, 3, 2)
 
     opened = []
     closed = []
@@ -355,17 +366,29 @@ def test_activity_replay_tail_and_stream_lifecycle(monkeypatch):
     monkeypatch.setattr(
         http_standalone_state, "stream_closed", lambda: closed.append(1)
     )
-    monkeypatch.setattr(activity, "_replay_log", lambda *_args: False)
+    monkeypatch.setattr(activity, "_replay_log", lambda *_args: (False, 0))
     activity.serve_activity_stream(_Handler("/?since=bad"), "db")
     assert opened == [1] and closed == [1]
 
     tails = []
-    monkeypatch.setattr(activity, "_replay_log", lambda *_args: True)
+    replay_since = []
     monkeypatch.setattr(
-        activity, "_tail_live", lambda _handler, cursor: tails.append(cursor)
+        activity,
+        "_replay_log",
+        lambda _handler, _store, since: (replay_since.append(since) or True, 9),
     )
-    activity.serve_activity_stream(_Handler("/?since=2"), "db")
-    assert tails == [4]
+    monkeypatch.setattr(
+        activity,
+        "_tail_live",
+        lambda _handler, buffer_cursor, durable_since: tails.append(
+            (buffer_cursor, durable_since)
+        ),
+    )
+    resumed = _Handler("/?since=bad")
+    resumed.headers["Last-Event-ID"] = "8"
+    activity.serve_activity_stream(resumed, "db")
+    assert replay_since == [8]
+    assert tails == [(4, 9)]
     assert closed == [1, 1]
 
 

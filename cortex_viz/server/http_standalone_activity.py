@@ -140,7 +140,12 @@ def serve_activity_ingest(handler, store) -> None:
         new_id = activity_store.record_activity(store, row)
         row["seq"] = new_id
         frag = event_to_graph(row)
-        _activity_stream().emit("activity", frag["nodes"], frag["edges"])
+        _activity_stream().emit(
+            "activity",
+            frag["nodes"],
+            frag["edges"],
+            event_meta={"activity_id": new_id},
+        )
         _maybe_trigger_impact(store, row)
     except Exception as exc:  # pragma: no cover - defensive; never error the hook
         _send_json(handler, 200, {"ok": False, "error": str(exc)})
@@ -148,14 +153,19 @@ def serve_activity_ingest(handler, store) -> None:
     _send_json(handler, 200, {"ok": True, "id": new_id, "action": row["action"]})
 
 
-def _replay_log(handler, store, since: int) -> bool:
-    """Replay the durable ``session_activity`` log from ``since``. Returns
-    ``False`` on client disconnect (caller stops immediately)."""
+def _replay_log(handler, store, since: int) -> tuple[bool, int]:
+    """Replay PostgreSQL activity after ``since``.
+
+    Returns ``(connected, last_durable_id)``. The durable id is deliberately
+    kept separate from the in-process buffer index: PostgreSQL is the replay
+    authority, while the buffer exists only to wake live subscribers.
+    """
     from cortex_viz.core.activity_graph import event_to_graph
     from cortex_viz.infrastructure import activity_store
     from cortex_viz.server.graph_event_stream import format_event
 
     try:
+        last_id = since
         for row in activity_store.read_recent(store, since_id=since):
             frag = event_to_graph(row)
             handler.wfile.write(
@@ -168,10 +178,11 @@ def _replay_log(handler, store, since: int) -> bool:
                     },
                 )
             )
+            last_id = int(row["id"])
         handler.wfile.flush()
-        return True
+        return True, last_id
     except (BrokenPipeError, ConnectionResetError):
-        return False
+        return False, since
 
 
 def _write_or_stop(handler, payload: bytes) -> bool:
@@ -184,20 +195,34 @@ def _write_or_stop(handler, payload: bytes) -> bool:
         return False
 
 
-def _tail_live(handler, cursor: int) -> None:
-    """Tail new emits from the in-process activity stream past ``cursor``
-    (the replay's end) until the client disconnects. Never returns on a
-    live connection — a session is open-ended."""
+def _tail_live(handler, buffer_cursor: int, durable_since: int) -> None:
+    """Tail the wake-up buffer without changing cursor namespaces.
+
+    ``buffer_cursor`` is an in-process deque position captured *before* the
+    PostgreSQL replay. ``durable_since`` is the last replayed database id and
+    is the only value placed in an SSE ``id`` field. Capturing first closes the
+    replay/tail race: an ingest concurrent with replay is either replayed from
+    PostgreSQL or retained in the buffer, and the durable-id check deduplicates
+    the case where it is present in both.
+    """
     from cortex_viz.server.activity_stream import stream as _activity_stream
     from cortex_viz.server.graph_event_stream import format_event, format_heartbeat
 
     astream = _activity_stream()
     while True:
         saw_any = False
-        for idx, event in astream.subscribe(since=cursor, timeout=15.0):
-            if not _write_or_stop(handler, format_event(idx, event)):
+        for idx, event in astream.subscribe(since=buffer_cursor, timeout=15.0):
+            activity_id = event.get("activity_id")
+            if activity_id is not None and int(activity_id) <= durable_since:
+                buffer_cursor = idx + 1
+                saw_any = True
+                continue
+            wire_id = int(activity_id) if activity_id is not None else durable_since
+            if not _write_or_stop(handler, format_event(wire_id, event)):
                 return
-            cursor = idx + 1
+            buffer_cursor = idx + 1
+            if activity_id is not None:
+                durable_since = int(activity_id)
             saw_any = True
         if not saw_any and not _write_or_stop(handler, format_heartbeat()):
             return
@@ -220,11 +245,23 @@ def serve_activity_stream(handler, store) -> None:
 
     qs = parse_qs(urlparse(handler.path).query)
     since = 0
+    last_event_id = (
+        handler.headers.get("Last-Event-ID")
+        or handler.headers.get("Last-Event-Id")
+        or ""
+    )
+    if last_event_id:
+        try:
+            since = int(last_event_id)
+        except ValueError:
+            since = 0
     if "since" in qs:
         try:
-            since = int(qs["since"][0])
+            since = max(since, int(qs["since"][0]))
         except (ValueError, IndexError):
-            since = 0
+            # Keep a valid Last-Event-ID when only the optional query value is
+            # malformed; reconnect continuity must not be reset to the origin.
+            pass
 
     stream_opened()
     try:
@@ -235,11 +272,14 @@ def serve_activity_stream(handler, store) -> None:
         handler.send_header("X-Accel-Buffering", "no")
         handler.end_headers()
 
-        if not _replay_log(handler, store, since):
-            return
         astream = _activity_stream()
-        cursor = astream.stats().get("count", 0)
-        _tail_live(handler, cursor)
+        # Capture BEFORE replay. Any concurrent ingest after this point stays
+        # visible in the buffer even if the replay query's snapshot missed it.
+        buffer_cursor = astream.stats().get("count", 0)
+        connected, durable_since = _replay_log(handler, store, since)
+        if not connected:
+            return
+        _tail_live(handler, buffer_cursor, durable_since)
     finally:
         stream_closed()
 

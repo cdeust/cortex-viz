@@ -237,10 +237,13 @@ tool names are provenance and are not reinterpreted as Claude tools.
 }
 ```
 
-The endpoint normalizes the event into the same session/action/file graph as
-Claude activity. This PR defines the ingestion boundary; host-specific hook or
-telemetry adapters can be added independently without changing the graph or
-database schema.
+The endpoint normalizes the event into the same session/action/target graph as
+Claude activity. Producers can report `mcp_call`, `api_call`, `db_read` and
+`db_write` explicitly in addition to prompts, tools, files, terminal commands,
+skills, subagents and web access. API/database targets come from the producer's
+`artifact`; input/result summaries are displayed as observed and are never
+inferred from a tool name. Host-specific hook or telemetry adapters can be
+added independently without changing the graph or database schema.
 
 ## Boundary
 

@@ -69,7 +69,18 @@
     });
     var edges = data.edges || [];
     if (!nodes.length && !edges.length) return;
-    if (!_galaxyLive()) { _buf.push({ nodes: nodes, edges: edges }); return; }
+    if (!_galaxyLive()) {
+      // Trace owns lastData while its tab is active, so it must decide which
+      // activity is safe to project. Its narrow contract accepts only the
+      // directed fragment rooted at a currently expanded session. Keep the
+      // complete batch buffered as before: switching to Galaxy still flushes
+      // the durable replay/live stream without losing anything.
+      _buf.push({ nodes: nodes, edges: edges });
+      if (window.TraceView && typeof TraceView.acceptActivityBatch === 'function') {
+        TraceView.acceptActivityBatch(nodes, edges);
+      }
+      return;
+    }
     if (_buf.length) _flush();
     _append(nodes, edges);
   }

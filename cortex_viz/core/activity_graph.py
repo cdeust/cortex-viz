@@ -6,9 +6,10 @@ shape and the versioned host-neutral contract in
 same normalized activity row (persisted by ``infrastructure.activity_store``)
 and directional nodes/edges streamed to the live graph.
 
-Every Claude action is one of a fixed taxonomy — tool / mcp_call / file-read /
-file-edit / file-write / terminal-run / skill / subagent / web / prompt — and
-each maps to a target node and a typed, DIRECTIONAL edge from the action:
+Every observed action uses a fixed taxonomy — tool / mcp_call / api_call /
+database-read / database-write / file-read / file-edit / file-write /
+terminal-run / skill / subagent / web / prompt — and each maps to a target
+node and a typed, DIRECTIONAL edge from the action:
 
     session ──did──▶ action ──{read|edit|write|run|call|use|spawn|fetch}──▶ target
 
@@ -24,6 +25,7 @@ with the galaxy's on the client instead of rendering as duplicates.
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
@@ -45,11 +47,45 @@ _FILE_WRITE = {"Write"}
 # Bash command → leading file path (same regex the Trace source uses to pull
 # touched paths out of a shell command). source: trace_source path-ref regex.
 _PATH_RE = re.compile(r"(?:^|[\s=])((?:\.{1,2}/|~/|/)[^\s`'\"]{3,})")
+_DISPLAY_TEXT_CHARS = 200
+_SENSITIVE_FIELD = re.compile(
+    r"(?:authorization|cookie|credential|password|secret|token|api[_-]?key)",
+    re.IGNORECASE,
+)
 
 
 def _first_path(text: str) -> str | None:
     m = _PATH_RE.search(text or "")
     return m.group(1) if m else None
+
+
+def _redact_observed(value: Any) -> Any:
+    """Redact credential-shaped fields before an observed payload is stored."""
+    if isinstance(value, dict):
+        return {
+            str(key): "[redacted]"
+            if _SENSITIVE_FIELD.search(str(key))
+            else _redact_observed(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_observed(item) for item in value]
+    return value
+
+
+def _observed_summary(value: Any) -> str:
+    """Bounded JSON/text summary for the live detail panel."""
+    if value in (None, "", {}, []):
+        return ""
+    redacted = _redact_observed(value)
+    if isinstance(redacted, str):
+        text = redacted
+    else:
+        try:
+            text = json.dumps(redacted, ensure_ascii=False, separators=(",", ":"))
+        except (TypeError, ValueError):
+            text = str(redacted)
+    return text[:_DISPLAY_TEXT_CHARS]
 
 
 def classify(
@@ -217,6 +253,16 @@ def normalize_event(event: dict[str, Any]) -> dict[str, Any] | None:
         # canonical absolute path for a FILE target (kept alongside the
         # hashed target_id — see ``_file_action``'s docstring on why).
         detail["path"] = c["path"]
+    input_summary = _observed_summary(event.get("tool_input"))
+    if input_summary:
+        detail["input_summary"] = input_summary
+    result = _observed_summary(
+        event.get("tool_response")
+        if "tool_response" in event
+        else event.get("tool_result")
+    )
+    if result:
+        detail["result"] = result
     return {
         "session_id": session_id,
         "ts": ts,
@@ -250,12 +296,23 @@ def event_to_graph(row: dict[str, Any]) -> dict[str, list]:
     """
     sid = row["session_id"]
     seq = row.get("seq") or row.get("id") or row.get("ts") or "0"
+    session_node_id = f"session:{sid}"
+    detail = dict(row.get("detail") or {})
+    observed = {
+        "session_id": sid,
+        "domain_id": session_node_id,
+        "seq": seq,
+        "ts": row.get("ts"),
+        "event_type": row.get("event_type") or "",
+        "host": detail.get("host") or "",
+    }
     nodes: list[dict] = [
         {
-            "id": f"session:{sid}",
+            "id": session_node_id,
             "kind": "session",
             "label": sid[:12],
             "type": "session",
+            "session_id": sid,
         },
     ]
     edges: list[dict] = []
@@ -268,13 +325,15 @@ def event_to_graph(row: dict[str, Any]) -> dict[str, list]:
                 "kind": "prompt",
                 "type": "prompt",
                 "label": row["target_label"],
+                "full": row["target_label"],
                 "tool": "",
+                **observed,
             }
         )
         edges.append(
             {
-                "id": f"session:{sid}->{pid}",
-                "source": f"session:{sid}",
+                "id": f"{session_node_id}->{pid}",
+                "source": session_node_id,
                 "target": pid,
                 "kind": "did",
                 "type": "did",
@@ -290,12 +349,19 @@ def event_to_graph(row: dict[str, Any]) -> dict[str, list]:
             "type": "action",
             "label": row["action"],
             "tool": row["tool"],
+            "target_id": row.get("target_id") or "",
+            "target_kind": row.get("target_kind") or "",
+            "target_label": row.get("target_label") or "",
+            "input_summary": detail.get("input_summary") or "",
+            "result": detail.get("result") or "",
+            "cwd": row.get("cwd") or "",
+            **observed,
         }
     )
     edges.append(
         {
-            "id": f"session:{sid}->{aid}",
-            "source": f"session:{sid}",
+            "id": f"{session_node_id}->{aid}",
+            "source": session_node_id,
             "target": aid,
             "kind": "did",
             "type": "did",

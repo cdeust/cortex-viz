@@ -77,12 +77,15 @@ class GraphEventStream:
         edges: list[dict[str, Any]],
         *,
         chunk: int = 1000,
+        event_meta: dict[str, Any] | None = None,
     ) -> int:
         """Append a batch (chunked into sub-batches of ``chunk`` items).
 
         Returns the number of sub-events emitted. Empty inputs are a
         no-op (returns 0). Each emitted sub-event carries a synthetic
         sub-label so the client can log progression without inferring.
+        ``event_meta`` adds internal transport metadata to every chunk; the
+        activity stream uses it for the authoritative PostgreSQL cursor.
         """
         if not nodes and not edges:
             return 0
@@ -101,16 +104,17 @@ class GraphEventStream:
                 e_chunk = edges[off : off + step]
                 if not n_chunk and not e_chunk:
                     continue
-                self._buf.append(
-                    {
-                        "label": label,
-                        "off": off,
-                        "n_total": n_total,
-                        "e_total": e_total,
-                        "nodes": n_chunk,
-                        "edges": e_chunk,
-                    }
-                )
+                event = {
+                    "label": label,
+                    "off": off,
+                    "n_total": n_total,
+                    "e_total": e_total,
+                    "nodes": n_chunk,
+                    "edges": e_chunk,
+                }
+                if event_meta:
+                    event.update(event_meta)
+                self._buf.append(event)
                 emitted += 1
             if emitted:
                 self._cond.notify_all()
@@ -181,28 +185,18 @@ class GraphEventStream:
 
 
 # ── Process-wide singleton ──────────────────────────────────────────
-# One stream per process. A new build resets it (see reset()); active
-# subscribers observe close-of-stream and reconnect, which is exactly
-# the behaviour SSE clients implement by default.
+# One stream per process. Callers reach it through get_stream() and use the
+# GraphEventStream API directly (``activity_stream`` is the worked example);
+# there are deliberately no module-level emit/close/reset forwarders. Three
+# such wrappers existed and had never had a caller in this repository's
+# history, and once ``emit`` gained ``event_meta`` the wrapper silently
+# dropped it — a second, subtly weaker door onto the same stream.
 
 _stream = GraphEventStream()
 
 
 def get_stream() -> GraphEventStream:
     return _stream
-
-
-def emit(label: str, nodes: list, edges: list, *, chunk: int = 1000) -> int:
-    return _stream.emit(label, nodes, edges, chunk=chunk)
-
-
-def close() -> None:
-    _stream.close()
-
-
-def reset() -> None:
-    global _stream
-    _stream.reset()
 
 
 # ── SSE wire helpers ────────────────────────────────────────────────

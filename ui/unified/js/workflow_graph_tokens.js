@@ -54,6 +54,8 @@
     hook:       '--kind-hook',
     agent:      '--kind-agent',
     mcp:        '--kind-mcp',
+    api:        '--kind-mcp',
+    database:   '--ok-ink',
     discussion: '--kind-discussion',
     memory:     '--ok-ink',       // emerald family — matches memory's established green hue
     file:       '--tool-read',    // per-tool color overrides; read is the neutral default
