@@ -54,6 +54,14 @@ FROM wiki.links
 WHERE dst_page_id IS NOT NULL
 """
 
+# ``= ANY(%s)`` rather than an interpolated IN-list: the ids are bound as a
+# single array parameter, so no amount of them can reach the SQL text.
+_MEMORIES_BY_IDS_SQL = """
+SELECT id, content, domain, heat, consolidation_stage, created_at
+FROM memories
+WHERE id = ANY(%s)
+"""
+
 # UNION of the two page->memory evidence sources: a page's own anchor
 # memory (wiki.pages.memory_id, may be NULL) and every memory cited
 # while writing the page (wiki.citations, one row per citation event).
@@ -183,7 +191,39 @@ def load_wiki_session_links(pg_store) -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
+def load_memories_by_ids(pg_store, memory_ids) -> list[dict[str, Any]]:
+    """Return the memory rows for ``memory_ids``, for the wiki lens.
+
+    The galaxy build ingests every memory in an earlier phase, so its
+    wiki→memory edges always find their endpoint. The wiki-scoped
+    documentation graph starts from pages instead, so it has to fetch the
+    handful of memories its pages actually link to; ``ingest_wiki_memory``
+    skips an edge whose MEMORY node is absent, which would silently empty
+    cross-lens mode.
+
+    Args:
+        pg_store: read-only store exposing ``.query(sql, params, *,
+            batch=True)``.
+        memory_ids: the ids to fetch. An empty iterable short-circuits
+            without a query.
+
+    Returns:
+        Rows shaped for ``core.workflow_graph_builder_ingest._ingest_memory``.
+        Empty list when nothing is asked for, or on any failure
+        (best-effort, matching the loaders above).
+    """
+    ids = sorted({int(mid) for mid in memory_ids if mid is not None})
+    if not ids:
+        return []
+    try:
+        rows = pg_store.query(_MEMORIES_BY_IDS_SQL, (ids,), batch=True)
+    except Exception:
+        return []
+    return [dict(r) for r in rows]
+
+
 __all__ = [
+    "load_memories_by_ids",
     "load_wiki_links",
     "load_wiki_memory_links",
     "load_wiki_page_sources",

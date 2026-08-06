@@ -9,12 +9,18 @@ GET  /api/wiki/actions?page_id=     — live Claude activity on a page's
                                        source files (best-effort)
 GET  /api/wiki/bibliography         — .bib files
 GET  /api/wiki/bibliography/read?path= — one .bib file
+GET  /api/wiki/graph?domain=&cooccur=&xlens= — the documentation graph
 POST /api/wiki/save  {rel_path, body} — overwrite a page
 
 Composition root: filesystem reads in ``infrastructure.wiki_read``, PG reads
 in ``infrastructure.wiki_pg`` / ``infrastructure.wiki_page_actions_pg`` /
-``infrastructure.activity_store``. Unknown ``/api/wiki/*`` paths return a
-valid empty shape (never 410/404) so wiki.js never hangs on a missing op.
+``infrastructure.wiki_graph`` / ``infrastructure.activity_store``.
+
+Unknown ``/api/wiki/*`` paths return a valid empty shape (never 410/404) so
+wiki.js never hangs on a missing op — but they now carry ``unavailable: True``
+as well. Without that marker the reply was indistinguishable from a real empty
+result, and ``enterGraphMode`` mistook the fall-through for a graph and mounted
+an empty canvas with no explanation (#119).
 """
 
 from __future__ import annotations
@@ -180,9 +186,70 @@ def _dispatch_get(store, path_no_qs: str, p: dict[str, str]) -> dict:
         return wiki_read.list_bibliography()
     if path_no_qs == "/api/wiki/bibliography/read":
         return wiki_read.read_bibliography(p.get("path", ""))
+    if path_no_qs == "/api/wiki/graph":
+        return _doc_graph(store, p)
     # Unknown wiki op (concepts/drafts/views/…): a valid empty shape, NOT 410 —
     # so any stray frontend call degrades instead of hanging the view.
-    return {"ok": True, "items": [], "note": "not_served_by_viz"}
+    # ``unavailable`` is what makes that degrade legible: a caller cannot tell
+    # "nothing to show" from "this op does not exist" by shape alone, and
+    # ``enterGraphMode`` used to render the difference as a blank canvas (#119).
+    return {
+        "ok": True,
+        "items": [],
+        "note": "not_served_by_viz",
+        "unavailable": True,
+    }
+
+
+def _flag(params: dict[str, str], name: str, *, default: bool) -> bool:
+    """Read a ``0``/``1`` client toggle, falling back to ``default``.
+
+    Only the two literals the client sends are honoured. Anything else keeps the
+    default rather than being coerced, so a malformed query cannot silently flip
+    a lens the user did not ask for.
+    """
+    raw = params.get(name)
+    if raw == "1":
+        return True
+    if raw == "0":
+        return False
+    return default
+
+
+def _doc_graph(store, params: dict[str, str]) -> dict:
+    """GET /api/wiki/graph — the wiki lens, as ``workflow_graph.v1``.
+
+    Loads the wiki relations from PostgreSQL and the per-page tags from
+    markdown frontmatter (each source for what it is authoritative about),
+    then hands both to the pure builder in ``core.wiki_doc_graph``.
+    """
+    from cortex_viz.core.wiki_doc_graph import build_doc_graph
+    from cortex_viz.infrastructure import wiki_graph
+
+    pages = wiki_graph.load_wiki_pages(store)
+    memory_links = wiki_graph.load_wiki_memory_links(store)
+    cross_lens = _flag(params, "xlens", default=True)
+    memories = (
+        wiki_graph.load_memories_by_ids(
+            store, [row.get("memory_id") for row in memory_links]
+        )
+        if cross_lens
+        else []
+    )
+    tags_by_path = {
+        str(item.get("path") or ""): item.get("tags") or []
+        for item in wiki_read.list_pages().get("pages", [])
+    }
+    return build_doc_graph(
+        pages=pages,
+        links=wiki_graph.load_wiki_links(store),
+        memory_links=memory_links,
+        memories=memories,
+        tags_by_path=tags_by_path,
+        domain=params.get("domain", ""),
+        cross_lens=cross_lens,
+        co_occurrence=_flag(params, "cooccur", default=False),
+    )
 
 
 def serve_wiki(handler, store, path_no_qs: str) -> None:

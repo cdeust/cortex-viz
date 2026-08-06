@@ -211,6 +211,28 @@
         if (!data || data.error) {
           throw new Error((data && data.error) || 'empty graph');
         }
+        // An `unavailable` reply is the server saying "this op is not served
+        // here". It is shaped like a success and carries no `error`, so before
+        // #119 it fell through and was mounted as a graph — an empty canvas
+        // with nothing to explain it. A missing endpoint is a failure, not an
+        // empty result, so it takes the error path.
+        if (data.unavailable) {
+          throw new Error('the documentation graph is not served by this server');
+        }
+        // A real but empty graph is a different statement, and says so rather
+        // than leaving the user in front of a blank canvas.
+        if (data.meta && data.meta.empty) {
+          var emptyHost = document.getElementById('wiki-main');
+          if (emptyHost) {
+            emptyHost.innerHTML = '';
+            emptyHost.appendChild(buildErrorState(
+              'Nothing to graph',
+              'No wiki pages match this domain, so there is no documentation '
+                + 'graph to draw yet.'));
+          }
+          if (host) host.style.display = 'none';
+          return;
+        }
         // Reset dedup sets so the bridge treats this as a fresh wholesale
         // payload (same contract the trace lens relies on).
         if (window.JUG) {
@@ -2242,7 +2264,13 @@
   // builds the live editor from THIS function, so what is asserted is what
   // the editor gets.
   window.JUG = window.JUG || {};
-  window.JUG._wikiTest = { buildEditorSetup: buildEditorSetup };
+  window.JUG._wikiTest = {
+    buildEditorSetup: buildEditorSetup,
+    // enterGraphMode decides between three outcomes that look alike from the
+    // outside — a graph, an empty wiki, and an op this server does not serve.
+    // Getting that wrong is #119, so the decision is reachable from a test.
+    enterGraphMode: enterGraphMode,
+  };
 
   // ── Init ──
   document.addEventListener('DOMContentLoaded', init);

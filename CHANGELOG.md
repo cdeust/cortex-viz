@@ -6,6 +6,25 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 ## [Unreleased]
 
 ### Added
+- `GET /api/wiki/graph` — the wiki view's cross-lens documentation graph, which
+  the UI has been requesting since it shipped but which nothing served (#119).
+  Nodes are wiki pages (filtered by `domain`); edges are the authored
+  page-to-page `wiki_links`, plus `documents` edges to the memories a page was
+  written from when `xlens` is on, plus `associates_with` edges between pages
+  sharing a tag when `cooccur` is on. Assembled by `WorkflowGraphBuilder`
+  through the same ingesters the galaxy lens uses, so a page keeps one identity,
+  colour and node id in either lens. Deterministic for a given input.
+
+### Fixed
+- The documentation-graph mode no longer renders a blank canvas when the graph
+  cannot be built (#119). An unserved `/api/wiki/*` op replied
+  `{ok: true, items: []}` with no `error` key, so the client's guard passed and
+  it mounted the fall-through as a graph. Those replies now carry
+  `unavailable: true`, and the client renders its named "Graph unavailable"
+  state for them — and a distinct "Nothing to graph" state for a wiki that
+  really has no pages in the selected domain.
+
+### Added
 - `MCPClient.aclose()`, an awaitable teardown that terminates the child and then
   waits for it to exit, escalating to `SIGKILL` after a 5 s grace period. The
   synchronous `close()` can only request the exit; it cannot reap. Every async
