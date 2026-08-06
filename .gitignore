@@ -17,3 +17,10 @@ reports/
 # so a local `ruff format .` never reformats a throwaway script).
 scratchpad/
 scratchpad-session/
+
+# Local vendored dependency tree: a site-packages install (~158 MB, measured
+# 2026-08-06) produced by local bundle/install runs, never part of a clone.
+# Untracked *and* unignored meant `git add -A` would stage the whole tree, and
+# — because ruff respects .gitignore — `ruff check .` linted it: 43,207
+# findings that buried the real ones while CI stayed green on a clean clone.
+/deps/
