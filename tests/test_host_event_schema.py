@@ -269,6 +269,43 @@ def test_explicit_remote_and_database_events_are_not_inferred(
     assert row["edge_kind"] == edge_kind
 
 
+def test_an_mcp_call_without_an_artifact_is_labelled_by_its_tool():
+    """The only branch of the new taxonomy with a fallback label."""
+    row = normalize_event(
+        _event(event="mcp_call", tool="mcp__postgres__query", artifact="")
+    )
+
+    assert row is not None
+    assert row["target_label"] == "mcp__postgres__query"
+    assert row["target_id"] == "mcp:mcp__postgres__query"
+
+
+@pytest.mark.parametrize(
+    ("event_name", "prefix"),
+    [("api_call", "api:"), ("db_read", "db:"), ("db_write", "db:")],
+)
+def test_remote_and_database_labels_are_bounded(event_name, prefix):
+    row = normalize_event(_event(event=event_name, artifact="u" * 500))
+
+    assert row is not None
+    assert row["target_label"] == "u" * 200
+    assert row["target_id"] == prefix + "u" * 200
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"event": "mcp_call", "tool": 7},
+        {"event": "api_call", "artifact": {"url": "x"}},
+        {"event": "db_read", "artifact": ["table"]},
+        {"event": "db_write", "artifact": 42},
+    ],
+)
+def test_a_non_string_identifier_is_rejected_like_an_empty_one(overrides):
+    """The `isinstance` arm of each guard; only the falsy-string arm was covered."""
+    assert normalize_event(_event(**overrides)) is None
+
+
 @pytest.mark.parametrize(
     "overrides",
     [
@@ -316,3 +353,165 @@ def test_legacy_claude_hook_shape_remains_supported():
     assert "host" not in row["detail"]
     assert row["detail"]["input_summary"] == '{"file_path":"/repo/src/auth.ts"}'
     assert row["detail"]["result"] == '{"rows":3,"authorization":"[redacted]"}'
+
+
+def _observed(**overrides):
+    """A legacy Claude hook event, the shape that carries observed payloads."""
+    event = {
+        "tool_name": "Read",
+        "tool_input": {"file_path": "/repo/a.py"},
+        "cwd": "/repo",
+        "session_id": "s1",
+        "ts": 1.0,
+        "event_type": "PostToolUse",
+    }
+    event.update(overrides)
+    return event
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "authorization",
+        "Authorization",
+        "cookie",
+        "Set-Cookie",
+        "credential",
+        "aws_credentials",
+        "password",
+        "db_password",
+        "secret",
+        "client_secret",
+        "token",
+        "refresh_token",
+        "api_key",
+        "api-key",
+        "apikey",
+        "X-API-Key",
+    ],
+)
+def test_every_credential_shaped_field_is_redacted_before_storage(field):
+    """One alternative of `_SENSITIVE_FIELD` per case: a regex with seven
+    branches that only ever sees `authorization` is six branches unverified."""
+    row = normalize_event(_observed(tool_response={field: "sensitive-value"}))
+
+    assert row is not None
+    assert "sensitive-value" not in row["detail"]["result"]
+    assert '"[redacted]"' in row["detail"]["result"]
+
+
+@pytest.mark.parametrize("field", ["rows", "status", "duration_ms", "cookbook"])
+def test_fields_that_only_look_adjacent_are_kept(field):
+    """Negative control: over-redaction would silently gut the detail panel."""
+    row = normalize_event(_observed(tool_response={field: "kept-value"}))
+
+    assert row is not None
+    assert "kept-value" in row["detail"]["result"]
+
+
+@pytest.mark.parametrize("field", ["tokens_used", "input_tokens", "cookie_jar"])
+def test_substring_matching_over_redacts_by_design(field):
+    """`_SENSITIVE_FIELD` is an unanchored substring match, so it catches
+    `db_password` and `refresh_token` — and also collides with innocent
+    `*_tokens` telemetry. Pinned deliberately: a leaked credential is
+    unrecoverable, a hidden token count is not, so the fail-safe direction
+    stays. Narrowing this must break this test and argue the new pattern.
+    """
+    row = normalize_event(_observed(tool_response={field: "telemetry"}))
+
+    assert row is not None
+    assert row["detail"]["result"] == f'{{"{field}":"[redacted]"}}'
+
+
+def test_redaction_reaches_credentials_nested_under_lists():
+    row = normalize_event(
+        _observed(
+            tool_response={
+                "results": [
+                    {"headers": {"authorization": "Bearer nested"}},
+                    {"ok": True},
+                ]
+            }
+        )
+    )
+
+    assert row is not None
+    assert "Bearer nested" not in row["detail"]["result"]
+    assert row["detail"]["result"] == (
+        '{"results":[{"headers":{"authorization":"[redacted]"}},{"ok":true}]}'
+    )
+
+
+def test_observed_summaries_are_bounded_for_the_detail_panel():
+    row = normalize_event(
+        _observed(
+            tool_input={"query": "q" * 500},
+            tool_response={"body": "r" * 500},
+        )
+    )
+
+    assert row is not None
+    assert len(row["detail"]["input_summary"]) == 200
+    assert len(row["detail"]["result"]) == 200
+
+
+def test_a_plain_string_payload_is_passed_through_and_bounded():
+    """Hosts may send an already-summarized string rather than a JSON object;
+    it must not be re-encoded with JSON quotes around it."""
+    row = normalize_event(_observed(tool_response="rows=3"))
+
+    assert row is not None
+    assert row["detail"]["result"] == "rows=3"
+    assert len(
+        normalize_event(_observed(tool_response="r" * 500))["detail"]["result"]
+    ) == (200)
+
+
+def test_redaction_is_field_shaped_and_does_not_scan_free_text():
+    """Known boundary, pinned rather than left to be discovered: redaction
+    matches KEY names, so a credential a host embeds in a summary STRING is
+    stored as-is. Widening it to value patterns needs a sourced pattern and a
+    false-positive budget, so the limit is asserted here instead of implied.
+    """
+    row = normalize_event(_observed(tool_response="authorization: Bearer xyz"))
+
+    assert row is not None
+    assert row["detail"]["result"] == "authorization: Bearer xyz"
+
+
+def test_an_unserializable_payload_degrades_to_text_instead_of_raising():
+    class _Opaque:
+        def __repr__(self):
+            return "<opaque>"
+
+    row = normalize_event(_observed(tool_response={"handle": _Opaque()}))
+
+    assert row is not None
+    assert "<opaque>" in row["detail"]["result"]
+
+
+@pytest.mark.parametrize("empty", [None, "", {}, []])
+def test_empty_observed_payloads_add_no_detail_keys(empty):
+    """Absence is the behaviour: an empty payload must not create a blank
+    `input_summary`/`result` the panel would render as a filled-in field."""
+    row = normalize_event(_observed(tool_input=empty, tool_response=empty))
+
+    assert row is not None
+    assert "input_summary" not in row["detail"]
+    assert "result" not in row["detail"]
+
+
+def test_tool_result_is_read_when_the_host_sends_no_tool_response():
+    row = normalize_event(_observed(tool_result={"rows": 1}))
+
+    assert row is not None
+    assert row["detail"]["result"] == '{"rows":1}'
+
+
+def test_an_explicit_null_tool_response_wins_over_tool_result():
+    """`tool_response` present-but-null means "the tool returned nothing", and
+    must not silently fall back to a stale `tool_result` from the same event."""
+    row = normalize_event(_observed(tool_response=None, tool_result={"rows": 1}))
+
+    assert row is not None
+    assert "result" not in row["detail"]

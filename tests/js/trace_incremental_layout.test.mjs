@@ -252,6 +252,97 @@ describe('Trace topology-aware append', () => {
     expect(local.affectedDomains).toEqual({ 'domain:dev': true });
   });
 
+  function packWith(nodes, edges, addedIds, changedEdges) {
+    const { ctx } = mountTraceHarness();
+    const slotOf = Object.fromEntries(
+      nodes.map((node, index) => [node.id, { x: index * 10, y: index * 10 }])
+    );
+    return window.JUG._wfg.packTraceExpansion({
+      ...ctx,
+      nodes,
+      byId: Object.fromEntries(nodes.map((node) => [node.id, node])),
+      domainOf: Object.fromEntries(nodes.map((node) => [node.id, 'domain:dev'])),
+      slotOf,
+    }, edges, addedIds, changedEdges, {});
+  }
+
+  it('prefers an observed cause that knows its position in the session', () => {
+    // Two candidate parents for one effect: the action carries a `seq` (it is
+    // a point on the session's spine), the file does not. The anchor must be
+    // the ordered one, or a revealed effect emerges from whichever candidate
+    // the edge list happened to mention first.
+    const nodes = [
+      { id: 'domain:dev', kind: 'domain' },
+      { id: 'session:s', kind: 'session', session_id: 's' },
+      { id: 'file:helper', kind: 'file', session_id: 's' },
+      { id: 's:a4', kind: 'action', session_id: 's', seq: 4 },
+      { id: 's:new', kind: 'action', session_id: 's', seq: 5 },
+    ];
+    const edges = [
+      { source: 'file:helper', target: 's:new', kind: 'read' },
+      { source: 's:a4', target: 's:new', kind: 'next' },
+    ];
+
+    expect(packWith(nodes, edges, ['s:new'], []).anchorOf['s:new']).toBe('s:a4');
+  });
+
+  it('breaks a tie between two unordered causes the same way in either order', () => {
+    const nodes = [
+      { id: 'domain:dev', kind: 'domain' },
+      { id: 'session:s', kind: 'session', session_id: 's' },
+      { id: 'file:b', kind: 'file', session_id: 's' },
+      { id: 'file:a', kind: 'file', session_id: 's' },
+      { id: 's:new', kind: 'action', session_id: 's' },
+    ];
+    const edges = [
+      { source: 'file:b', target: 's:new', kind: 'read' },
+      { source: 'file:a', target: 's:new', kind: 'read' },
+    ];
+    const forward = packWith(nodes, edges, ['s:new'], []);
+    const reversed = packWith([...nodes].reverse(), [...edges].reverse(), ['s:new'], []);
+
+    expect(forward.anchorOf['s:new']).toBe('file:a');
+    expect(reversed.anchorOf['s:new']).toBe(forward.anchorOf['s:new']);
+  });
+
+  it('falls back to the session root when nothing caused the new node', () => {
+    const nodes = [
+      { id: 'domain:dev', kind: 'domain' },
+      { id: 'session:s', kind: 'session', session_id: 's' },
+      { id: 's:orphan', kind: 'action', session_id: 's' },
+    ];
+
+    expect(packWith(nodes, [], ['s:orphan'], []).anchorOf['s:orphan'])
+      .toBe('session:s');
+  });
+
+  it('accepts an append that reports no changed edges at all', () => {
+    // The Galaxy-side caller omits the argument entirely; a missing list must
+    // not throw and must not lose the added node's target.
+    const nodes = [
+      { id: 'domain:dev', kind: 'domain' },
+      { id: 'session:s', kind: 'session', session_id: 's' },
+      { id: 's:new', kind: 'action', session_id: 's', seq: 1 },
+    ];
+    const local = packWith(nodes, [], ['s:new'], undefined);
+
+    expect(Object.keys(local.targets)).toEqual(['s:new']);
+    expect(local.affectedDomains).toEqual({ 'domain:dev': true });
+  });
+
+  it('is a no-op with nothing to move and no animation in flight', () => {
+    const { ctx, sim, redraw, redrawNow, pendingAnimationFrames } = mountTraceHarness();
+    const requestFrame = window.requestAnimationFrame.bind(window);
+
+    const duration = window.JUG._wfg.animateTraceExpansion(
+      ctx, { targets: {} }, sim, { redraw, redrawNow }, requestFrame
+    );
+
+    expect(duration).toBe(0);
+    expect(pendingAnimationFrames()).toBe(0);
+    expect(sim._traceAnimationState).toBeFalsy();
+  });
+
   it('reveals each new effect beside its immediate causal parent', () => {
     vi.useFakeTimers();
     const { handle, ctx, flushAnimation, pendingAnimationFrames } = mountTraceHarness([
