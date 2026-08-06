@@ -55,6 +55,27 @@ afterEach(() => {
 });
 
 describe('progress poll — offline degradation', () => {
+  it('renders the current mixed-kind Trace snapshot into the legend and status strip', () => {
+    document.body.insertAdjacentHTML('beforeend', [
+      's-dom', 's-mem', 's-ent', 's-disc', 's-nodes', 's-edge', 'sb-nodes', 'sb-edges',
+    ].map((id) => `<div id="${id}"></div>`).join(''));
+    window.JUG.state.activeView = 'trace';
+    window.JUG.__wfgRendered = {
+      nodes: 4, edges: 3, domain: 1, memory: 1, discussion: 1,
+    };
+
+    window.JUG.emit('state:lastData', {});
+
+    expect(document.getElementById('s-dom').textContent).toBe('1');
+    expect(document.getElementById('s-mem').textContent).toBe('1');
+    expect(document.getElementById('s-ent').textContent).toBe('1');
+    expect(document.getElementById('s-disc').textContent).toBe('1');
+    expect(document.getElementById('s-nodes').textContent).toBe('4');
+    expect(document.getElementById('s-edge').textContent).toBe('3');
+    expect(document.getElementById('sb-nodes').textContent).toBe('4/4');
+    expect(document.getElementById('sb-edges').textContent).toBe('3/3');
+  });
+
   it('does not degrade before the failure threshold', async () => {
     installFailingFetch();
     for (let i = 0; i < poll.offlineAfter - 1; i++) await pollOnce();

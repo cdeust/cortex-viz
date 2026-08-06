@@ -9,6 +9,7 @@
   var WFG_KINDS = {
     domain: 1, skill: 1, command: 1, hook: 1, agent: 1,
     tool_hub: 1, file: 1, memory: 1, discussion: 1, entity: 1,
+    mcp: 1, api: 1, database: 1,
   };
   var _handle = null;
   var _wrapperId = 'wfg-container';
@@ -130,7 +131,8 @@
       if (!isWorkflowGraph(data)) return;
       // ── Incremental fast-path (the streaming hot path) ──
       // Every SSE batch and phase-load lands here via appendGraphDelta, which
-      // emits a `delta` of ONLY the newly-added nodes/edges (graph.js). If the
+      // emits a `delta` of newly-added nodes/edges plus field-enriched duplicate
+      // nodes (graph.js). If the
       // live handle already renders THIS view, push that delta into the
       // existing simulation (handle.append → workflow_graph.js:append mutates
       // ctx.nodes/ctx.edges in place and gently reheats) instead of
@@ -146,7 +148,12 @@
           && haveDelta && _lastPayload
           && _viewOf(_lastPayload) === _viewOf(data)) {
         try {
-          _handle.append(delta.nodes || [], delta.edges || []);
+          _handle.append(delta.nodes || [], delta.edges || [], {
+            // Trace deltas expand a tree around a clicked node; their slots,
+            // domain propagation and adjacency must be refreshed immediately.
+            // Galaxy keeps the existing O(delta) streaming hot path.
+            topologyAware: _viewOf(data) === 'trace',
+          });
           // The accumulated payload object is mutated in place (same ref), so
           // _lastPayload / _byView already point at it — a later view switch
           // re-renders the full accumulated graph, not a stale snapshot.

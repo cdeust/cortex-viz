@@ -11,6 +11,7 @@
 // loaded next) calls it.
 (function () {
   var C = window.JUG._wfgConst;
+  var GOLDEN = Math.PI * (3 - Math.sqrt(5));
   var TOOL_R = C.TOOL_R, FILE_R = C.FILE_R, SETUP_R = C.SETUP_R;
   var DISC_R = C.DISC_R, MEM_R = C.MEM_R, MCP_R = C.MCP_R;
   var TOOL_LOCAL_ANGLE = C.TOOL_LOCAL_ANGLE;
@@ -22,9 +23,130 @@
   var ENTITY_HEAT_TAU = C.ENTITY_HEAT_TAU;
   var ENTITY_TOPN = C.ENTITY_TOPN;
 
+  var TRACE_CAUSAL_EDGE = { step: 1, next: 1, did: 1, read: 1, edit: 1,
+    write: 1, run: 1, use: 1, call: 1, spawn: 1, fetch: 1,
+    discusses: 1, remembers: 1 };
+  function edgePair(edge) {
+    return [(edge.source && edge.source.id) || edge.source,
+      (edge.target && edge.target.id) || edge.target];
+  }
+  function traceCausalContext(nodes, edges) {
+    var byId = {}, rootOf = {}, rootSets = {}, predecessors = {}, shared = {};
+    nodes.forEach(function (node) {
+      byId[node.id] = node;
+      var root = node.kind === 'session' ? node.id
+        : (node.session_id ? 'session:' + node.session_id : null);
+      if (root) { rootSets[node.id] = {}; rootSets[node.id][root] = true; }
+    });
+    var causalEdges = (edges || []).filter(function (edge) {
+      var pair = edgePair(edge);
+      return TRACE_CAUSAL_EDGE[edge.kind] && byId[pair[0]] && byId[pair[1]];
+    }).sort(function (left, right) {
+      var a = edgePair(left).join('\u0000') + '\u0000' + left.kind;
+      var b = edgePair(right).join('\u0000') + '\u0000' + right.kind;
+      return a.localeCompare(b);
+    });
+    // Fixed point, not a pass limit: shuffled or long chains inherit the same
+    // canonical session without changing their compact visual order.
+    var changed = true;
+    while (changed) {
+      changed = false;
+      causalEdges.forEach(function (edge) {
+        var pair = edgePair(edge), sourceRoots = rootSets[pair[0]];
+        if (!sourceRoots) return;
+        var targetRoots = rootSets[pair[1]] = rootSets[pair[1]] || {};
+        Object.keys(sourceRoots).forEach(function (root) {
+          if (!targetRoots[root]) { targetRoots[root] = true; changed = true; }
+        });
+      });
+    }
+    Object.keys(rootSets).forEach(function (id) {
+      var roots = Object.keys(rootSets[id]).sort();
+      if (roots.length) rootOf[id] = roots[0];
+      if (roots.length > 1) shared[id] = true;
+    });
+    causalEdges.forEach(function (edge) {
+      var pair = edgePair(edge);
+      (predecessors[pair[1]] = predecessors[pair[1]] || []).push(pair[0]);
+    });
+    return { rootOf: rootOf, predecessors: predecessors, shared: shared };
+  }
+
   // Assign each non-domain node a target (x,y) slot expressing the hierarchy:
   //   domain → L1 (setup) → L2 (tools) → L3 (files);  discussions lane;  memories lane.
-  function computeSlots(nodes, domains, anchors, domainOf, primaryHub, parentFile, cx, cy, edges, byId, isTrace) {
+  function resolveTraceCollisions(nodes, domains, anchors, domainOf, slotOf, radiusOf) {
+    var radii = {}, grouped = {}, maxRadius = 0;
+    nodes.forEach(function (node) {
+      var radius = radiusOf(node);
+      radii[node.id] = radius;
+      maxRadius = Math.max(maxRadius, radius);
+      var domainId = domainOf[node.id];
+      if (node.kind !== 'domain' && domainId && slotOf[node.id]) {
+        (grouped[domainId] = grouped[domainId] || []).push(node);
+      }
+    });
+    // A cell spans the largest possible collision distance (r1+r2). Therefore
+    // an exact query needs only the candidate cell and its eight neighbours.
+    var cell = Math.max(Number.EPSILON, 2 * maxRadius), buckets = {};
+    function key(x, y) { return Math.floor(x / cell) + ',' + Math.floor(y / cell); }
+    function insert(item) {
+      var bucket = buckets[key(item.x, item.y)];
+      if (!bucket) bucket = buckets[key(item.x, item.y)] = [];
+      bucket.push(item);
+    }
+    function nearby(x, y) {
+      var result = [], cx2 = Math.floor(x / cell), cy2 = Math.floor(y / cell);
+      for (var dx = -1; dx <= 1; dx++) for (var dy = -1; dy <= 1; dy++) {
+        var bucket = buckets[(cx2 + dx) + ',' + (cy2 + dy)];
+        if (bucket) result.push.apply(result, bucket);
+      }
+      return result;
+    }
+    // Every domain anchor is an immutable obstacle before any child is placed;
+    // later domains therefore yield around earlier content without moving hubs.
+    domains.forEach(function (domain) {
+      var anchor = anchors[domain.id];
+      if (anchor) insert({ x: anchor.x, y: anchor.y, radius: radii[domain.id] });
+    });
+    domains.forEach(function (domain) {
+      (grouped[domain.id] || []).sort(function (left, right) {
+        var band = { session: 0, prompt: 1, action: 2, discussion: 3, memory: 4, file: 5 };
+        var lb = band[left.kind] == null ? 6 : band[left.kind];
+        var rb = band[right.kind] == null ? 6 : band[right.kind];
+        if (lb !== rb) return lb - rb;
+        var ls = left.seq == null ? Number.MAX_SAFE_INTEGER : left.seq;
+        var rs = right.seq == null ? Number.MAX_SAFE_INTEGER : right.seq;
+        return ls === rs ? String(left.id).localeCompare(String(right.id)) : ls - rs;
+      }).forEach(function (node) {
+        var target = slotOf[node.id], radius = radiusOf(node), penetration = 0;
+        function collides(x, y) {
+          penetration = 0;
+          var candidates = nearby(x, y);
+          for (var i = 0; i < candidates.length; i++) {
+            var other = candidates[i];
+            var distance = Math.hypot(x - other.x, y - other.y);
+            penetration = Math.max(penetration, radius + other.radius - distance);
+          }
+          return penetration > 0;
+        }
+        var x = target.x, y = target.y;
+        if (collides(x, y)) {
+          var overlap = penetration;
+          for (var k = 1; ; k++) {
+            var distance = overlap + 2 * radius * Math.sqrt(k);
+            var angle = k * GOLDEN;
+            x = target.x + distance * Math.cos(angle);
+            y = target.y + distance * Math.sin(angle);
+            if (!collides(x, y)) break;
+          }
+          slotOf[node.id] = { x: x, y: y };
+        }
+        insert({ x: x, y: y, radius: radius });
+      });
+    });
+  }
+
+  function computeSlots(nodes, domains, anchors, domainOf, primaryHub, parentFile, cx, cy, edges, byId, isTrace, radiusOf) {
     // Group non-domain nodes by (domain, kind).
     var groups = {};
     for (var i = 0; i < nodes.length; i++) {
@@ -38,6 +160,8 @@
     }
     var slotOf = {};
     var setupKinds = ['skill', 'hook', 'command', 'agent'];
+    var traceCausal = isTrace ? traceCausalContext(nodes, edges)
+      : { rootOf: {}, predecessors: {}, shared: {} };
 
     // ── Entity → linked-memory index (Gap 10 / Kekulé positioning).
     //    One pass over the about_entity edge set builds, per entity,
@@ -73,22 +197,6 @@
     // below can pack the file into that session's disk (outer band) instead of
     // flinging it to the orphan ring. Galaxy files use tool_used_file edges (not
     // these verbs) so this map stays empty for them — they fall through to L3.
-    var fileSession = {};
-    if (edges && edges.length) {
-      var _verbKinds = { read: 1, edit: 1, write: 1, run: 1 };
-      for (var vfi = 0; vfi < edges.length; vfi++) {
-        var ve = edges[vfi];
-        if (!_verbKinds[ve.kind]) continue;
-        var vaId = typeof ve.source === 'object' ? ve.source.id : ve.source;
-        var vbId = typeof ve.target === 'object' ? ve.target.id : ve.target;
-        var vaN = byId[vaId], vbN = byId[vbId];
-        var vAct = vaN && vaN.kind === 'action' ? vaN : (vbN && vbN.kind === 'action' ? vbN : null);
-        var vFil = vaN && vaN.kind === 'file' ? vaN : (vbN && vbN.kind === 'file' ? vbN : null);
-        if (!vAct || !vFil || !vAct.session_id) continue;
-        if (!fileSession[vFil.id]) fileSession[vFil.id] = 'session:' + vAct.session_id;
-      }
-    }
-
     Object.keys(groups).forEach(function (domId) {
       var a = anchors[domId];
       var outward = Math.atan2(a.y - cy, a.x - cx);  // radially outward from graph center
@@ -125,7 +233,10 @@
       // so only admit discussions when this is a trace layout.
       var clusterKinds = ['prompt', 'action', 'file',
                           'wiki_page', 'entity', 'symbol', 'memory', 'prd'];
-      if (isTrace) clusterKinds.push('discussion');
+      if (isTrace) {
+        clusterKinds.push('discussion', 'tool_hub', 'mcp', 'api', 'database',
+                          'skill', 'command', 'agent', 'web');
+      }
       clusterKinds.forEach(function (kind) {
         (g[kind] || []).forEach(function (n) {
           // cluster (cross-lens) → session_id (trace prompt/action/discussion/
@@ -134,7 +245,7 @@
           // entity/symbol/file) and is left to its kind-lane downstream.
           var sid = n.cluster
             || (n.session_id ? 'session:' + n.session_id : null)
-            || fileSession[n.id];
+            || (isTrace ? traceCausal.rootOf[n.id] : null);
           if (!sid) return;
           (bySession[sid] = bySession[sid] || []).push(n);
         });
@@ -150,7 +261,6 @@
       // ring radius until the whole run fits in 2π. Even, non-overlapping,
       // exactly the galaxy's "tight disks with gaps".
       var DOT = 13;                       // ~node spacing in the spiral
-      var GOLDEN = Math.PI * (3 - Math.sqrt(5));
       var GAP = 16;                       // hard gap between adjacent disks
       function clusterRadius(count) { return DOT * Math.sqrt(Math.max(count, 1)) + 14; }
 
@@ -171,9 +281,10 @@
           var qk = KIND_BAND[q.kind] != null ? KIND_BAND[q.kind] : 3;
           if (pk !== qk) return pk - qk;
           var ps = (p.seq != null ? p.seq : 1e9), qs = (q.seq != null ? q.seq : 1e9);
-          return ps - qs;
+          return ps === qs ? String(p.id).localeCompare(String(q.id)) : ps - qs;
         });
-        return { node: sessNodeBySid[sid] || null, items: items, rad: clusterRadius(items.length) };
+        return { sid: sid, node: sessNodeBySid[sid] || null,
+          items: items, rad: clusterRadius(items.length) };
       });
       // ── Collapse UNEXPANDED session hubs into ONE compact blob ──────────────
       // A domain holds dozens of sessions but only a few are expanded (chain
@@ -193,14 +304,19 @@
         else contentClusters.push(c);
       });
       if (emptyHubNodes.length) {
+        emptyHubNodes.sort(function (a3, b3) { return String(a3.id).localeCompare(String(b3.id)); });
         contentClusters.push({
-          node: null, items: emptyHubNodes, rad: clusterRadius(emptyHubNodes.length),
+          sid: '', node: null, items: emptyHubNodes,
+          rad: clusterRadius(emptyHubNodes.length),
         });
       }
       clusters = contentClusters;
       // Largest disks first → each ring's thickness is set by its biggest disk,
       // and big disks land in the inner rings (stable, dense packing).
-      clusters.sort(function (a2, b2) { return b2.rad - a2.rad; });
+      clusters.sort(function (a2, b2) {
+        return b2.rad === a2.rad
+          ? String(a2.sid).localeCompare(String(b2.sid)) : b2.rad - a2.rad;
+      });
 
       // ── GRAVITY-PACK session disks tight around the domain hub ──────────────
       // Concentric rings (the prior fix) placed disks at INCREASING radii, so a
@@ -258,6 +374,7 @@
       // L2: tool_hubs at fixed per-tool angles within the setup sector.
       var hubAngle = {};
       (g.tool_hub || []).forEach(function (h) {
+        if (slotOf[h.id]) return;
         var local = TOOL_LOCAL_ANGLE[h.tool];
         if (local == null) local = 0;
         var t = outward + local;
@@ -304,7 +421,9 @@
 
       // L1: skills, hooks, commands, agents — fanned inner ring.
       var setup = [];
-      setupKinds.forEach(function (k) { (g[k] || []).forEach(function (x) { setup.push(x); }); });
+      setupKinds.forEach(function (k) { (g[k] || []).forEach(function (x) {
+        if (!slotOf[x.id]) setup.push(x);
+      }); });
       if (setup.length) {
         var arc1 = SECTOR_SETUP_HALF * 2;
         setup.forEach(function (n, i) {
@@ -350,6 +469,7 @@
       // domain anchor), so their long INVOKED_MCP edges fan visibly between
       // domains that share the MCP.
       (g.mcp || []).forEach(function (n, i) {
+        if (slotOf[n.id]) return;
         var t = outward + Math.PI;  // inward
         var jitter = (i - (g.mcp.length - 1) / 2) * 0.25;
         slotOf[n.id] = { x: a.x + MCP_R * Math.cos(t + jitter),
@@ -416,10 +536,14 @@
       // initial x/y seeding happens in mount() from the parent file's
       // position, then the force simulation does the layout work.
     });
+    if (isTrace && radiusOf) {
+      resolveTraceCollisions(nodes, domains, anchors, domainOf, slotOf, radiusOf);
+    }
     return slotOf;
   }
 
   window.JUG = window.JUG || {};
   window.JUG._wfg = window.JUG._wfg || {};
   window.JUG._wfg.computeSlots = computeSlots;
+  window.JUG._wfg.traceCausalContext = traceCausalContext;
 })();

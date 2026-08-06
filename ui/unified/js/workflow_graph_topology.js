@@ -42,6 +42,7 @@
       var k = n.kind || n.type;
       return k === 'session' || k === 'action' || k === 'prompt';
     });
+    if (isTrace) domains.sort(function (a, b) { return String(a.id).localeCompare(String(b.id)); });
 
     var cx = width / 2, cy = height / 2;
     // Each domain's outer shell is roughly FILE_R + cushion; Fibonacci
@@ -86,20 +87,33 @@
     // spine (they hang off a prompt/action without advancing it); they MUST be
     // here too, or those branch nodes never inherit a domain, fail the
     // anchored-domain gate in computeSlots, and pile at the origin as a fan.
-    var _traceEdgeKinds = { has_session: 1, step: 1, next: 1,
-      read: 1, edit: 1, write: 1, run: 1, discusses: 1, remembers: 1 };
-    for (var _pass = 0; _pass < 6; _pass++) {
-      var _changed = false;
+    var _traceEdgeKinds = { has_session: 1, step: 1, next: 1, did: 1,
+      read: 1, edit: 1, write: 1, run: 1, use: 1, call: 1,
+      spawn: 1, fetch: 1, discusses: 1, remembers: 1 };
+    var _domainSets = {};
+    Object.keys(domainOf).forEach(function (id) {
+      _domainSets[id] = {}; _domainSets[id][domainOf[id]] = true;
+    });
+    var _changed = true;
+    while (_changed) {
+      _changed = false;
       for (var _ei = 0; _ei < edges.length; _ei++) {
         var te = edges[_ei];
         if (!_traceEdgeKinds[te.kind]) continue;
         var ss = typeof te.source === 'object' ? te.source.id : te.source;
         var tt = typeof te.target === 'object' ? te.target.id : te.target;
-        if (domainOf[ss] && !domainOf[tt]) { domainOf[tt] = domainOf[ss]; _changed = true; }
-        else if (domainOf[tt] && !domainOf[ss]) { domainOf[ss] = domainOf[tt]; _changed = true; }
+        var sourceDomains = _domainSets[ss];
+        if (!sourceDomains) continue;
+        var targetDomains = _domainSets[tt] = _domainSets[tt] || {};
+        Object.keys(sourceDomains).forEach(function (did) {
+          if (!targetDomains[did]) { targetDomains[did] = true; _changed = true; }
+        });
       }
-      if (!_changed) break;
     }
+    Object.keys(_domainSets).forEach(function (id) {
+      var memberships = Object.keys(_domainSets[id]).sort();
+      if (memberships.length) domainOf[id] = memberships[0];
+    });
 
     // Parent file per symbol — drives the symbol-petal clustering.
     // Prefer `defined_in` edges; fall back to `path` string match.
@@ -159,7 +173,11 @@
       adj[e.source][e.target] = true; adj[e.target][e.source] = true;
     });
 
-    var slotOf = computeSlots(nodes, domains, anchors, domainOf, primaryHub, parentFile, cx, cy, edges, byId, isTrace);
+    var slotOf = computeSlots(
+      nodes, domains, anchors, domainOf, primaryHub, parentFile, cx, cy,
+      edges, byId, isTrace,
+      function (node) { return collisionRadius(node, { degree: degree }); }
+    );
 
     return { byId: byId, nodes: nodes, edges: edges, domains: domains,
       anchors: anchors, domainOf: domainOf, primaryHub: primaryHub,

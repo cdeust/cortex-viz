@@ -29,7 +29,10 @@
   };
   var KIND_TOKEN = {
     domain: '--warn-ink', session: '--warn-ink', prompt: '--stage-early',
-    action: '--tool-read', file: '--tool-read',
+    action: '--tool-read', file: '--tool-read', tool_hub: '--kind-entity',
+    mcp: '--kind-mcp', api: '--kind-mcp', database: '--ok-ink',
+    skill: '--kind-skill', command: '--kind-command', agent: '--kind-agent',
+    web: '--tool-web',
   };
   function _resolveToken(token) {
     if (!token) return null;
@@ -110,6 +113,21 @@
         + esc((node.session_id || '').slice(0, 8))
         + '. Expand the session on the graph to see the full chain.</div>',
         { open: true });
+      if (node.target_label) {
+        h += '<div class="conn-item">Target: ' + esc(node.target_label)
+          + (node.target_kind ? ' · ' + esc(node.target_kind) : '') + '</div>';
+      }
+      if (node.input_summary) {
+        h += section('Observed input', 'td-action-input',
+          '<div class="detail-text">' + esc(node.input_summary) + '</div>', { open: true });
+      }
+      if (node.result) {
+        h += section('Observed result', 'td-action-result',
+          '<div class="detail-text">' + esc(node.result) + '</div>', {});
+      }
+      if (node.host) h += '<div class="conn-item">Host: ' + esc(node.host) + '</div>';
+      if (node.session_id) h += '<button class="disc-view-btn" data-session-id="'
+        + esc(node.session_id) + '">View Full Conversation</button>';
       return h;
     }
     if (k === 'session') {
@@ -167,6 +185,13 @@
         + '">View Full Conversation</button>';
       return h;
     }
+    if (k === 'tool_hub' || k === 'mcp' || k === 'api' || k === 'database'
+        || k === 'skill' || k === 'command' || k === 'agent' || k === 'web') {
+      h += '<div class="conn-item">Observed activity target</div>';
+      if (node.session_id) h += '<button class="disc-view-btn" data-session-id="'
+        + esc(node.session_id) + '">View Full Conversation</button>';
+      return h;
+    }
     return h;
   }
 
@@ -211,8 +236,14 @@
       .catch(function () { return null; });
   }
 
+  var _fileWireVersion = 0;
   function _wireFile(content, node) {
+    var wireVersion = ++_fileWireVersion;
+    content.__traceFileWireVersion = wireVersion;
     _resolveFilePath(node).then(function (path) {
+      // A same-id enrichment may have rebuilt this panel while the sparse
+      // lookup was in flight. Never let the older miss overwrite that render.
+      if (content.__traceFileWireVersion !== wireVersion) return;
       var pathSlot = content.querySelector('#td-file-path');
       if (pathSlot) pathSlot.textContent = path || 'Path unknown for this node';
       if (!path) { _markFileSectionsUnknown(content); return; }

@@ -117,7 +117,7 @@ def test_scan_session_meta_handles_live_jsonl_and_read_errors(tmp_path):
         "last_ts": "2026-01-03T00:00:00Z",
         "first_prompt": "First prompt",
         "git_branch": "feature",
-        "action_count": 1,
+        "action_count": 2,
         "path": str(transcript),
     }
 
@@ -163,12 +163,17 @@ def test_list_sessions_filters_noise_and_orders_newest(tmp_path, monkeypatch):
     _write_jsonl(other / "other.jsonl", {"type": "user"})
 
     payload = trace_source.list_sessions("domain:cortex")
-    assert [node["session_id"] for node in payload["nodes"]] == ["new", "old"]
-    assert payload["nodes"][0]["label"].endswith("…")
-    assert payload["nodes"][0]["action_count"] == 1
+    assert [node["session_id"] for node in payload["nodes"]] == [
+        "quiet",
+        "new",
+        "old",
+    ]
+    assert payload["nodes"][1]["label"].endswith("…")
+    assert all(node["action_count"] == 1 for node in payload["nodes"])
     assert {edge["target"] for edge in payload["edges"]} == {
         "session:old",
         "session:new",
+        "session:quiet",
     }
     assert trace_source.list_sessions("domain:missing") == {"nodes": [], "edges": []}
 
@@ -210,6 +215,12 @@ def test_find_and_iter_session_events_fold_subagents_and_classify(
                         "input": {"query": "history"},
                     },
                     {"type": "tool_use", "name": "TodoWrite"},
+                    {"type": "tool_use", "name": "Skill", "input": {"skill": "review"}},
+                    {
+                        "type": "tool_use",
+                        "name": "mcp__postgres__query",
+                        "input": {"query": "SELECT 1"},
+                    },
                     {"type": "tool_use", "name": "Read", "input": None},
                 ]
             },
@@ -261,10 +272,19 @@ def test_find_and_iter_session_events_fold_subagents_and_classify(
         "memory",
         "memory",
         "action",
+        "action",
+        "action",
+        "action",
         "prompt",
         "action",
     ]
     assert events[2]["op"] == "remember" and events[2]["text"] == "decision"
     assert events[3]["op"] == "recall" and events[3]["text"] == "history"
-    assert events[4]["tool"] == "Read" and events[4]["cwd"] == "/repo"
+    assert [event["tool"] for event in events[4:8]] == [
+        "TodoWrite",
+        "Skill",
+        "mcp__postgres__query",
+        "Read",
+    ]
+    assert events[7]["cwd"] == "/repo"
     assert events[-1]["tool"] == "Bash" and events[-1]["cwd"] == ""

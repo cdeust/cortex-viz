@@ -145,6 +145,39 @@ def test_event_to_graph_fresh_row_carries_path_on_file_node():
     assert file_nodes[0]["path"] == "/Users/dev/repo/foo.py"
 
 
+def test_event_to_graph_carries_observed_context_for_trace_projection():
+    row = {
+        "session_id": "s1",
+        "seq": 9,
+        "ts": 4.5,
+        "event_type": "tool_call",
+        "action": "mcp_call",
+        "tool": "mcp__postgres__query",
+        "target_id": "mcp:postgres",
+        "target_kind": "mcp",
+        "target_label": "postgres:query",
+        "edge_kind": "call",
+        "cwd": "/repo",
+        "detail": {
+            "host": "codex",
+            "input_summary": "SELECT id FROM session_activity",
+            "result": "3 rows",
+        },
+    }
+
+    frag = event_to_graph(row)
+    session = next(node for node in frag["nodes"] if node["kind"] == "session")
+    action = next(node for node in frag["nodes"] if node["kind"] == "action")
+
+    assert session["session_id"] == "s1"
+    assert action["domain_id"] == "session:s1"
+    assert action["seq"] == 9
+    assert action["host"] == "codex"
+    assert action["input_summary"] == "SELECT id FROM session_activity"
+    assert action["result"] == "3 rows"
+    assert action["target_label"] == "postgres:query"
+
+
 def test_event_to_graph_command_path_node_carries_path():
     row = {
         "session_id": "s1",

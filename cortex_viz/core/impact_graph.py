@@ -106,7 +106,7 @@ def impact_to_graph(
         f = it.get("file")
         if not f:
             continue
-        nid = f"file:{f}"
+        nid = NodeIdFactory.file_id(f)
         if nid not in seen:
             seen.add(nid)
             nodes.append(
@@ -115,6 +115,7 @@ def impact_to_graph(
                     "kind": "file",
                     "type": "file",
                     "label": f.rsplit("/", 1)[-1] or f,
+                    "path": f,
                 }
             )
         edges.append(

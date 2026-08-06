@@ -465,12 +465,13 @@
 <!-- workflow_graph.js split (issue #41): pure-data constants, LOD/edge-coverage
      seams, token/colour resolution, slot layout, and topology+forces load as
      siblings BEFORE the orchestrator, which binds their JUG._wfg* seams. Order
-     matters (no bundler): const -> lod -> tokens -> slots -> topology -> main. -->
+     matters (no bundler): const -> lod -> tokens -> slots -> topology -> trace layout -> main. -->
 <script src="/js/workflow_graph_const.js?v=117ece5"></script>
 <script src="/js/workflow_graph_lod.js?v=117ece5"></script>
 <script src="/js/workflow_graph_tokens.js?v=117ece5"></script>
 <script src="/js/workflow_graph_slots.js?v=117ece5"></script>
 <script src="/js/workflow_graph_topology.js?v=117ece5"></script>
+<script src="/js/workflow_graph_trace_layout.js?v=e9dea82"></script>
 <script src="/js/workflow_graph.js?v=117ece5"></script>
 <!-- Bridge enabled (2026-05-28): re-enabled now that it has a 500 ms
      debounce + 5 s safety-net. The old disable comment was from a

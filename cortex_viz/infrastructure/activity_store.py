@@ -105,10 +105,16 @@ def read_recent(store, *, limit: int = 2000, since_id: int = 0) -> list[dict]:
     the replay so an enormous backlog can't stall first paint.
     """
     _ensure_table(store)
+    # Keep the newest bounded window, then restore chronological order for
+    # replay. The former ``ORDER BY id ASC LIMIT`` returned the oldest-ever
+    # rows on a fresh ``since=0`` connection and could omit today's activity
+    # forever once the table exceeded the replay limit.
     sql = (
-        "SELECT id, session_id, ts, event_type, tool, action, target_id, "
-        "       target_kind, target_label, edge_kind, cwd, detail "
-        "FROM session_activity WHERE id > %s ORDER BY id ASC LIMIT %s"
+        "SELECT * FROM ("
+        " SELECT id, session_id, ts, event_type, tool, action, target_id, "
+        "        target_kind, target_label, edge_kind, cwd, detail "
+        " FROM session_activity WHERE id > %s ORDER BY id DESC LIMIT %s"
+        ") AS recent_activity ORDER BY id ASC"
     )
     with _conn(store) as conn, conn.cursor() as cur:
         cur.execute(sql, (int(since_id), int(limit)))

@@ -44,26 +44,6 @@ def project_dir_to_domain(project_dir_name: str) -> str:
     return f"domain:{domain_id_from_label(label) or 'unknown'}"
 
 
-# Tools that are real graph actions (skip TodoWrite / internal noise).
-_ACTION_TOOLS = frozenset(
-    {
-        "Read",
-        "Edit",
-        "MultiEdit",
-        "Write",
-        "NotebookEdit",
-        "NotebookRead",
-        "Grep",
-        "Glob",
-        "Bash",
-        "Task",
-        "Agent",
-        "WebFetch",
-        "WebSearch",
-    }
-)
-
-
 def _memory_op(name: str) -> str | None:
     """Classify a Cortex memory MCP tool name → ``'remember'`` | ``'recall'``.
 
@@ -198,7 +178,7 @@ def _scan_session_meta(path: Path) -> dict[str, Any] | None:
                             if (
                                 isinstance(b, dict)
                                 and b.get("type") == "tool_use"
-                                and (b.get("name") or "") in _ACTION_TOOLS
+                                and b.get("name")
                             ):
                                 n_actions += 1
     except OSError:
@@ -364,7 +344,12 @@ def iter_session_events(session_id: str) -> list[dict[str, Any]]:
                                     }
                                 )
                                 continue
-                            if name not in _ACTION_TOOLS:
+                            # Trace is an evidence log: every named tool_use is
+                            # an action. A closed allowlist used to erase Skill,
+                            # arbitrary MCP calls and any tool introduced after
+                            # this reader shipped, making active sessions appear
+                            # empty even though their JSONL contained work.
+                            if not name:
                                 continue
                             events.append(
                                 {

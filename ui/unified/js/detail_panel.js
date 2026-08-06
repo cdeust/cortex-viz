@@ -281,9 +281,13 @@
     // those two kinds on the active view so neither path steals the other's.
     var _k = data.kind || data.type;
     var _trace = !!(window.JUG && JUG.state && JUG.state.activeView === 'trace');
+    var _traceActivityTarget = _trace && (_k === 'tool_hub' || _k === 'mcp' ||
+      _k === 'api' || _k === 'database' || _k === 'skill' ||
+      _k === 'command' || _k === 'agent' || _k === 'web');
     if (_k === 'domain' || _k === 'session' || _k === 'action' ||
         _k === 'prompt' || _k === 'file' ||
-        ((_k === 'discussion' || _k === 'memory') && _trace)) {
+        ((_k === 'discussion' || _k === 'memory') && _trace) ||
+        _traceActivityTarget) {
       content.innerHTML = JUG._traceDetail.build(data);
       panel.classList.add('open');
       panel.classList.remove('minimized');
@@ -406,9 +410,13 @@
     // is active (in the galaxy they fall through to the rich PG-enriched path).
     var _k = node && (node.kind || node.type);
     var _trace = !!(window.JUG && JUG.state && JUG.state.activeView === 'trace');
+    var _traceActivityTarget = _trace && (_k === 'tool_hub' || _k === 'mcp' ||
+      _k === 'api' || _k === 'database' || _k === 'skill' ||
+      _k === 'command' || _k === 'agent' || _k === 'web');
     if (_k === 'domain' || _k === 'session' || _k === 'action' ||
         _k === 'prompt' || _k === 'file' ||
-        ((_k === 'discussion' || _k === 'memory') && _trace)) {
+        ((_k === 'discussion' || _k === 'memory') && _trace) ||
+        _traceActivityTarget) {
       openDetailPanel(node);
       _lastSelectedId = node && node.id;
       return;
@@ -453,6 +461,13 @@
       .catch(function(){ /* keep the lightweight panel on failure */ });
   });
   JUG.on('graph:deselectNode', function(){ _lastSelectedId = null; closeDetailPanel(); });
+  // Incremental Trace can render a sparse node before a richer same-id record
+  // supplies fields such as FILE.path. Refresh only the card that is still
+  // selected; do not emit graph:selectNode again (Trace would re-expand it).
+  JUG.on('graph:nodeUpdated', function(event, value) {
+    var node = value || (event && event.value) || event;
+    if (node && node.id === _lastSelectedId) openDetailPanel(node);
+  });
 
   function minimizeDetailPanel() {
     var panel = document.getElementById('detail-panel');

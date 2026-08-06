@@ -11,6 +11,10 @@ from typing import Any
 _EVENT_KINDS = {
     "prompt",
     "tool_call",
+    "mcp_call",
+    "api_call",
+    "db_read",
+    "db_write",
     "file_read",
     "file_edit",
     "file_write",
@@ -150,6 +154,46 @@ def normalize_host_event(
                 "target_label": tool,
                 "edge_kind": "use",
             }
+        return _row(event, ts, semantics, detail)
+
+    if kind == "mcp_call":
+        if not isinstance(tool, str) or not tool:
+            return None
+        label = str(artifact or tool)
+        semantics = {
+            "action": "mcp_call",
+            "target_id": f"mcp:{label}",
+            "target_kind": "mcp",
+            "target_label": label,
+            "edge_kind": "call",
+        }
+        return _row(event, ts, semantics, detail)
+
+    if kind == "api_call":
+        if not isinstance(artifact, str) or not artifact:
+            return None
+        label = artifact[:_DISPLAY_TEXT_CHARS]
+        semantics = {
+            "action": "api_call",
+            "target_id": f"api:{label}",
+            "target_kind": "api",
+            "target_label": label,
+            "edge_kind": "call",
+        }
+        return _row(event, ts, semantics, detail)
+
+    if kind in {"db_read", "db_write"}:
+        if not isinstance(artifact, str) or not artifact:
+            return None
+        action = "read" if kind == "db_read" else "write"
+        label = artifact[:_DISPLAY_TEXT_CHARS]
+        semantics = {
+            "action": kind,
+            "target_id": f"db:{label}",
+            "target_kind": "database",
+            "target_label": label,
+            "edge_kind": action,
+        }
         return _row(event, ts, semantics, detail)
 
     if kind == "terminal_run":

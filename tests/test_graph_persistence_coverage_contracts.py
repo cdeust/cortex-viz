@@ -100,6 +100,8 @@ def test_activity_store_connection_schema_record_and_queries(monkeypatch):
     cursor.many = [{"id": 2, "detail": {}}, {"id": 3, "detail": {}}]
     recent = activity_store.read_recent(store, limit=5, since_id=1)
     assert [item["seq"] for item in recent] == [2, 3]
+    assert "ORDER BY id DESC LIMIT %s" in cursor.executions[-1][0]
+    assert cursor.executions[-1][0].endswith("ORDER BY id ASC")
     assert activity_store.find_by_target_ids(store, []) == []
     assert [
         item["id"] for item in activity_store.find_by_target_ids(store, ["file:1"])

@@ -17,7 +17,7 @@
     domain: 26, tool_hub: 14, agent: 10, skill: 10, command: 8,
     hook: 9, memory: 7, discussion: 8, entity: 6, file: 5, mcp: 12,
     symbol: 2,
-    session: 16, prompt: 9, action: 6,
+    session: 16, prompt: 9, action: 6, api: 10, database: 10,
   };
 
   // Radial hierarchy inside each domain cloud — FIVE concentric/sector levels:
@@ -94,6 +94,7 @@
     step: 34,
     next: 28,
     read: 30, edit: 30, write: 30, run: 30,
+    did: 28, use: 30, call: 30, spawn: 30, fetch: 30,
   };
   var EDGE_STRENGTH = {
     in_domain: 0.0,                      // layout is slot-anchored; links = slack
@@ -118,6 +119,7 @@
     step: 0.0,
     next: 0.0,
     read: 0.0, edit: 0.0, write: 0.0, run: 0.0,
+    did: 0.0, use: 0.0, call: 0.0, spawn: 0.0, fetch: 0.0,
   };
   var CROSS_DOMAIN_DISTANCE = 260;
   var CROSS_DOMAIN_STRENGTH = 0.02;

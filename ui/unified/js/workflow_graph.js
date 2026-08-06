@@ -1,18 +1,7 @@
-// Cortex — Workflow Graph (D3 v7 force layout): orchestration + forces.
-// Target: many small brain-region clouds, each internally structured,
-// with thin long-range threads between clouds where files/entities are shared.
-// Schema: mcp_server/core/workflow_graph_schema.py
-//   node kinds: domain, skill, command, hook, agent, tool_hub, file, memory, discussion, entity
-//   edge kinds: in_domain, tool_used_file, command_in_hub, invoked_skill, triggered_hook, spawned_agent, about_entity
-// Public API: window.JUG.renderWorkflowGraph(container, data) -> { destroy, select, data }.
-// Renderers are provided by workflow_graph_render_svg.js / _canvas.js on JUG._wfg.
-//
-// Issue #41 split: the constant tables, LOD/edge-coverage seams, token/colour
-// resolution, slot layout, and topology+force helpers now live in sibling
-// modules (workflow_graph_const/_lod/_tokens/_slots/_topology.js), loaded
-// BEFORE this file. This module is the orchestrator: D3 bootstrap, the public
-// renderWorkflowGraph API, and mount()/append() wiring. It binds the sibling
-// seams into locals below so the mount()/append() bodies stay unchanged.
+// Cortex — Workflow Graph orchestration + D3 force wiring.
+// Schema: mcp_server/core/workflow_graph_schema.py. Constants, LOD, tokens,
+// slots, topology and renderers live in the workflow_graph_* sibling modules,
+// loaded before this public renderWorkflowGraph API.
 (function () {
   var C = window.JUG._wfgConst;
   var _wfg = window.JUG._wfg;
@@ -29,7 +18,6 @@
   var symbolMultiCenterForce = _forces.symbolMultiCenterForce;
   var interDomainRepelForce = _forces.interDomainRepelForce;
   var collisionRadius = _forces.collisionRadius;
-
 
   var D3_URL = 'https://cdn.jsdelivr.net/npm/d3@7.8.5/dist/d3.min.js';
   // Always render via canvas. SVG path (mountSVG) cannot grow
@@ -58,24 +46,12 @@
     container.innerHTML = '';
     var handle = { destroy: function () {}, select: function () {},
                    data: data, append: function () { return { addedNodes: 0, addedEdges: 0 }; } };
-    // Renderer selection. The D3 force-graph is the DEFAULT: it shows the
-    // information that makes the view useful — node labels, edges, and the
-    // methodology structure — and it is the renderer users actually read.
-    // The deck.gl GPU scatterplot (``?viz=tilemap``) is an EXPLICIT opt-in
-    // for raw-scale point-cloud inspection: it renders 1M+ pickable points
-    // but carries no labels/edges, so it is never auto-selected — a slightly
-    // truncated-but-legible force graph beats a complete-but-unreadable dot
-    // field. The scatterplot module fetches its own data (/api/quadtree).
-    // T2/T3 scale note: a genuinely huge corpus (≫200k) needs a hierarchical
-    // multilevel force layout (coarsen via fractal_clustering, per-community
-    // layout, persist by zoom band) so the force-graph stays both legible
-    // AND complete — that is the real path to the full ecosystem view, not
-    // the label-less scatterplot. Not implemented yet.
+    // The labelled force graph is the default. The label-less tilemap is an
+    // explicit raw-scale inspection mode and fetches /api/quadtree itself.
     var qs = (window.location && window.location.search) || '';
     var wantForce = qs.indexOf('viz=force') !== -1;
     var wantTilemap = qs.indexOf('viz=tilemap') !== -1;
-    // Force-graph by default; scatterplot ONLY on explicit ?viz=tilemap
-    // (and ?viz=force always wins if both are somehow present).
+    // Force always wins if both query flags are present.
     var useTilemap = wantTilemap && !wantForce;
     if (useTilemap
         && window.JUG && typeof window.JUG.mountTilemap === 'function') {
@@ -265,13 +241,17 @@
     // initial paint AND every live-activity re-mount render the structured
     // galaxy almost immediately, so the graph stays FLUID. Symbols keep the
     // outward-ray pre-seed assigned above; everything else snaps to slotOf.
-    if (_lod.snapToSlots) {
+    if (_lod.snapToSlots || ctx.isTrace) {
       for (var sp = 0; sp < nodes.length; sp++) {
         var spn = nodes[sp];
         var sps = ctx.slotOf[spn.id];
-        if (sps) { spn.x = sps.x; spn.y = sps.y; }
+        if (sps) {
+          spn.x = sps.x; spn.y = sps.y;
+          if (ctx.isTrace) { spn.fx = spn.x; spn.fy = spn.y; }
+        }
       }
-      sim.alphaDecay(0.12);  // ~50 ticks to a brief de-overlap, then halt
+      if (ctx.isTrace) sim.stop();
+      else sim.alphaDecay(0.12);  // ~50 ticks to a brief de-overlap, then halt
     }
 
     var useCanvas = nodes.length > CANVAS_THRESHOLD;
@@ -294,28 +274,19 @@
       sim.alpha(0.3).restart();
     }
     window.addEventListener('resize', onResize);
-
-    // Incremental append: mutate the live ``nodes`` and ``edges``
-    // arrays (== ctx.nodes / ctx.edges) and gently restart the
-    // simulation. Existing nodes stay where they are; new nodes are
-    // seeded near their domain anchor and drift into place under
-    // the force constraints. The canvas renderer reads ctx.nodes /
-    // ctx.edges every frame, so new nodes appear on the next paint
-    // without any DOM rebind. Edges to nodes that aren't yet in the
-    // graph are skipped (caller must re-feed them on a later batch
-    // when both endpoints exist).
-    function append(newNodes, newEdges) {
+    // Incremental append mutates the live arrays. Galaxy batches keep the
+    // throttled force path; Trace asks for a topology refresh because its
+    // session disks and selection adjacency depend on every newly loaded edge.
+    function append(newNodes, newEdges, options) {
       newNodes = newNodes || [];
       newEdges = newEdges || [];
       var addedN = 0, addedE = 0;
-      // Canvas centre — guaranteed-numeric fallback chain. The video
-      // recording showed memories piling on a Fibonacci spiral around
-      // world (0, 0), which is the EXACT default that d3-force's
-      // initializeNodes() places nodes with NaN x/y on. So somewhere
-      // anc.x was NaN/undefined and d3 silently overrode our position.
-      // Belt-and-braces: ctx.cx → ctx.width/2 → window.innerWidth/2 →
-      // a hard-coded value, whichever first yields a finite positive
-      // number.
+      var traceTopology = !!(options && options.topologyAware && ctx.isTrace);
+      var oldPos = {}, oldSlots = ctx.slotOf, addedIds = [];
+      if (traceTopology) nodes.forEach(function (n) {
+        oldPos[n.id] = { x: n.x, y: n.y };
+      });
+      // Numeric fallbacks prevent d3's NaN -> phyllotaxis reset.
       function _finite(v, fallback) {
         return (typeof v === 'number' && isFinite(v)) ? v : fallback;
       }
@@ -323,21 +294,20 @@
                 _finite(window.innerWidth / 2, 600)));
       var cy = _finite(ctx.cy, _finite(ctx.height / 2,
                 _finite(window.innerHeight / 2, 400)));
-      // Build a list of ALL valid anchor coords once, so unknown-
-      // domain memories pick a random EXISTING anchor instead of
-      // falling back to (cx,cy) where they'd pile up on the same
-      // pixel and trigger d3's NaN→spiral re-initialisation through
-      // collision overflow.
       var anchorList = [];
       for (var dk in ctx.anchors) {
         var av = ctx.anchors[dk];
         if (av && isFinite(av.x) && isFinite(av.y)) anchorList.push(av);
       }
       if (anchorList.length === 0) anchorList.push({ x: cx, y: cy });
-
       for (var i = 0; i < newNodes.length; i++) {
         var n = newNodes[i];
-        if (!n || n.id == null || ctx.byId[n.id]) continue;
+        if (!n || n.id == null) continue;
+        var live = ctx.byId[n.id];
+        if (live) {
+          var enriched = false; for (var field in n) if (Object.prototype.hasOwnProperty.call(n, field) && n[field] != null && live[field] == null) { live[field] = n[field]; enriched = true; }
+          if (enriched && window.JUG && typeof JUG.emit === 'function') JUG.emit('graph:nodeUpdated', live); continue;
+        }
         var n2 = Object.assign({}, n);
         var didCandidates = [
           n2.domain_id,
@@ -358,20 +328,14 @@
           }
         }
         if (!anc) {
-          // No specific domain match. Pick a random valid anchor so
-          // memories with mismatched domain labels still cluster
-          // somewhere meaningful (and definitely NOT at world origin).
           anc = anchorList[(Math.random() * anchorList.length) | 0];
           did = 'domain:__global__';
         }
         ctx.domainOf[n2.id] = did;
-
         var angle = Math.random() * Math.PI * 2;
         var rr = 30 + Math.random() * 100;
         var nx = anc.x + Math.cos(angle) * rr;
         var ny = anc.y + Math.sin(angle) * rr;
-        // Final guard: if anything's NaN here it'd trigger d3's
-        // spiral default. Replace with cx/cy + small jitter.
         if (!isFinite(nx) || !isFinite(ny)) {
           nx = cx + (Math.random() - 0.5) * 60;
           ny = cy + (Math.random() - 0.5) * 60;
@@ -380,7 +344,12 @@
         n2.y = ny;
         nodes.push(n2);
         ctx.byId[n2.id] = n2;
-        addedN++;
+        addedIds.push(n2.id);
+        addedN++; _rc.nodes++;
+        var rkind = n2.kind || n2.type || '';
+        if (rkind === 'domain') _rc.domain++;
+        else if (rkind === 'memory') _rc.memory++;
+        else if (rkind === 'discussion') _rc.discussion++;
       }
       for (var j = 0; j < newEdges.length; j++) {
         var e = newEdges[j];
@@ -389,30 +358,78 @@
         var t = (e.target && e.target.id) || e.target;
         if (!ctx.byId[s] || !ctx.byId[t]) continue;
         var e2 = Object.assign({}, e, { source: s, target: t });
-        // Crosslink classification used by the link force.
         var sd = ctx.domainOf[s], td = ctx.domainOf[t];
         e2._crossDomain = !!(sd && td && sd !== td);
         edges.push(e2);
-        addedE++;
+        addedE++; _rc.edges++;
       }
       if (addedN || addedE) {
+        if (traceTopology) {
+          // Refresh topology maps in place; the canvas and camera stay mounted.
+          var topoEdges = edges.map(function (te) {
+            return Object.assign({}, te, {
+              source: (te.source && te.source.id) || te.source,
+              target: (te.target && te.target.id) || te.target,
+            });
+          });
+          var fresh = prepareTopology(nodes, topoEdges, ctx.width, ctx.height);
+          ['byId', 'domains', 'anchors', 'domainOf', 'primaryHub', 'parentFile',
+            'degree', 'adj', 'slotOf', 'isTrace', 'shells', 'sideShells',
+            'cx', 'cy', 'baseR', 'width', 'height'].forEach(function (key) {
+            ctx[key] = fresh[key];
+          });
+          // Preserve world positions; canonical slots animate without remount/camera change.
+          nodes.forEach(function (tn) {
+            if (oldPos[tn.id]) {
+              tn.x = oldPos[tn.id].x; tn.y = oldPos[tn.id].y;
+              tn.vx = 0; tn.vy = 0; tn.fx = tn.x; tn.fy = tn.y;
+            }
+          });
+          var radiusOf = function (tn) { return collisionRadius(tn, ctx); };
+          var local = _wfg.packTraceExpansion(ctx, topoEdges, addedIds,
+                                              newEdges, oldSlots);
+          Object.keys(local.targets).forEach(function (id) {
+            var target = local.targets[id];
+            ctx.slotOf[id] = { x: target.x, y: target.y };
+          });
+          nodes.forEach(function (tn) {
+            if (!local.moving[tn.id]) { tn.fx = tn.x; tn.fy = tn.y; return; }
+            var root = ctx.byId[local.anchorOf[tn.id]];
+            if (!oldPos[tn.id] && root) {
+              var angle = _hash01(String(tn.id)) * Math.PI * 2;
+              var distance = radiusOf(root) + radiusOf(tn);
+              tn.x = root.x + Math.cos(angle) * distance;
+              tn.y = root.y + Math.sin(angle) * distance;
+            }
+            tn.vx = 0; tn.vy = 0;
+            // Domain anchors stay fixed; only a changed canonical slot yields.
+            tn.fx = tn.kind === 'domain' ? tn.x : null;
+            tn.fy = tn.kind === 'domain' ? tn.y : null;
+          });
+          edges.forEach(function (te) {
+            var s = (te.source && te.source.id) || te.source;
+            var t = (te.target && te.target.id) || te.target;
+            te._crossDomain = !!(ctx.domainOf[s] && ctx.domainOf[t]
+                                  && ctx.domainOf[s] !== ctx.domainOf[t]);
+          });
+          sim.nodes(nodes);
+          sim.force('link').links(edges);
+          sim.force('charge', null);
+          sim.force('interdomain', null);
+          sim.force('symmulti', null);
+          sim.on('end.traceAppend', null);
+          sim.alpha(0.3); sim.stop();
+          // One continuous interpolation replaces the former late end-event snap.
+          _wfg.animateTraceExpansion(ctx, local, sim, renderer,
+                                    window.requestAnimationFrame.bind(window));
+          if (renderer.redrawNow) renderer.redrawNow();
+          else if (renderer.redraw) renderer.redraw();
+          return { addedNodes: addedN, addedEdges: addedE,
+                   totalNodes: nodes.length, totalEdges: edges.length };
+        }
         sim.nodes(nodes);
         sim.force('link').links(edges);
-        // ── Reheat throttling ──
-        // The bridge drains at 60 rAF/sec during streaming. Calling
-        // sim.alpha(0.15).restart() per drain pegged alpha at 0.15
-        // forever — alphaDecay (~0.022 / tick) can never pull alpha
-        // down between drains, so forces fire continuously and the
-        // whole graph drifts every frame. User saw this as
-        // 'refreshing the whole graph every sec'.
-        //
-        // Two-tier bump based on elapsed time since the previous
-        // reheat:
-        //   < 250 ms  → α = 0.03  (gentle nudge; new nodes drift to
-        //              their links, existing nodes barely shift)
-        //   ≥ 250 ms  → α = 0.15  (settle a fresh wave)
-        // Only bump if the current alpha is BELOW the target — so a
-        // long ongoing settle from a previous wave isn't stomped on.
+        // Throttled Galaxy reheat lets alpha decay between streaming waves.
         var now = (window.performance && performance.now()) || Date.now();
         var sinceLast = now - (sim._lastReheatAt || 0);
         var bump = sinceLast < 250 ? 0.03 : 0.15;
@@ -429,13 +446,7 @@
                totalNodes: nodes.length, totalEdges: edges.length };
     }
 
-    // Pin every node at its current position once the seed's force
-    // simulation has settled. New nodes added later via handle.append
-    // stay unpinned so they can drift to a sensible position under
-    // force; the already-settled nodes are locked so the incoming
-    // mass (memories at 100 k+, symbols at 600 k+) can't push them
-    // off-screen via manyBody repulsion. That was the user-visible
-    // 'nodes already there should not be removed' bug.
+    // Pin the seed after settling so later high-volume appends cannot push it.
     //
     // Pinning fires when alpha first drops below 0.08 (visually
     // settled — see Maxwell-damped ADR-0047) OR after 3.5 s wall-
@@ -466,6 +477,8 @@
     var handle = {
       destroy: function () {
         window.removeEventListener('resize', onResize);
+        sim._traceAnimationToken = (sim._traceAnimationToken || 0) + 1;
+        sim._tracePendingTargets = {}; sim._traceAnimationState = null;
         sim.stop();
         renderer.destroy();
         _wfg.clearActiveRenderer(renderer);

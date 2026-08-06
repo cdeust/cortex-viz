@@ -115,6 +115,10 @@ def test_published_schema_declares_the_runtime_contract():
     assert set(schema["properties"]["event"]["enum"]) == {
         "prompt",
         "tool_call",
+        "mcp_call",
+        "api_call",
+        "db_read",
+        "db_write",
         "file_read",
         "file_edit",
         "file_write",
@@ -217,6 +221,57 @@ def test_prompt_event_preserves_host_provenance():
 
 
 @pytest.mark.parametrize(
+    ("event_name", "artifact", "tool", "action", "target_kind", "edge_kind"),
+    [
+        (
+            "mcp_call",
+            "postgres:query",
+            "mcp__postgres__query",
+            "mcp_call",
+            "mcp",
+            "call",
+        ),
+        (
+            "api_call",
+            "GET https://api.example.test/users",
+            "http",
+            "api_call",
+            "api",
+            "call",
+        ),
+        (
+            "db_read",
+            "postgres:cortex.session_activity",
+            "postgres",
+            "db_read",
+            "database",
+            "read",
+        ),
+        (
+            "db_write",
+            "postgres:cortex.session_activity",
+            "postgres",
+            "db_write",
+            "database",
+            "write",
+        ),
+    ],
+)
+def test_explicit_remote_and_database_events_are_not_inferred(
+    event_name, artifact, tool, action, target_kind, edge_kind
+):
+    row = normalize_event(
+        _event(event=event_name, artifact=artifact, tool=tool)
+    )
+
+    assert row is not None
+    assert row["action"] == action
+    assert row["target_kind"] == target_kind
+    assert row["target_label"] == artifact
+    assert row["edge_kind"] == edge_kind
+
+
+@pytest.mark.parametrize(
     "overrides",
     [
         {"schema_version": "2"},
@@ -227,6 +282,10 @@ def test_prompt_event_preserves_host_provenance():
         {"timestamp": float("nan")},
         {"event": "unknown"},
         {"event": "tool_call", "tool": ""},
+        {"event": "mcp_call", "tool": ""},
+        {"event": "api_call", "artifact": ""},
+        {"event": "db_read", "artifact": ""},
+        {"event": "db_write", "artifact": ""},
         {"event": "file_edit", "artifact": ""},
         {"event": "prompt", "input_summary": ""},
         {"event": "skill", "tool": "", "input_summary": ""},
@@ -246,6 +305,10 @@ def test_legacy_claude_hook_shape_remains_supported():
             "session_id": "claude-session",
             "ts": 1.0,
             "event_type": "PostToolUse",
+            "tool_response": {
+                "rows": 3,
+                "authorization": "Bearer private",
+            },
         }
     )
 
@@ -253,3 +316,5 @@ def test_legacy_claude_hook_shape_remains_supported():
     assert row["action"] == "edit"
     assert row["target_id"] == NodeIdFactory.file_id("/repo/src/auth.ts")
     assert "host" not in row["detail"]
+    assert row["detail"]["input_summary"] == '{"file_path":"/repo/src/auth.ts"}'
+    assert row["detail"]["result"] == '{"rows":3,"authorization":"[redacted]"}'

@@ -400,6 +400,9 @@
       // ticking for an unrelated reason; it is safe to call any time
       // because draw() only reads current positions, never writes them.
       redraw: function () { draw(); },
+      // Trace reflow calls this at animation boundaries. Rebuild hit-testing
+      // so new neighbours are clickable; leave the zoom transform untouched.
+      redrawNow: function () { invalidateSpatial(); rebuildSpatial(); draw(); },
       selectId: function (id) {
         var n = ctx.byId[id];
         if (!n) return;

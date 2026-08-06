@@ -223,12 +223,16 @@
   // postcondition: for every key k in incoming, existing[k] is non-null if
   // either existing[k] or incoming[k] was non-null before the call.
   function _fillMissingFields(existing, incoming) {
+    var changed = false;
     for (var key in incoming) {
       if (!Object.prototype.hasOwnProperty.call(incoming, key)) continue;
       var v = incoming[key];
       if (v === undefined || v === null) continue;
-      if (existing[key] === undefined || existing[key] === null) existing[key] = v;
+      if (existing[key] === undefined || existing[key] === null) {
+        existing[key] = v; changed = true;
+      }
     }
+    return changed;
   }
 
   function _scheduleRebuild() {
@@ -256,9 +260,9 @@
                           totalNodes: 0, totalEdges: 0 };
     }
     _seedSets();
-    // Track which items were ACTUALLY added so subscribers can
-    // process the delta in O(batch_size) instead of re-scanning the
-    // accumulated state.lastData. With 114 SSE chunks growing to
+    // Track items ACTUALLY added or enriched so subscribers can update their
+    // live clone in O(batch_size) instead of re-scanning the accumulated
+    // state.lastData. With 114 SSE chunks growing to
     // 135 k nodes, re-scanning the full set per batch is ~9 billion
     // iterations — that OOMs the tab. The delta payload keeps the
     // hot path O(1000).
@@ -270,13 +274,17 @@
     // O(N) again, so even on a 600 k+ accumulated graph the per-
     // batch work stays bounded by the SSE batch chunk (≤ 1000).
     var addedNodes = [];
+    var enrichedNodes = [];
     var addedEdges = [];
     var c = JUG._statCounts;
     for (var i = 0; i < nodes.length; i++) {
       var n = nodes[i];
       if (!n || !n.id) continue;
       var existing = JUG._existingIdSet[n.id];
-      if (existing) { _fillMissingFields(existing, n); continue; }
+      if (existing) {
+        if (_fillMissingFields(existing, n)) enrichedNodes.push(existing);
+        continue;
+      }
       JUG._existingIdSet[n.id] = n;
       JUG.state.lastData.nodes.push(n);
       addedNodes.push(n);
@@ -309,7 +317,8 @@
     // that alone OOMs the tab. The bridge sets
     // window.JUG.__wfgActive=true on first seed so this guard kicks
     // in for every subsequent append.
-    if ((addedNodes.length || addedEdges.length) && !(JUG.__wfgActive)) {
+    if ((addedNodes.length || enrichedNodes.length || addedEdges.length)
+        && !(JUG.__wfgActive)) {
       _scheduleRebuild();
     }
     // Fire the legacy event bus with a delta payload so the bridge
@@ -318,7 +327,7 @@
       try {
         JUG.emit('state:lastData', {
           value: JUG.state.lastData,
-          delta: { nodes: addedNodes, edges: addedEdges },
+          delta: { nodes: addedNodes.concat(enrichedNodes), edges: addedEdges },
           old: null,
         });
       } catch {}

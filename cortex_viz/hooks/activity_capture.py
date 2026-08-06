@@ -22,34 +22,51 @@ import urllib.request
 from pathlib import Path
 
 _TIMEOUT_S = 0.5
+_DEFAULT_PORT = 3458
 
 
-def _discover_url() -> str | None:
-    """Resolve the live viz server's ``/api/activity`` URL.
+def _candidate_urls() -> list[str]:
+    """Ordered activity endpoints within the hook's one shared time budget.
 
     Precedence: explicit ``CORTEX_VIZ_URL`` env → the instance registry the
     server writes (``~/.cache/cortex/viz-server.json``, pid+port) → the
-    ``CORTEX_VIZ_PORT`` env → the dev default 3503. Returns None only if every
-    source is unusable (then capture silently no-ops).
+    ``CORTEX_VIZ_PORT`` env → the launcher default 3458. The registry is a
+    discovery hint, not proof of liveness: a server can exit after writing it,
+    so ``main`` tries the remaining candidates when connection refusal is
+    immediate. Duplicate endpoints are removed without changing precedence.
     """
     env_url = os.environ.get("CORTEX_VIZ_URL")
     if env_url:
-        return env_url.rstrip("/") + "/api/activity"
-    port = None
+        return [env_url.rstrip("/") + "/api/activity"]
+    ports: list[int] = []
     try:
         reg = json.loads(
             (Path.home() / ".cache" / "cortex" / "viz-server.json").read_text()
         )
-        port = int(reg.get("port") or 0) or None
+        port = int(reg.get("port") or 0)
+        if port:
+            ports.append(port)
     except (OSError, ValueError, KeyError, TypeError):
-        port = None
-    if not port:
-        try:
-            port = int(os.environ.get("CORTEX_VIZ_PORT") or 0) or None
-        except ValueError:
-            port = None
-    port = port or 3503
-    return f"http://127.0.0.1:{port}/api/activity"
+        pass
+    try:
+        configured = int(os.environ.get("CORTEX_VIZ_PORT") or 0)
+        if configured:
+            ports.append(configured)
+    except ValueError:
+        pass
+    ports.append(_DEFAULT_PORT)
+    seen: set[int] = set()
+    return [
+        f"http://127.0.0.1:{port}/api/activity"
+        for port in ports
+        if not (port in seen or seen.add(port))
+    ]
+
+
+def _discover_url() -> str | None:
+    """Backward-compatible first endpoint for diagnostics/tests."""
+    urls = _candidate_urls()
+    return urls[0] if urls else None
 
 
 def main() -> None:
@@ -72,21 +89,27 @@ def main() -> None:
     event.setdefault("event_type", sys.argv[1] if len(sys.argv) > 1 else "PostToolUse")
     event.setdefault("ts", time.time())
 
-    url = _discover_url()
-    if not url:
-        return
-    try:
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(event).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        urllib.request.urlopen(req, timeout=_TIMEOUT_S).read()
-    except Exception:
-        # Server down, slow, or unreachable — capture is best-effort and must
-        # never affect the session. Swallow everything.
-        return
+    payload = json.dumps(event).encode("utf-8")
+    deadline = time.monotonic() + _TIMEOUT_S
+    for url in _candidate_urls():
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return
+        try:
+            req = urllib.request.Request(
+                url,
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            urllib.request.urlopen(req, timeout=remaining).read()
+            return
+        except Exception:
+            # A stale registry commonly refuses immediately; use the remaining
+            # shared budget to try the configured/default launcher port. A slow
+            # endpoint consumes the budget and therefore never delays the host
+            # beyond the original 0.5 s hard contract.
+            continue
 
 
 if __name__ == "__main__":
