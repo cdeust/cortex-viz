@@ -5,7 +5,7 @@
 // (e.g. JUG._rendererTest, window.CortexPalette).
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const REPO = path.resolve(HERE, '..', '..', '..');
@@ -14,10 +14,17 @@ export const REPO = path.resolve(HERE, '..', '..', '..');
 // identifiers inside the file (`window`, `document`, `JUG`, `d3`, …) resolve
 // against globalThis, so callers must install any non-DOM globals first.
 export function loadScript(rel) {
-  const code = fs.readFileSync(path.join(REPO, rel), 'utf8');
+  const abs = path.join(REPO, rel);
+  const code = fs.readFileSync(abs, 'utf8');
+  // The sourceURL is what makes this file VISIBLE TO COVERAGE. V8 reports
+  // coverage per script keyed by URL, and a `new Function` script has none, so
+  // every ui/ file measured 0% no matter how thoroughly it was tested. Naming
+  // the script after the real file on disk is what lets v8-to-istanbul map the
+  // ranges back. Also gives stack traces a real path instead of "<anonymous>".
+  const located = `${code}\n//# sourceURL=${pathToFileURL(abs).href}`;
   // eslint-disable-next-line no-new-func -- deliberate: run browser IIFE at
   // global scope. Input is a repo-committed source file, never user data.
-  const run = new Function(code);
+  const run = new Function(located);
   run.call(globalThis);
 }
 

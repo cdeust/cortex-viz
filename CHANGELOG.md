@@ -25,6 +25,21 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 - The test suite now fails on `PytestUnraisableExceptionWarning` instead of
   printing it. An exception inside `__del__` cannot fail a test by itself, so
   this class of resource leak was structurally invisible.
+- JavaScript coverage measured 0% for every `ui/` file regardless of how well
+  tested it was. The test harness loads each browser IIFE through
+  `new Function`, and V8 reports coverage per script keyed by URL — a
+  `new Function` script has none, so nothing could be attributed back to a file
+  on disk. Naming the script with `//# sourceURL=` restores attribution:
+  0% → 26.37% statements / 27.29% lines, with real per-file numbers
+  (`coverage_model.js` 98.8%, `workflow_graph_lod.js` 100%,
+  `ui/brain/js/edges.js` 96.0%). The suite was always testing these; the
+  instrument could not see it. `coverage.include` is widened from 8 curated
+  files to the 21 the suite actually loads. Report-only, no threshold.
+- `npm run test:coverage` no longer fails. The trigram 300k-label scan asserts
+  a 500 ms bound, and V8 instrumentation roughly doubles it (1079 ms measured),
+  so that one assertion is unmeasurable under coverage. It now reports a named
+  skip instead, and still runs unconditionally in `npm test`, which is the CI
+  gate.
 
 ### Security
 - Update `cryptography` from 49.0.0 to 50.0.0, the first release patched for
