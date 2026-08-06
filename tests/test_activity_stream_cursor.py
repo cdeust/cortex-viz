@@ -50,7 +50,7 @@ def _capture_since(monkeypatch):
         lambda _handler, _store, since: (seen.append(since) or True, 0),
     )
     monkeypatch.setattr(activity, "_tail_live", lambda *_args: None)
-    monkeypatch.setattr(activity_stream, "stream", lambda: _CountingStream())
+    monkeypatch.setattr(activity_stream, "stream", _CountingStream)
     return seen
 
 
