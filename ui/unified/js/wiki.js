@@ -15,6 +15,25 @@
   var graphXlens = true;
   var graphCooccur = false;
 
+  // ── Transport port ──
+  // Every wiki data access in this file goes through wikiFetch, and the default
+  // adapter is plain HTTP against the server that served the page. It is a
+  // named seam so an alternative adapter can be installed at a composition
+  // root (the page) instead of by overriding global fetch, which
+  // rules/coding-standards.md §7.2 refuses. The static wiki export is the
+  // reason it exists: it supplies an adapter that resolves from an inlined
+  // payload, so the export renders through THIS file rather than a copy of it
+  // — the only way "renders identically to the served view" is structural
+  // rather than a comparison someone has to keep re-running.
+  //
+  // Reading the adapter per call, not once at load, keeps the order in which
+  // the page's scripts happen to run from mattering.
+  function wikiFetch(url, options) {
+    var adapter = window.JUG && window.JUG._wikiTransport;
+    if (adapter) return adapter(url, options);
+    return fetch(url, options);
+  }
+
   var KIND_ORDER = ['adr', 'spec', 'lesson', 'convention', 'note', 'guide', 'domain', 'entity', 'index', 'misc'];
   var KIND_LABELS = {
     adr:        'Architecture Decisions',
@@ -60,7 +79,7 @@
   // ── Data ──
   function fetchPages() {
     container.innerHTML = '<div class="wiki-loading"><div class="wiki-loading-spinner"></div>Loading wiki index\u2026</div>';
-    fetch('/api/wiki/list', { cache: 'no-store' })
+    wikiFetch('/api/wiki/list', { cache: 'no-store' })
       .then(function(r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
@@ -202,7 +221,7 @@
     var url = '/api/wiki/graph?domain=' + encodeURIComponent(domain) +
       '&cooccur=' + (graphCooccur ? '1' : '0') +
       '&xlens=' + (graphXlens ? '1' : '0');
-    fetch(url)
+    wikiFetch(url)
       .then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
@@ -557,7 +576,7 @@
 
     // Fire and forget — the grid populates async without blocking the
     // rest of the welcome render.
-    fetch('/api/wiki/projects', { cache: 'no-store' })
+    wikiFetch('/api/wiki/projects', { cache: 'no-store' })
       .then(function(r) { return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)); })
       .then(function(data) {
         var grid = document.getElementById('wiki-projects-grid');
@@ -748,12 +767,12 @@
     main.scrollTop = 0;
 
     Promise.all([
-      fetch('/api/wiki/page?path=' + encodeURIComponent(path), { cache: 'no-store' }).then(function(r) {
+      wikiFetch('/api/wiki/page?path=' + encodeURIComponent(path), { cache: 'no-store' }).then(function(r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
       }),
       // page_meta is best-effort — missing DB shouldn't block page render
-      fetch('/api/wiki/page_meta?path=' + encodeURIComponent(path))
+      wikiFetch('/api/wiki/page_meta?path=' + encodeURIComponent(path))
         .then(function(r) { return r.ok ? r.json() : null; })
         .catch(function() { return null; })
     ]).then(function(results) {
@@ -1095,7 +1114,7 @@
     details.addEventListener('toggle', function() {
       if (!details.open || loaded) return;
       loaded = true;
-      fetch('/api/wiki/memos?subject_type=page&subject_id=' + dbRow.id + '&limit=20')
+      wikiFetch('/api/wiki/memos?subject_type=page&subject_id=' + dbRow.id + '&limit=20')
         .then(function(r) { return r.ok ? r.json() : { memos: [] }; })
         .then(function(data) {
           memoBody.innerHTML = '';
@@ -1773,7 +1792,7 @@
     try {
       var url = '/api/wiki/export?path=' + encodeURIComponent(relPath)
         + '&format=' + fmt;
-      var resp = await fetch(url);
+      var resp = await wikiFetch(url);
       var contentType = resp.headers.get('Content-Type') || '';
       if (contentType.indexOf('application/json') === 0) {
         var err = await resp.json();
@@ -1846,7 +1865,7 @@
         if (explicit && Array.isArray(explicit)) {
           list = explicit;
         } else {
-          var resp = await fetch('/api/wiki/bibliography');
+          var resp = await wikiFetch('/api/wiki/bibliography');
           var j = await resp.json();
           list = (j.files || []).map(function(f) { return f.path; });
         }
@@ -1858,7 +1877,7 @@
       var byKey = {};
       await Promise.all(list.map(async function(path) {
         try {
-          var r = await fetch('/api/wiki/bibliography/read?path=' + encodeURIComponent(path));
+          var r = await wikiFetch('/api/wiki/bibliography/read?path=' + encodeURIComponent(path));
           var data = await r.json();
           if (!data.content) return;
           var cite = new Cite(data.content);
@@ -2208,7 +2227,7 @@
       saveBtn.textContent = 'Saving\u2026';
       var newSource = cm.state.doc.toString();
       try {
-        var resp = await fetch('/api/wiki/save', {
+        var resp = await wikiFetch('/api/wiki/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ rel_path: data.path, body: newSource })
@@ -2270,6 +2289,9 @@
     // outside — a graph, an empty wiki, and an op this server does not serve.
     // Getting that wrong is #119, so the decision is reachable from a test.
     enterGraphMode: enterGraphMode,
+    // The transport port. Exposed so the adapter contract is asserted directly
+    // rather than only through whichever caller happens to exercise it.
+    wikiFetch: wikiFetch,
   };
 
   // ── Init ──
