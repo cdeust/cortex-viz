@@ -5,6 +5,33 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 
 ## [Unreleased]
 
+### Added
+- Trace streams observed session activity while a session stays expanded:
+  prompts, tool and MCP calls, files, commands, skills, subagents, web/API and
+  database operations. Topology is rebuilt incrementally without remounting the
+  canvas or resetting the camera, historical work is revealed progressively, and
+  layout animation is coalesced under rapid clicks and streaming. New effects
+  emerge beside their immediate causal parent rather than treating every branch
+  edge (`read`, `edit`, `run`, `discusses`) as temporal spine progression, which
+  had expanded frequently reused targets outside the readable session cluster:
+  on a real PostgreSQL fixture of 631 nodes / 958 edges the maximum session
+  radius drops from 1007.14 px to 353.96 px.
+- Running the activity-capture hook by hand now names the endpoint discovery
+  resolved to, on stderr. An interactive run used to exit silently, which is
+  indistinguishable from discovery being broken.
+
+### Fixed
+- The activity-capture hook no longer raises when
+  `~/.cache/cortex/viz-server.json` decodes to something other than a mapping
+  (a JSON list, string, or number). `.get` on that value raised an uncaught
+  `AttributeError`, breaking the hook's never-raise contract with the host on a
+  corrupt registry; every unusable-registry shape now falls through to the next
+  candidate endpoint.
+- A registry or `CORTEX_VIZ_PORT` value of `0` or below is no longer accepted as
+  a port. A negative value produced the unusable endpoint
+  `http://127.0.0.1:-1/api/activity` and spent part of the hook's 0.5 s budget
+  on it.
+
 ## [3.0.0] - 2026-08-04
 
 ### Security

@@ -260,9 +260,7 @@ def test_prompt_event_preserves_host_provenance():
 def test_explicit_remote_and_database_events_are_not_inferred(
     event_name, artifact, tool, action, target_kind, edge_kind
 ):
-    row = normalize_event(
-        _event(event=event_name, artifact=artifact, tool=tool)
-    )
+    row = normalize_event(_event(event=event_name, artifact=artifact, tool=tool))
 
     assert row is not None
     assert row["action"] == action

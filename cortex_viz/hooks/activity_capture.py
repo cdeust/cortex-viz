@@ -25,6 +25,61 @@ _TIMEOUT_S = 0.5
 _DEFAULT_PORT = 3458
 
 
+def _positive_port(value: object) -> int | None:
+    """A usable TCP port from an untrusted value, or None when it names none.
+
+    ``object`` is the honest input type: both sources below are unvalidated
+    (a JSON payload on disk, an environment string). ``int`` raises ValueError
+    on non-numeric text and TypeError on a value it cannot convert at all;
+    each caller names those in its own handler.
+    """
+    port = int(value or 0)
+    return port if port > 0 else None
+
+
+def _registry_path() -> Path:
+    """Where the running server records itself.
+
+    Deliberately a second, independent copy of the location
+    ``cortex_viz.server.viz_instance.instance_path`` writes: this module is
+    stdlib-only by contract, so it cannot import the writer. The two are held
+    in agreement by a test, not by a shared import — a drift in either would
+    otherwise leave discovery silently falling back to the default port.
+    """
+    return Path.home() / ".cache" / "cortex" / "viz-server.json"
+
+
+def _registry_port() -> int | None:
+    """The port the instance registry records, or None when it records none.
+
+    Named failure modes, each meaning the same thing — no recorded server:
+    the file is absent or unreadable (OSError), is not JSON or holds a
+    non-numeric port (ValueError), decodes to something other than a mapping
+    so it has no ``get`` (AttributeError), or carries a port of a type ``int``
+    refuses (TypeError). Returning None here is not a swallowed error: the
+    hook's hard contract forbids raising, and the caller has two further
+    candidate sources to try.
+    """
+    try:
+        registry = json.loads(_registry_path().read_text())
+        return _positive_port(registry.get("port"))
+    except (OSError, ValueError, AttributeError, TypeError):
+        return None
+
+
+def _env_port() -> int | None:
+    """The port ``CORTEX_VIZ_PORT`` names, or None when unset or non-numeric.
+
+    A hand-typed or shell-interpolated value is the one named failure mode
+    (ValueError); an unusable override must not stop the launcher default from
+    being tried.
+    """
+    try:
+        return _positive_port(os.environ.get("CORTEX_VIZ_PORT"))
+    except ValueError:
+        return None
+
+
 def _candidate_urls() -> list[str]:
     """Ordered activity endpoints within the hook's one shared time budget.
 
@@ -39,40 +94,38 @@ def _candidate_urls() -> list[str]:
     if env_url:
         return [env_url.rstrip("/") + "/api/activity"]
     ports: list[int] = []
-    try:
-        reg = json.loads(
-            (Path.home() / ".cache" / "cortex" / "viz-server.json").read_text()
-        )
-        port = int(reg.get("port") or 0)
-        if port:
+    for port in (_registry_port(), _env_port(), _DEFAULT_PORT):
+        if port is not None and port not in ports:
             ports.append(port)
-    except (OSError, ValueError, KeyError, TypeError):
-        pass
-    try:
-        configured = int(os.environ.get("CORTEX_VIZ_PORT") or 0)
-        if configured:
-            ports.append(configured)
-    except ValueError:
-        pass
-    ports.append(_DEFAULT_PORT)
-    seen: set[int] = set()
-    return [
-        f"http://127.0.0.1:{port}/api/activity"
-        for port in ports
-        if not (port in seen or seen.add(port))
-    ]
+    return [f"http://127.0.0.1:{port}/api/activity" for port in ports]
 
 
-def _discover_url() -> str | None:
-    """Backward-compatible first endpoint for diagnostics/tests."""
-    urls = _candidate_urls()
-    return urls[0] if urls else None
+def _discover_url() -> str:
+    """The endpoint capture posts to first.
+
+    Total, never empty: ``_candidate_urls`` always ends with the launcher
+    default, so there is always an endpoint to name.
+    """
+    return _candidate_urls()[0]
+
+
+def _report_endpoint() -> None:
+    """Name the endpoint capture would post to, on stderr.
+
+    Reached only when stdin is a terminal — a human ran the hook by hand to
+    check it. A host-invoked hook always receives its event on a pipe, so this
+    never writes during a session. Without it an interactive run is completely
+    silent, which is indistinguishable from discovery being broken.
+    """
+    print(f"cortex-viz activity endpoint: {_discover_url()}", file=sys.stderr)
 
 
 def main() -> None:
-    # No stdin (interactive run) → nothing to capture.
+    # No stdin (interactive run) → nothing to capture; report what discovery
+    # resolved to instead, so the run is not silent.
     try:
         if sys.stdin.isatty():
+            _report_endpoint()
             return
         raw = sys.stdin.read().strip()
     except Exception:
