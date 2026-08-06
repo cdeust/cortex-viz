@@ -5,6 +5,15 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 
 ## [Unreleased]
 
+### Changed
+- The wiki view routes every data access through one named transport port
+  (`wikiFetch`) instead of ten direct `fetch` calls. Behaviour is unchanged —
+  the default adapter is the same plain HTTP request — and the seam exists so an
+  alternative adapter can be installed at the page level rather than by
+  overriding global `fetch`, which rules/coding-standards.md §7.2 refuses. It is
+  the substrate the static wiki export needs (#112): supplying an adapter lets
+  the export render through the wiki view's own code rather than a copy of it.
+
 ### Added
 - `GET /api/wiki/graph` — the wiki view's cross-lens documentation graph, which
   the UI has been requesting since it shipped but which nothing served (#119).
