@@ -55,7 +55,10 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
   (`coverage_model.js` 98.8%, `workflow_graph_lod.js` 100%,
   `ui/brain/js/edges.js` 96.0%). The suite was always testing these; the
   instrument could not see it. `coverage.include` is widened from 8 curated
-  files to the 21 the suite actually loads. Report-only, no threshold.
+  files to the 30 the suite actually loads, which now reports the Trace surface
+  too (`workflow_graph_trace_layout.js` 99.0%, `activity_stream.js` 86.8%,
+  `workflow_graph.js` 80.9%, `workflow_graph_slots.js` 80.1%, `trace.js` 64.0%)
+  and lifts the total to 40.1% lines. Report-only, no threshold.
 - `npm run test:coverage` no longer fails. The trigram 300k-label scan asserts
   a 500 ms bound, and V8 instrumentation roughly doubles it (1079 ms measured),
   so that one assertion is unmeasurable under coverage. It now reports a named
