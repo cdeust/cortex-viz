@@ -475,9 +475,10 @@ class APBridge:
     async def close(self) -> None:
         if self._client is not None:
             try:
-                # MCPClient.close() is SYNCHRONOUS — ``await self._client.close()``
-                # was ``await None`` → TypeError on every teardown.
-                self._client.close()
+                # aclose(), not close(): the synchronous variant only asks the
+                # child to terminate and leaves its transport for the garbage
+                # collector, which raises once the loop is gone.
+                await self._client.aclose()
             except Exception:
                 # Teardown: the client is dropped either way, and a failing
                 # close must not mask the error that triggered the teardown.

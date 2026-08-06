@@ -162,7 +162,7 @@ class PRDBridge:
     async def close(self) -> None:
         if self._client is not None:
             try:
-                self._client.close()
+                await self._client.aclose()
             except Exception:
                 # Teardown: the client is dropped either way.
                 pass
