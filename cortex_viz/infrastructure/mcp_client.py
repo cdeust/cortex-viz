@@ -7,6 +7,7 @@ Implements MCP 2025-11-25 handshake with version negotiation.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import sys
 from typing import Any
@@ -22,6 +23,20 @@ from cortex_viz.infrastructure.mcp_client_stderr import open_stderr_log, stderr_
 
 CLIENT_INFO = {"name": "cortex", "version": "1.0.0"}
 PROTOCOL_VERSION = "2025-11-25"
+# Grace period between SIGTERM and SIGKILL in ``aclose``. Matches the 5 s
+# default systemd and Docker allow a process to shut down on SIGTERM before
+# escalating. source: systemd.kill(5) DefaultTimeoutStopSec; docker stop(1) -t.
+_CHILD_EXIT_TIMEOUT_S = 5.0
+
+
+def _request_child_exit(proc: asyncio.subprocess.Process) -> None:
+    """Close the child's stdin and send SIGTERM. Never raises."""
+    with contextlib.suppress(Exception):
+        # The child may have exited already and closed stdin with it.
+        proc.stdin.close()  # type: ignore[union-attr]
+    with contextlib.suppress(Exception):
+        # The process may have exited between the stdin close and here.
+        proc.terminate()
 
 
 class MCPClient:
@@ -92,7 +107,7 @@ class MCPClient:
                 timeout=self._connect_timeout_ms / 1000,
             )
         except asyncio.TimeoutError as exc:
-            self.close()
+            await self.aclose()
             raise McpConnectionError(
                 f"Handshake timed out after {self._connect_timeout_ms}ms",
                 {"command": self._config.get("command")},
@@ -139,7 +154,7 @@ class MCPClient:
             self._idle_task = asyncio.create_task(self._idle_loop())
 
         except Exception as e:
-            self.close()
+            await self.aclose()
             raise McpConnectionError(
                 f"Handshake failed: {e}",
                 {"command": command},
@@ -238,21 +253,59 @@ class MCPClient:
         return (loop.time() - self._last_activity) > (self._idle_timeout_ms / 1000)
 
     def close(self) -> None:
-        """Gracefully close the connection."""
+        """Signal the connection closed and ask the child to terminate.
+
+        Synchronous, so it can only REQUEST the child's exit; it cannot reap
+        it. Prefer ``aclose`` from async code — see its docstring for what the
+        missing reap costs.
+        """
+        self._release_tasks()
+        proc = self._detach_process()
+        if proc is not None:
+            _request_child_exit(proc)
+
+    async def aclose(self) -> None:
+        """Close the connection and wait for the child to actually exit.
+
+        ``close`` leaves the child terminating and its asyncio subprocess
+        transport alive. If the event loop is closed before the transport is
+        (which ``asyncio.run`` does immediately on return), the transport's
+        finalizer later runs against a closed loop and raises
+        ``RuntimeError: Event loop is closed`` from ``__del__`` — swallowed by
+        the interpreter, so it surfaces only as an unraisable-exception
+        warning. Awaiting the exit reaps the child and lets the transport close
+        while its loop is still running, which also means no zombie is left
+        behind on a caller that opens many short-lived clients.
+        """
+        self._release_tasks()
+        proc = self._detach_process()
+        if proc is None:
+            return
+        _request_child_exit(proc)
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=_CHILD_EXIT_TIMEOUT_S)
+        except (TimeoutError, asyncio.TimeoutError):
+            # The child ignored SIGTERM. Escalate rather than leak it, then
+            # reap unconditionally: a killed process always becomes waitable.
+            with contextlib.suppress(Exception):
+                proc.kill()
+            with contextlib.suppress(Exception):
+                await proc.wait()
+        except Exception:
+            # Already reaped by someone else, or never started. Either way the
+            # transport has no live child to strand.
+            pass
+
+    def _release_tasks(self) -> None:
+        """Drop connection state and cancel the three background tasks."""
         self._connected = False
         self._bound_loop = None
 
-        if self._idle_task:
-            self._idle_task.cancel()
-            self._idle_task = None
-
-        if self._reader_task:
-            self._reader_task.cancel()
-            self._reader_task = None
-
-        if self._stderr_task:
-            self._stderr_task.cancel()
-            self._stderr_task = None
+        for attribute in ("_idle_task", "_reader_task", "_stderr_task"):
+            task = getattr(self, attribute)
+            if task:
+                task.cancel()
+                setattr(self, attribute, None)
 
         # Reject pending requests
         for future in self._pending.values():
@@ -260,19 +313,10 @@ class MCPClient:
                 future.set_exception(McpConnectionError("Client closed"))
         self._pending.clear()
 
-        if self._proc:
-            try:
-                self._proc.stdin.close()  # type: ignore
-            except Exception:
-                # Teardown: the child may have exited already and closed stdin with it.
-                pass
-            try:
-                self._proc.terminate()
-            except Exception:
-                # Teardown: the process may have exited between the stdin
-                # close and here.
-                pass
-            self._proc = None
+    def _detach_process(self):
+        """Take ownership of the child handle so only one caller tears it down."""
+        proc, self._proc = self._proc, None
+        return proc
 
     # ── Private ──────────────────────────────────────────────────────────────
 
@@ -365,4 +409,4 @@ class MCPClient:
             # stop, which is the normal path, not a failure.
             return
         print("[mcp-client] Idle timeout — closing connection", file=sys.stderr)
-        self.close()
+        await self.aclose()

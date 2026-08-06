@@ -168,6 +168,14 @@ testpaths = ["tests"]
 pythonpath = ["."]
 timeout = 300
 timeout_method = "thread"
+# An exception raised inside __del__ is UNRAISABLE: the interpreter prints it
+# and continues, so a leaked resource surfaces as a warning on whichever test
+# happened to trigger the collection — never as a failure. That is how issue
+# #113 stayed green for months (an asyncio subprocess transport finalized after
+# its loop had closed, reported against an unrelated graph-build test). Failing
+# on it is the only way this class of leak is visible; the suite passes clean,
+# so the gate costs nothing until something regresses.
+filterwarnings = ["error::pytest.PytestUnraisableExceptionWarning"]
 
 [tool.coverage.run]
 source = ["cortex_viz"]
