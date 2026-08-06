@@ -170,6 +170,9 @@ def test_stdio_handshake_advertises_canonical_identity() -> None:
             assert client.server_info["version"] == VERSION
             assert "open_visualization" in client.list_tools()
         finally:
-            client.close()
+            # aclose(), not close(): asyncio.run closes the loop the moment this
+            # returns, and close() leaves the child's subprocess transport for
+            # the garbage collector to finalize against that dead loop.
+            await client.aclose()
 
     asyncio.run(exercise())

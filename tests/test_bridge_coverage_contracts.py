@@ -40,7 +40,13 @@ class FakeMCPClient:
         self.calls.append((tool, args))
         return {"tool": tool, "args": args}
 
-    def close(self):
+    async def aclose(self):
+        """Mirrors the real client: teardown is awaited so the child is reaped.
+
+        Deliberately NOT also offering a sync ``close`` — a fake that accepts
+        both would keep passing if a bridge regressed to the variant that
+        leaves the subprocess transport for the garbage collector.
+        """
         self.closed = True
         self.connected = False
 

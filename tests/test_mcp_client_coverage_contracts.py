@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 import pytest
 
 from cortex_viz import errors
+from cortex_viz.infrastructure import mcp_client
 from cortex_viz.infrastructure import mcp_client_reader as reader
 from cortex_viz.infrastructure import mcp_client_spawn as spawn
 from cortex_viz.infrastructure import mcp_client_stderr as stderr
@@ -403,10 +404,10 @@ def test_perform_handshake_wraps_failure():
     async def exercise():
         client = make_client()
         client._send = AsyncMock(side_effect=RuntimeError("bad handshake"))
-        client.close = MagicMock()
+        client.aclose = AsyncMock()
         with pytest.raises(errors.McpConnectionError, match="Handshake failed"):
             await client._perform_handshake()
-        client.close.assert_called_once()
+        client.aclose.assert_awaited_once()
 
     asyncio.run(exercise())
 
@@ -429,10 +430,10 @@ def test_connect_success_noop_and_timeout(monkeypatch):
         timed._read_loop = AsyncMock()
         timed._stderr_loop = AsyncMock()
         timed._perform_handshake = AsyncMock(side_effect=asyncio.TimeoutError())
-        timed.close = MagicMock()
+        timed.aclose = AsyncMock()
         with pytest.raises(errors.McpConnectionError, match="Handshake timed out"):
             await timed.connect()
-        timed.close.assert_called_once()
+        timed.aclose.assert_awaited_once()
 
     asyncio.run(exercise())
 
@@ -482,6 +483,110 @@ def test_close_cancels_tasks_fails_pending_and_tolerates_dead_process():
     asyncio.run(exercise())
 
 
+class ReapableProcess(FakeProcess):
+    """A child that records how it was asked to exit and whether it was reaped."""
+
+    def __init__(self, *, exits: bool = True) -> None:
+        super().__init__()
+        self.exits = exits
+        self.killed = False
+        self.waits = 0
+
+    async def wait(self) -> int:
+        self.waits += 1
+        if not self.exits and not self.killed:
+            # Ignores SIGTERM: block until the caller escalates to SIGKILL.
+            await asyncio.sleep(3600)
+        return 0
+
+    def kill(self) -> None:
+        self.killed = True
+
+
+def test_aclose_reaps_the_child_so_its_transport_dies_with_a_live_loop():
+    """`close` can only ask; only `aclose` waits. Without the wait, the
+    subprocess transport outlives the loop and its finalizer raises
+    `RuntimeError: Event loop is closed` from `__del__`.
+    """
+
+    async def exercise():
+        client = make_client()
+        proc = ReapableProcess()
+        client._proc = proc
+
+        await client.aclose()
+
+        assert proc.terminated
+        assert proc.waits == 1
+        assert not proc.killed
+        assert client._proc is None
+
+    asyncio.run(exercise())
+
+
+def test_aclose_escalates_to_kill_when_the_child_ignores_sigterm(monkeypatch):
+    monkeypatch.setattr(mcp_client, "_CHILD_EXIT_TIMEOUT_S", 0.01)
+
+    async def exercise():
+        client = make_client()
+        proc = ReapableProcess(exits=False)
+        client._proc = proc
+
+        await client.aclose()
+
+        assert proc.terminated
+        assert proc.killed, "a child that ignores SIGTERM must not be leaked"
+        assert proc.waits == 2, "the kill must be followed by an unconditional reap"
+
+    asyncio.run(exercise())
+
+
+def test_aclose_on_a_client_that_never_spawned_is_a_no_op():
+    async def exercise():
+        client = MCPClient({"command": "python3"})
+
+        await client.aclose()
+
+        assert client._proc is None
+        assert not client._connected
+
+    asyncio.run(exercise())
+
+
+def test_a_second_aclose_does_not_touch_the_child_again():
+    """Both bridges call close in a `finally`; a double teardown must not
+    terminate a process handle this client no longer owns."""
+
+    async def exercise():
+        client = make_client()
+        proc = ReapableProcess()
+        client._proc = proc
+
+        await client.aclose()
+        await client.aclose()
+
+        assert proc.waits == 1
+
+    asyncio.run(exercise())
+
+
+def test_aclose_tolerates_a_child_that_is_already_gone():
+    async def exercise():
+        client = make_client()
+
+        class _Gone(ReapableProcess):
+            async def wait(self):
+                raise ProcessLookupError("already reaped")
+
+        client._proc = _Gone()
+
+        await client.aclose()
+
+        assert client._proc is None
+
+    asyncio.run(exercise())
+
+
 def test_wait_until_idle_and_idle_loop_paths(monkeypatch, capsys):
     async def exercise():
         client = make_client()
@@ -498,14 +603,14 @@ def test_wait_until_idle_and_idle_loop_paths(monkeypatch, capsys):
         assert sleeps == 2
 
         client._wait_until_idle = AsyncMock()
-        client.close = MagicMock()
+        client.aclose = AsyncMock()
         await client._idle_loop()
-        client.close.assert_called_once()
+        client.aclose.assert_awaited_once()
 
         client._wait_until_idle = AsyncMock(side_effect=asyncio.CancelledError())
-        client.close.reset_mock()
+        client.aclose.reset_mock()
         await client._idle_loop()
-        client.close.assert_not_called()
+        client.aclose.assert_not_awaited()
 
     asyncio.run(exercise())
     assert "Idle timeout" in capsys.readouterr().err
