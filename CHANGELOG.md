@@ -46,6 +46,21 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 - The test suite now fails on `PytestUnraisableExceptionWarning` instead of
   printing it. An exception inside `__del__` cannot fail a test by itself, so
   this class of resource leak was structurally invisible.
+- JavaScript coverage measured 0% for every `ui/` file regardless of how well
+  tested it was. The test harness loads each browser IIFE through
+  `new Function`, and V8 reports coverage per script keyed by URL — a
+  `new Function` script has none, so nothing could be attributed back to a file
+  on disk. Naming the script with `//# sourceURL=` restores attribution:
+  0% → 26.37% statements / 27.29% lines, with real per-file numbers
+  (`coverage_model.js` 98.8%, `workflow_graph_lod.js` 100%,
+  `ui/brain/js/edges.js` 96.0%). The suite was always testing these; the
+  instrument could not see it. `coverage.include` is widened from 8 curated
+  files to the 21 the suite actually loads. Report-only, no threshold.
+- `npm run test:coverage` no longer fails. The trigram 300k-label scan asserts
+  a 500 ms bound, and V8 instrumentation roughly doubles it (1079 ms measured),
+  so that one assertion is unmeasurable under coverage. It now reports a named
+  skip instead, and still runs unconditionally in `npm test`, which is the CI
+  gate.
 - The activity-capture hook no longer raises when
   `~/.cache/cortex/viz-server.json` decodes to something other than a mapping
   (a JSON list, string, or number). `.get` on that value raised an uncaught
@@ -56,6 +71,18 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
   a port. A negative value produced the unusable endpoint
   `http://127.0.0.1:-1/api/activity` and spent part of the hook's 0.5 s budget
   on it.
+
+### Security
+- Update `cryptography` from 49.0.0 to 50.0.0, the first release patched for
+  GHSA-g6cj-pr64-35w5 (high). Unlike the `brace-expansion` bump in 3.0.0 this
+  one is a **runtime** dependency and does ship in the wheel: it arrives
+  transitively through `authlib`, `joserfc`, `pyjwt` and `secretstorage`, none
+  of which cap the major version (`joserfc` asks for `>=45.0.1`, the others are
+  unpinned), so the bump needs no upstream release to land.
+- Update the development-only `fast-uri` from 3.1.4 to 3.1.5, patched for
+  GHSA-7p8r-x3mc-p8w7 (high, host confusion via a backslash authority
+  introducer). Transitive under the JS test toolchain; it does not ship.
+  `npm audit --package-lock-only` now reports zero vulnerabilities.
 
 ## [3.0.0] - 2026-08-04
 

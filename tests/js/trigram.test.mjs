@@ -17,7 +17,7 @@
 // re-running, against a live pg_trgm Postgres, the query whose VALUES list is
 // exactly the fixture's {a,b} pairs:
 //     SELECT a, b, similarity(a, b) FROM (VALUES ('http','http'), …) AS pairs(a, b);
-import { describe, it, expect } from 'vitest';
+import { describe, expect, inject, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -217,7 +217,15 @@ describe('trigram scale benchmark', () => {
 
   it(
     'scans a 300k-label corpus within the regression bound',
-    () => {
+    (ctx) => {
+      // V8 coverage instrumentation roughly doubles this scan, so the bound is
+      // unmeasurable under it. Report the skip; never pass silently.
+      if (inject('coverageEnabled')) {
+        // eslint-disable-next-line no-console
+        console.log('[trigram-bench] SKIPPED: perf bound is invalid under coverage instrumentation');
+        ctx.skip();
+        return;
+      }
       const N = 300000;
       const nodes = syntheticLabels(N).map((label, i) => ({ id: 'n' + i, label }));
 
