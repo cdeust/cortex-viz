@@ -41,6 +41,18 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
   skip instead, and still runs unconditionally in `npm test`, which is the CI
   gate.
 
+### Security
+- Update `cryptography` from 49.0.0 to 50.0.0, the first release patched for
+  GHSA-g6cj-pr64-35w5 (high). Unlike the `brace-expansion` bump in 3.0.0 this
+  one is a **runtime** dependency and does ship in the wheel: it arrives
+  transitively through `authlib`, `joserfc`, `pyjwt` and `secretstorage`, none
+  of which cap the major version (`joserfc` asks for `>=45.0.1`, the others are
+  unpinned), so the bump needs no upstream release to land.
+- Update the development-only `fast-uri` from 3.1.4 to 3.1.5, patched for
+  GHSA-7p8r-x3mc-p8w7 (high, host confusion via a backslash authority
+  introducer). Transitive under the JS test toolchain; it does not ship.
+  `npm audit --package-lock-only` now reports zero vulnerabilities.
+
 ## [3.0.0] - 2026-08-04
 
 ### Security
