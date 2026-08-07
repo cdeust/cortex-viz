@@ -16,7 +16,15 @@ import re
 from pathlib import Path
 from typing import Any
 
-from cortex_viz.core.wiki_export import build_payload, render_bundle
+from cortex_viz.core.wiki_export import (
+    OMITTED_CAPABILITIES,
+    UNASSIGNED_DOMAIN_LABEL,
+    build_payload,
+    domain_filenames,
+    group_by_domain,
+    render_bundle,
+    render_domain_index,
+)
 
 # Remote references come in two shapes and only one is a tag. The tag pass
 # below handles `<script src>` / `<link href>`; these two handle the rest, which
@@ -171,7 +179,14 @@ def _adapter_source(ui_root: Path) -> str:
     )
 
 
-def export_wiki(*, out_dir: Path, ui_root: Path, respond) -> dict[str, Any]:
+def export_wiki(
+    *,
+    out_dir: Path,
+    ui_root: Path,
+    respond,
+    domain: str | None = None,
+    filename: str = "index.html",
+) -> dict[str, Any]:
     """Write ``<out_dir>/index.html`` and return a manifest.
 
     Args:
@@ -195,19 +210,29 @@ def export_wiki(*, out_dir: Path, ui_root: Path, respond) -> dict[str, Any]:
     pages = sorted(
         (listing or {}).get("pages") or [], key=lambda page: str(page.get("path") or "")
     )
+    overrides: dict[str, Any] = {}
+    variants = _GRAPH_VARIANTS
+    if domain is not None:
+        pages = _in_domain(pages, domain)
+        # The scoped index, not the server's. Without this the tree lists every
+        # page in the wiki while the payload only carries this domain's bodies,
+        # so every other page reads as unavailable — a bundle that looks broken.
+        overrides["/api/wiki/list"] = {"pages": pages}
+        variants = [dict(v, domain=_graph_domain(domain)) for v in _GRAPH_VARIANTS]
     bib = (respond("/api/wiki/bibliography", {}) or {}).get("files") or []
     payload = build_payload(
         respond=respond,
         pages=pages,
         bibliography=sorted(bib, key=lambda item: str(item.get("path") or "")),
-        graph_variants=_GRAPH_VARIANTS,
+        graph_variants=variants,
+        overrides=overrides,
     )
     template, missing = _template(ui_root)
     html = render_bundle(
         template=template, payload=payload, adapter_js=""
     )  # adapter ships as its own tag
     out_dir.mkdir(parents=True, exist_ok=True)
-    target = out_dir / "index.html"
+    target = out_dir / filename
     target.write_text(html, encoding="utf-8")
     return {
         "path": str(target),
@@ -217,11 +242,90 @@ def export_wiki(*, out_dir: Path, ui_root: Path, respond) -> dict[str, Any]:
         "omitted_capabilities": payload["omitted_capabilities"],
         "missing_assets": missing,
         "remote_references": audit_remote_references(template),
+        "domain": domain,
+    }
+
+
+def _in_domain(pages: list[dict], domain: str) -> list[dict]:
+    """The pages belonging to ``domain``, with the unassigned group named."""
+    wanted = "" if domain == UNASSIGNED_DOMAIN_LABEL else domain
+    return [page for page in pages if str(page.get("domain") or "").strip() == wanted]
+
+
+def _graph_domain(domain: str) -> str:
+    """What to send as the graph's ``domain`` filter.
+
+    The unassigned group has no domain string to filter on, so it asks for the
+    unfiltered graph — which is the honest answer for "pages with no domain"
+    rather than inventing a filter value the server would not recognise.
+    """
+    return "" if domain == UNASSIGNED_DOMAIN_LABEL else domain
+
+
+def export_wiki_per_domain(*, out_dir: Path, ui_root: Path, respond) -> dict[str, Any]:
+    """One self-contained bundle per domain, plus a chooser ``index.html``.
+
+    The single-file export stays the default; this exists because that file is
+    linear in the wiki (measured: 66 MB for 16 254 pages), and the number a
+    reader feels is the size of the ONE file they open. Splitting trades total
+    bytes for per-file bytes: each bundle re-inlines the ~1 MB application
+    shell, so 30 domains cost ~30 MB of duplicated shell — and the largest file
+    drops from the whole wiki to the largest domain.
+    """
+    # Created here, not only inside export_wiki: with zero domains the loop
+    # below never runs, and the chooser write would fail on a missing directory.
+    # An empty wiki has to produce a valid export that says it is empty.
+    out_dir.mkdir(parents=True, exist_ok=True)
+    listing = respond("/api/wiki/list", {})
+    all_pages = (listing or {}).get("pages") or []
+    groups = group_by_domain(all_pages)
+    names = domain_filenames([domain for domain, _pages in groups])
+
+    bundles: list[dict[str, Any]] = []
+    for domain, pages in groups:
+        bundles.append(
+            export_wiki(
+                out_dir=out_dir,
+                ui_root=ui_root,
+                respond=respond,
+                domain=domain,
+                filename=names[domain],
+            )
+        )
+        # Assert the scoping actually held rather than trusting the filter: a
+        # bundle whose page count disagrees with its group is one whose reader
+        # sees the wrong wiki.
+        if bundles[-1]["page_count"] != len(pages):
+            raise ValueError(
+                f"domain {domain!r}: scoped {bundles[-1]['page_count']} pages, "
+                f"expected {len(pages)}"
+            )
+
+    index_html = render_domain_index(
+        [(domain, names[domain], len(pages)) for domain, pages in groups],
+        omitted=list(OMITTED_CAPABILITIES),
+    )
+    index_path = out_dir / "index.html"
+    index_path.write_text(index_html, encoding="utf-8")
+    return {
+        "path": str(index_path),
+        "bytes": len(index_html.encode("utf-8")) + sum(b["bytes"] for b in bundles),
+        "largest_bundle_bytes": max((b["bytes"] for b in bundles), default=0),
+        "domain_count": len(groups),
+        "page_count": sum(b["page_count"] for b in bundles),
+        "request_count": sum(b["request_count"] for b in bundles),
+        "omitted_capabilities": list(OMITTED_CAPABILITIES),
+        "missing_assets": sorted({m for b in bundles for m in b["missing_assets"]}),
+        "remote_references": sorted(
+            {r for b in bundles for r in b["remote_references"]}
+        ),
+        "bundles": bundles,
     }
 
 
 __all__ = [
     "audit_remote_references",
     "export_wiki",
+    "export_wiki_per_domain",
     "inline_assets",
 ]

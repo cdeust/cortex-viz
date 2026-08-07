@@ -24,6 +24,7 @@ filesystem half lives in ``handlers.wiki_export_bundle``.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -78,6 +79,7 @@ def build_payload(
     pages: list[dict],
     bibliography: list[dict],
     graph_variants: list[dict[str, str]] | None = None,
+    overrides: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Answer every URL the view will request and return the keyed payload.
 
@@ -90,22 +92,80 @@ def build_payload(
         graph_variants: query-parameter sets for ``/api/wiki/graph`` to
             pre-render, so graph mode works offline for the toggle combinations
             a reader can actually reach.
+        overrides: responses to use INSTEAD of asking ``respond``. A per-domain
+            bundle needs this for ``/api/wiki/list``: the server answers with
+            every page, but a scoped bundle only carries its own domain's
+            bodies, so an unscoped index would list pages whose content is
+            absent and the tree would fill with "unavailable" entries.
     """
+    fixed = dict(overrides or {})
     responses: dict[str, Any] = {}
     for url in request_urls(pages, bibliography):
+        if url in fixed:
+            responses[url] = fixed[url]
+            continue
         path, _, query = url.partition("?")
         responses[url] = respond(path, _parse_query(query))
     for variant in graph_variants or []:
         url = "/api/wiki/graph?" + "&".join(
             f"{key}={_quote(variant[key])}" for key in sorted(variant)
         )
-        responses[url] = respond("/api/wiki/graph", dict(variant))
+        responses[url] = (
+            fixed[url] if url in fixed else respond("/api/wiki/graph", dict(variant))
+        )
     return {
         "schema": "wiki_export.v1",
         "omitted_capabilities": list(OMITTED_CAPABILITIES),
         "page_count": len(pages),
         "responses": responses,
     }
+
+
+# Pages carrying no domain still have to land somewhere. Dropping them would
+# lose 1064 of this wiki's 16254 pages without saying so.
+UNASSIGNED_DOMAIN_LABEL = "unassigned"
+
+# Everything a filename may not safely carry. Compiled once at module level —
+# a lazily-initialised global would be mutable state for no gain (§7.2).
+_SLUG_UNSAFE = re.compile(r"[^a-z0-9._-]+")
+
+
+def group_by_domain(pages: list[dict]) -> list[tuple[str, list[dict]]]:
+    """``[(domain, pages)]``, domain-sorted, pages path-sorted within each.
+
+    A page with no domain is grouped under ``UNASSIGNED_DOMAIN_LABEL`` rather
+    than discarded — an export that silently omits a sixth of the wiki is worse
+    than one with an awkward group name.
+    """
+    grouped: dict[str, list[dict]] = {}
+    for page in pages:
+        label = str(page.get("domain") or "").strip() or UNASSIGNED_DOMAIN_LABEL
+        grouped.setdefault(label, []).append(page)
+    return [
+        (domain, sorted(items, key=lambda page: str(page.get("path") or "")))
+        for domain, items in sorted(grouped.items())
+    ]
+
+
+def domain_filenames(domains: list[str]) -> dict[str, str]:
+    """Map each domain to a distinct, filesystem-safe ``.html`` filename.
+
+    Two domains can slug to the same name (``a/b`` and ``a-b``), and one
+    silently overwriting the other would delete a whole domain's pages from the
+    export. Collisions are therefore resolved by appending an index, assigned in
+    sorted order so the mapping is the same on every run.
+    """
+    used: set[str] = set()
+    mapping: dict[str, str] = {}
+    for domain in sorted(domains):
+        base = _SLUG_UNSAFE.sub("-", domain.lower()).strip("-.") or "domain"
+        candidate, suffix = base, 2
+        while candidate in used:
+            candidate = f"{base}-{suffix}"
+            suffix += 1
+        used.add(candidate)
+        mapping[domain] = f"{candidate}.html"
+    return mapping
 
 
 def _parse_query(query: str) -> dict[str, str]:
@@ -140,10 +200,76 @@ def render_bundle(*, template: str, payload: dict[str, Any], adapter_js: str) ->
     return template.replace(_PAYLOAD_MARKER, injected)
 
 
+_INDEX_CSS = """
+:root { color-scheme: light dark; }
+body { font: 15px/1.55 ui-sans-serif, system-ui, sans-serif; margin: 0;
+       padding: 3rem 1.5rem; display: flex; justify-content: center; }
+main { width: min(46rem, 100%); }
+h1 { font-size: 1.35rem; margin: 0 0 .35rem; }
+p.sub { margin: 0 0 2rem; opacity: .7; }
+ul { list-style: none; margin: 0; padding: 0; }
+li { border-top: 1px solid rgba(128,128,128,.28); }
+li:last-child { border-bottom: 1px solid rgba(128,128,128,.28); }
+a { display: flex; justify-content: space-between; gap: 1rem; padding: .7rem .2rem;
+    text-decoration: none; color: inherit; }
+a:hover { background: rgba(128,128,128,.1); }
+.count { opacity: .6; font-variant-numeric: tabular-nums; }
+footer { margin-top: 2rem; font-size: .85rem; opacity: .65; }
+"""
+
+
+def _escape(text: str) -> str:
+    """HTML-escape. Domain names come from page frontmatter — untrusted input."""
+    from html import escape
+
+    return escape(str(text), quote=True)
+
+
+def render_domain_index(
+    entries: list[tuple[str, str, int]], *, omitted: list[str] | None = None
+) -> str:
+    """The chooser page for a per-domain export.
+
+    ``entries`` is ``[(domain, filename, page_count)]``. Written out plainly with
+    inline CSS and no script at all: it is a list of links, and the one thing it
+    must never do is need the network to render.
+    """
+    rows = "\n".join(
+        f'      <li><a href="{_escape(filename)}">'
+        f"<span>{_escape(domain)}</span>"
+        f'<span class="count">{count} pages</span></a></li>'
+        for domain, filename, count in entries
+    )
+    total = sum(count for _domain, _filename, count in entries)
+    note = (
+        f"      <footer>Renders as source (not bundled): {_escape(', '.join(omitted))}."
+        "</footer>\n"
+        if omitted
+        else ""
+    )
+    return (
+        "<!doctype html>\n"
+        '<html lang="en">\n<head>\n<meta charset="utf-8">\n'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+        "<title>Wiki export</title>\n"
+        f"<style>{_INDEX_CSS}</style>\n"
+        "</head>\n<body>\n  <main>\n"
+        "    <h1>Wiki export</h1>\n"
+        f'    <p class="sub">{len(entries)} domains, {total} pages. '
+        "Each link opens a self-contained file; no server required.</p>\n"
+        f"    <ul>\n{rows}\n    </ul>\n{note}"
+        "  </main>\n</body>\n</html>\n"
+    )
+
+
 __all__ = [
     "OMITTED_CAPABILITIES",
+    "UNASSIGNED_DOMAIN_LABEL",
     "build_payload",
+    "domain_filenames",
+    "group_by_domain",
     "render_bundle",
+    "render_domain_index",
     "request_urls",
     "serialize_payload",
 ]
