@@ -147,5 +147,18 @@ jobs:
           cache: "npm"
       - name: Install JS test dependencies
         run: npm ci
+      # Python, in the JS job, for exactly one reason: the static wiki export
+      # (#112) is produced by Python and consumed by a browser, and criterion 1
+      # requires the test to launch the BUILT ARTIFACT rather than the sources.
+      # So `wiki_export_artifact.test.mjs` shells out to the real exporter and
+      # loads its output in JSDOM over a file:// URL. Without this the file's 11
+      # tests do not fail — they skip, and the one criterion that proves the
+      # bundle opens offline silently stops being checked.
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+      - name: Install the exporter the artifact test builds with
+        run: uv sync --locked --all-extras --python 3.12
       - name: Run JS test suite
         run: npm test

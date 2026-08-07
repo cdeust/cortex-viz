@@ -5,6 +5,24 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 
 ## [Unreleased]
 
+### Added
+- `python -m cortex_viz --export <dir>` writes a single self-contained HTML file
+  that opens from `file://` with no server and no network (#112). It carries no
+  remote script or style reference, and the command exits non-zero if one
+  survives — a bundle that needs the network is the one thing the feature
+  forbids, so it fails rather than reporting success. The bundle renders through
+  the wiki view's own code by installing an offline adapter on the transport
+  port, so maturity badges and the 10-kind taxonomy cannot drift from the served
+  view. Deterministic: the same wiki produces a byte-identical file. `mermaid`
+  diagrams and LaTeX math render as source and the bundle says so, rather than
+  degrading silently as the served view does.
+
+### Security
+- Every CDN `<script>` in `atom-viz.html`, `brain-viz.html` and
+  `methodology-viz.html` now declares a `sha384` `integrity` hash and
+  `crossorigin` (#50). Without one, the browser executes whatever the CDN
+  returns. Hashes computed from the pinned artifacts on 2026-08-06.
+
 ### Changed
 - The wiki view routes every data access through one named transport port
   (`wikiFetch`) instead of ten direct `fetch` calls. Behaviour is unchanged —
