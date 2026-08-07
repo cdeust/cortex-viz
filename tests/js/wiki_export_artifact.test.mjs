@@ -10,7 +10,7 @@
 // laptop.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -28,7 +28,23 @@ const KINDS = [
   'guide', 'domain', 'entity', 'index', 'misc',
 ];
 
+// The exporter is Python; this suite is Node. Resolving the interpreter up
+// front turns "the venv is missing" into one legible line instead of a
+// spawnSync ENOENT dump three frames deep — which is how this first failed in
+// CI, where the js-test job had Node only.
+function pythonPath() {
+  const venv = join(REPO, '.venv/bin/python');
+  if (!existsSync(venv)) {
+    throw new Error(
+      `no interpreter at ${venv}. This test builds the real export bundle, so ` +
+        'the job needs `uv sync --locked --all-extras` as well as `npm ci`.'
+    );
+  }
+  return venv;
+}
+
 function buildBundle(pagesJson) {
+  const python = pythonPath();
   const dir = mkdtempSync(join(tmpdir(), 'cortex-wiki-export-'));
   const script = `
 import json, pathlib, sys
@@ -51,7 +67,7 @@ m = export_wiki(out_dir=pathlib.Path(sys.argv[2]), ui_root=pathlib.Path('ui'),
 print(json.dumps(m))
 `;
   const out = execFileSync(
-    join(REPO, '.venv/bin/python'),
+    python,
     ['-c', script, JSON.stringify(pagesJson), dir],
     { cwd: REPO, encoding: 'utf8' }
   );
