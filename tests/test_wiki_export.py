@@ -311,7 +311,6 @@ def test_every_remote_script_declares_an_integrity_hash(page):
     """A CDN script without `integrity` executes whatever the CDN returns. The
     export bundles nothing remote at all, but these three views still load
     three.js and 3d-force-graph over the network."""
-    import re
 
     html = (UI_ROOT / page).read_text(encoding="utf-8")
     remote = re.findall(r"<script[^>]*src=\"https://[^\"]+\"[^>]*>", html)
@@ -326,7 +325,6 @@ def test_the_unified_view_loads_no_remote_script_at_all():
     """The page the wiki ships from. Its three KaTeX tags were the only remote
     references, and they are stylesheet + script; if one comes back it needs
     integrity too, and the export needs to keep dropping it."""
-    import re
 
     html = (UI_ROOT / "unified-viz.html").read_text(encoding="utf-8")
     remote = re.findall(r"<(?:script|link)[^>]*(?:src|href)=\"https://[^\"]+\"", html)
