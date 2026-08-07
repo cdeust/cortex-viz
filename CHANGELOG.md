@@ -6,6 +6,17 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 ## [Unreleased]
 
 ### Added
+- `--export <dir> --per-domain` writes one self-contained bundle per wiki domain
+  plus a chooser `index.html` that links them. The single-file export is
+  unchanged and remains the default. Measured on a 16 254-page wiki: the largest
+  file a reader opens drops from **66 MB to 14.3 MB** across 30 domains, at the
+  cost of total bytes rising to 93 MB — each bundle re-inlines the ~1 MB
+  application shell, and the number that matters is the one file being opened.
+  Pages carrying no domain are grouped under `unassigned` rather than dropped
+  (1064 of them on this wiki). Deterministic, and every bundle's page count is
+  checked against its group before anything ships.
+
+### Added
 - `python -m cortex_viz --export <dir>` writes a single self-contained HTML file
   that opens from `file://` with no server and no network (#112). It carries no
   remote script or style reference, and the command exits non-zero if one

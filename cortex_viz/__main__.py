@@ -45,7 +45,7 @@ def _shutdown(sig=None, frame=None) -> None:
     sys.exit(0)
 
 
-def _export(out_dir: str) -> int:
+def _export(out_dir: str, *, per_domain: bool = False) -> int:
     """``--export <dir>``: write the static wiki bundle and report on it.
 
     A one-shot command, not a server mode: it prints a summary and exits, so it
@@ -56,13 +56,17 @@ def _export(out_dir: str) -> int:
     """
     from pathlib import Path
 
-    from cortex_viz.handlers.wiki_export_bundle import export_wiki
+    from cortex_viz.handlers.wiki_export_bundle import (
+        export_wiki,
+        export_wiki_per_domain,
+    )
     from cortex_viz.infrastructure.db_probe import open_store_or_none
     from cortex_viz.server.http_standalone_wiki import _dispatch_get
 
     store = open_store_or_none()
     ui_root = Path(__file__).resolve().parent.parent / "ui"
-    manifest = export_wiki(
+    write = export_wiki_per_domain if per_domain else export_wiki
+    manifest = write(
         out_dir=Path(out_dir),
         ui_root=ui_root,
         respond=lambda path, params: _dispatch_get(store, path, params),
@@ -73,6 +77,14 @@ def _export(out_dir: str) -> int:
         f"{manifest['request_count']} responses)",
         file=sys.stderr,
     )
+    if per_domain:
+        # The number a reader feels is the size of the ONE file they open, so it
+        # is reported alongside the total rather than buried in it.
+        print(
+            f"  {manifest['domain_count']} domains, "
+            f"largest bundle {manifest['largest_bundle_bytes'] / 1024:.0f} KB",
+            file=sys.stderr,
+        )
     print(
         "  renders as source (not bundled): "
         + ", ".join(manifest["omitted_capabilities"]),
@@ -94,10 +106,14 @@ def main() -> None:
     # MCP server" and every argument it will ever take is a one-shot side door.
     # A two-line check keeps the server path free of parser setup.
     if len(sys.argv) >= 2 and sys.argv[1] == "--export":
-        if len(sys.argv) < 3:
-            print("usage: python -m cortex_viz --export <dir>", file=sys.stderr)
+        rest = [a for a in sys.argv[2:] if a != "--per-domain"]
+        if len(rest) != 1:
+            print(
+                "usage: python -m cortex_viz --export <dir> [--per-domain]",
+                file=sys.stderr,
+            )
             sys.exit(2)
-        sys.exit(_export(sys.argv[2]))
+        sys.exit(_export(rest[0], per_domain="--per-domain" in sys.argv[2:]))
     signal.signal(signal.SIGTERM, _shutdown)
     signal.signal(signal.SIGINT, _shutdown)
     mcp.run(transport="stdio")

@@ -9,6 +9,7 @@ how they are keyed, and whether the audit can actually see a remote reference.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -522,3 +523,273 @@ def test_the_audit_sees_into_a_block_however_its_tag_is_closed(closer):
     html = f"<script>\nimport('https://esm.sh/mermaid@10.9.0');\n{closer}"
 
     assert bundle.audit_remote_references(html) == ["https://esm.sh/mermaid@10.9.0"]
+
+
+# ── Per-domain split ───────────────────────────────────────────────────
+# The single-file export is linear in the wiki (66 MB / 16254 pages measured),
+# and what a reader feels is the size of the ONE file they open.
+
+
+def test_pages_group_by_domain_sorted_with_paths_sorted_inside():
+    groups = wiki_export.group_by_domain(
+        [
+            _page("z.md", domain="beta"),
+            _page("b.md", domain="alpha"),
+            _page("a.md", domain="alpha"),
+        ]
+    )
+
+    assert [domain for domain, _pages in groups] == ["alpha", "beta"]
+    assert [p["path"] for p in groups[0][1]] == ["a.md", "b.md"]
+
+
+@pytest.mark.parametrize("missing", [None, "", "   "])
+def test_a_page_with_no_domain_is_grouped_not_dropped(missing):
+    """1064 of this wiki's 16254 pages carry no domain. Silently omitting a
+    sixth of the content would be the worst possible way to "reduce size"."""
+    groups = wiki_export.group_by_domain([_page("a.md", domain=missing)])
+
+    assert groups == [
+        (wiki_export.UNASSIGNED_DOMAIN_LABEL, [_page("a.md", domain=missing)])
+    ]
+
+
+@pytest.mark.parametrize(
+    ("domain", "expected"),
+    [
+        ("cortex", "cortex.html"),
+        ("DCP-Wealth", "dcp-wealth.html"),
+        ("a/b", "a-b.html"),
+        ("with spaces", "with-spaces.html"),
+        ("../escape", "escape.html"),
+        ("...", "domain.html"),
+    ],
+)
+def test_a_domain_becomes_a_safe_filename(domain, expected):
+    """Domains come from page frontmatter, so a name can contain anything —
+    including a path traversal that must not become one."""
+    assert wiki_export.domain_filenames([domain])[domain] == expected
+
+
+def test_two_domains_that_slug_alike_get_distinct_files():
+    """`a/b` and `a-b` both slug to `a-b`; one silently overwriting the other
+    would delete a whole domain's pages from the export."""
+    names = wiki_export.domain_filenames(["a/b", "a-b"])
+
+    assert len(set(names.values())) == 2
+    assert sorted(names.values()) == ["a-b-2.html", "a-b.html"]
+
+
+def test_the_filename_mapping_does_not_depend_on_input_order():
+    forward = wiki_export.domain_filenames(["a/b", "a-b", "c"])
+    backward = wiki_export.domain_filenames(["c", "a-b", "a/b"])
+
+    assert forward == backward
+
+
+def test_the_chooser_lists_every_domain_with_its_page_count():
+    html = wiki_export.render_domain_index(
+        [("alpha", "alpha.html", 3), ("beta", "beta.html", 12)]
+    )
+
+    assert 'href="alpha.html"' in html
+    assert "3 pages" in html
+    assert 'href="beta.html"' in html
+    assert "12 pages" in html
+    assert "2 domains, 15 pages" in html
+
+
+def test_the_chooser_needs_no_script_and_no_network():
+    html = wiki_export.render_domain_index([("a", "a.html", 1)], omitted=["mermaid"])
+
+    assert "<script" not in html
+    assert "http://" not in html and "https://" not in html
+    assert "mermaid" in html  # the omission is still named
+
+
+def test_a_hostile_domain_name_cannot_inject_markup_into_the_chooser():
+    html = wiki_export.render_domain_index(
+        [('<img src=x onerror="alert(1)">', "x.html", 1)]
+    )
+
+    assert "<img" not in html
+    assert "&lt;img" in html
+
+
+def test_a_scoped_export_carries_only_its_domains_pages(tmp_path):
+    pages = [
+        _page("a.md", domain="cortex"),
+        _page("b.md", domain="other"),
+        _page("c.md", domain="cortex"),
+    ]
+    captured = {}
+
+    def respond(path, params):
+        if path == "/api/wiki/list":
+            return {"pages": pages}
+        if path == "/api/wiki/bibliography":
+            return {"files": []}
+        if path == "/api/wiki/graph":
+            captured.setdefault("graph_domains", set()).add(params.get("domain"))
+            return {"nodes": [], "edges": [], "meta": {}}
+        return {"ok": True}
+
+    manifest = bundle.export_wiki(
+        out_dir=tmp_path / "out",
+        ui_root=UI_ROOT,
+        respond=respond,
+        domain="cortex",
+        filename="cortex.html",
+    )
+
+    assert manifest["page_count"] == 2
+    assert manifest["domain"] == "cortex"
+    assert Path(manifest["path"]).name == "cortex.html"
+    # The graph is asked for with the same scope, or graph mode would draw the
+    # whole wiki inside a per-domain bundle.
+    assert captured["graph_domains"] == {"cortex"}
+
+
+def test_the_scoped_index_agrees_with_what_the_bundle_carries(tmp_path):
+    """The override that matters: the server answers /api/wiki/list with every
+    page, and an unscoped index would list pages whose bodies are absent — the
+    tree would fill with entries that read as unavailable."""
+    pages = [_page("a.md", domain="cortex"), _page("b.md", domain="other")]
+    manifest = bundle.export_wiki(
+        out_dir=tmp_path / "out",
+        ui_root=UI_ROOT,
+        respond=lambda path, params: (
+            {"pages": pages}
+            if path == "/api/wiki/list"
+            else {"files": []}
+            if path == "/api/wiki/bibliography"
+            else {"ok": True}
+        ),
+        domain="cortex",
+    )
+
+    html = Path(manifest["path"]).read_text(encoding="utf-8")
+    listed = re.search(r'"/api/wiki/list":\{"pages":\[(.*?)\]\}', html, re.S).group(1)
+    assert '"a.md"' in listed
+    assert '"b.md"' not in listed
+
+
+def test_the_unassigned_group_asks_for_an_unfiltered_graph(tmp_path):
+    """It has no domain string to filter on, so inventing one would ask the
+    server for a domain it does not know."""
+    seen = []
+    bundle.export_wiki(
+        out_dir=tmp_path / "out",
+        ui_root=UI_ROOT,
+        respond=lambda path, params: (
+            {"pages": [_page("a.md", domain=None)]}
+            if path == "/api/wiki/list"
+            else {"files": []}
+            if path == "/api/wiki/bibliography"
+            else (seen.append(params.get("domain")) or {"nodes": [], "meta": {}})
+            if path == "/api/wiki/graph"
+            else {"ok": True}
+        ),
+        domain=wiki_export.UNASSIGNED_DOMAIN_LABEL,
+    )
+
+    assert set(seen) == {""}
+
+
+def _split_respond(pages):
+    def respond(path, params):
+        if path == "/api/wiki/list":
+            return {"pages": pages}
+        if path == "/api/wiki/bibliography":
+            return {"files": []}
+        if path == "/api/wiki/graph":
+            return {"nodes": [], "edges": [], "meta": {}}
+        return {"ok": True}
+
+    return respond
+
+
+def test_the_split_writes_one_bundle_per_domain_plus_a_chooser(tmp_path):
+    pages = [
+        _page("a.md", domain="alpha"),
+        _page("b.md", domain="beta"),
+        _page("c.md", domain="beta"),
+        _page("d.md", domain=None),
+    ]
+
+    manifest = bundle.export_wiki_per_domain(
+        out_dir=tmp_path / "out", ui_root=UI_ROOT, respond=_split_respond(pages)
+    )
+
+    written = sorted(p.name for p in (tmp_path / "out").iterdir())
+    assert written == ["alpha.html", "beta.html", "index.html", "unassigned.html"]
+    assert manifest["domain_count"] == 3
+    # No page lost and none counted twice.
+    assert manifest["page_count"] == len(pages)
+    assert manifest["remote_references"] == []
+    assert manifest["missing_assets"] == []
+
+
+def test_the_split_reports_the_size_of_the_file_a_reader_opens(tmp_path):
+    """Total bytes go UP — every bundle re-inlines the ~1 MB application shell.
+    The number worth reporting is the largest single file, so it is."""
+    pages = [_page("a.md", domain="alpha"), _page("b.md", domain="beta")]
+
+    manifest = bundle.export_wiki_per_domain(
+        out_dir=tmp_path / "out", ui_root=UI_ROOT, respond=_split_respond(pages)
+    )
+
+    assert manifest["largest_bundle_bytes"] < manifest["bytes"]
+    assert manifest["largest_bundle_bytes"] == max(
+        b["bytes"] for b in manifest["bundles"]
+    )
+
+
+def test_the_split_is_byte_identical_when_run_twice(tmp_path):
+    pages = [_page("a.md", domain="alpha"), _page("b.md", domain="beta")]
+    respond = _split_respond(pages)
+
+    first = tmp_path / "one"
+    second = tmp_path / "two"
+    bundle.export_wiki_per_domain(out_dir=first, ui_root=UI_ROOT, respond=respond)
+    bundle.export_wiki_per_domain(out_dir=second, ui_root=UI_ROOT, respond=respond)
+
+    for name in ("index.html", "alpha.html", "beta.html"):
+        assert (first / name).read_bytes() == (second / name).read_bytes(), name
+
+
+def test_a_scoping_failure_stops_the_export_instead_of_shipping_it(
+    monkeypatch, tmp_path
+):
+    """If the filter and the grouping ever disagree, a reader gets the wrong
+    wiki. That must abort, not produce files."""
+    pages = [_page("a.md", domain="alpha")]
+    monkeypatch.setattr(
+        bundle,
+        "export_wiki",
+        lambda **kwargs: {
+            "path": str(tmp_path / "x.html"),
+            "bytes": 1,
+            "page_count": 99,
+            "request_count": 1,
+            "omitted_capabilities": [],
+            "missing_assets": [],
+            "remote_references": [],
+            "domain": kwargs.get("domain"),
+        },
+    )
+
+    with pytest.raises(ValueError, match="expected 1"):
+        bundle.export_wiki_per_domain(
+            out_dir=tmp_path / "out", ui_root=UI_ROOT, respond=_split_respond(pages)
+        )
+
+
+def test_an_empty_wiki_still_produces_a_chooser_that_says_so(tmp_path):
+    manifest = bundle.export_wiki_per_domain(
+        out_dir=tmp_path / "out", ui_root=UI_ROOT, respond=_split_respond([])
+    )
+
+    assert manifest["domain_count"] == 0
+    assert manifest["page_count"] == 0
+    assert "0 domains, 0 pages" in Path(manifest["path"]).read_text(encoding="utf-8")
