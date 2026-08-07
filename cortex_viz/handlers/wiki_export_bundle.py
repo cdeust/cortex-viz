@@ -35,12 +35,15 @@ _REMOTE_TAG_REF = re.compile(
     r"""<(?:script|link)\b[^>]*?(?:src|href)\s*=\s*["']https?://[^"']*["']""",
     re.IGNORECASE,
 )
-# `</script\s*>`, not `</script>`: HTML allows whitespace before the closing
-# angle bracket, and a block ended that way would slip past this scan with
-# whatever remote URLs it contained (CodeQL py/bad-tag-filter #236). The audit
-# is the criterion-2 gate, so a hole in it reports a clean bundle that is not.
+# `</script[^>]*>`, not `</script>` and not `</script\s*>`. An HTML end tag may
+# carry whitespace AND attributes the parser ignores, so browsers close the
+# element on `</script\t\n bar>` — a block ended that way was invisible to the
+# first two versions of this scan, taking whatever remote URLs it held straight
+# past the criterion-2 gate. (CodeQL py/bad-tag-filter #236, then #237 on the
+# half-fix: whitespace alone was not enough.) A hole here reports a clean bundle
+# that is not one, which is the only failure this audit exists to prevent.
 _SCRIPT_BLOCK = re.compile(
-    r"<script\b[^>]*>(.*?)</script\s*>", re.IGNORECASE | re.DOTALL
+    r"<script\b[^>]*>(.*?)</script[^>]*>", re.IGNORECASE | re.DOTALL
 )
 
 # Replaces a remote URL literal. Not the empty string: every call site here
@@ -50,7 +53,7 @@ _SCRIPT_BLOCK = re.compile(
 _NOT_BUNDLED = "about:blank#cortex-export-not-bundled"
 _TAG = re.compile(
     r"""<(script|link)\b[^>]*?(?:src|href)\s*=\s*["']([^"']+)["'][^>]*?>"""
-    r"""(?:\s*</script\s*>)?""",
+    r"""(?:\s*</script[^>]*>)?""",
     re.IGNORECASE | re.DOTALL,
 )
 _GRAPH_VARIANTS = [

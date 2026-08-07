@@ -504,7 +504,17 @@ def test_a_bibliography_entry_without_a_path_adds_no_url():
     ]
 
 
-@pytest.mark.parametrize("closer", ["</script>", "</script >", "</SCRIPT\n>"])
+@pytest.mark.parametrize(
+    "closer",
+    [
+        "</script>",
+        "</script >",
+        "</SCRIPT\n>",
+        # The spelling CodeQL named in #237: browsers ignore attributes on an
+        # end tag and close the element anyway.
+        "</script\t\n bar>",
+    ],
+)
 def test_the_audit_sees_into_a_block_however_its_tag_is_closed(closer):
     """CodeQL py/bad-tag-filter (#236): HTML allows whitespace before the closing
     bracket, and the first version of this scan required `</script>` exactly — so
