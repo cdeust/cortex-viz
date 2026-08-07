@@ -357,7 +357,9 @@ def test_a_url_in_page_content_is_not_mistaken_for_a_resource_load(tmp_path):
     assert manifest["remote_references"] == []
     # And the content really is in the artifact — the audit passing must not be
     # because the URL was stripped out of the reader's page.
-    assert "img.shields.io" in Path(manifest["path"]).read_text(encoding="utf-8")
+    assert "https://img.shields.io/badge/x.svg" in Path(manifest["path"]).read_text(
+        encoding="utf-8"
+    )
 
 
 def test_narrowing_the_audit_did_not_make_it_blind_to_code(tmp_path):
@@ -500,3 +502,13 @@ def test_a_bibliography_entry_without_a_path_adds_no_url():
     assert [u for u in urls if u.startswith("/api/wiki/bibliography/read")] == [
         "/api/wiki/bibliography/read?path=refs%2Fmain.bib"
     ]
+
+
+@pytest.mark.parametrize("closer", ["</script>", "</script >", "</SCRIPT\n>"])
+def test_the_audit_sees_into_a_block_however_its_tag_is_closed(closer):
+    """CodeQL py/bad-tag-filter (#236): HTML allows whitespace before the closing
+    bracket, and the first version of this scan required `</script>` exactly — so
+    a block closed any other way took its remote URLs past the gate."""
+    html = f"<script>\nimport('https://esm.sh/mermaid@10.9.0');\n{closer}"
+
+    assert bundle.audit_remote_references(html) == ["https://esm.sh/mermaid@10.9.0"]

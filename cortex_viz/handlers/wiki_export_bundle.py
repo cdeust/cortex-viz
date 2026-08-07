@@ -35,7 +35,13 @@ _REMOTE_TAG_REF = re.compile(
     r"""<(?:script|link)\b[^>]*?(?:src|href)\s*=\s*["']https?://[^"']*["']""",
     re.IGNORECASE,
 )
-_SCRIPT_BLOCK = re.compile(r"<script\b[^>]*>(.*?)</script>", re.IGNORECASE | re.DOTALL)
+# `</script\s*>`, not `</script>`: HTML allows whitespace before the closing
+# angle bracket, and a block ended that way would slip past this scan with
+# whatever remote URLs it contained (CodeQL py/bad-tag-filter #236). The audit
+# is the criterion-2 gate, so a hole in it reports a clean bundle that is not.
+_SCRIPT_BLOCK = re.compile(
+    r"<script\b[^>]*>(.*?)</script\s*>", re.IGNORECASE | re.DOTALL
+)
 
 # Replaces a remote URL literal. Not the empty string: every call site here
 # feeds the value to a loader, and a scheme-less "" can resolve back against the
@@ -44,7 +50,7 @@ _SCRIPT_BLOCK = re.compile(r"<script\b[^>]*>(.*?)</script>", re.IGNORECASE | re.
 _NOT_BUNDLED = "about:blank#cortex-export-not-bundled"
 _TAG = re.compile(
     r"""<(script|link)\b[^>]*?(?:src|href)\s*=\s*["']([^"']+)["'][^>]*?>"""
-    r"""(?:\s*</script>)?""",
+    r"""(?:\s*</script\s*>)?""",
     re.IGNORECASE | re.DOTALL,
 )
 _GRAPH_VARIANTS = [
