@@ -30,7 +30,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
       # `--extra dev`, not `--only-dev`: this project declares `dev` as a
       # project EXTRA in [project.optional-dependencies], and `--only-dev`
       # selects PEP 735 dependency-GROUPS, of which there are none here. It
@@ -95,7 +95,7 @@ jobs:
       # `uv run --no-sync`: `uv run` re-syncs the DEFAULT environment before
       # running, which drops the extras just installed. Verified locally: the
       # re-sync silently reverted an --all-extras env mid-measurement.
-      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
       - name: Install package with test dependencies
         run: uv sync --locked --all-extras --python 3.12
       - name: Run test suite with 80% coverage gate
@@ -157,7 +157,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
       - name: Install the exporter the artifact test builds with
         run: uv sync --locked --all-extras --python 3.12
       - name: Run JS test suite
