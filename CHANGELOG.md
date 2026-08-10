@@ -5,6 +5,35 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-08-10
+
+**Upgrading from 2.8.0:** this release carries a breaking distribution-identity
+rename that was cut into the tree as `3.0.0` but never tagged or published —
+see the `[3.0.0]` entry below for the full detail, and read it before you
+upgrade. In short: `hypermnesia-mcp-viz` is now the *only* Claude Code plugin,
+MCP server, Python distribution, and console identity; the `cortex-viz`
+plugin and console entry point are gone. Run
+`claude plugin uninstall cortex-viz@cortex-plugins`, refresh `cortex-plugins`,
+then `claude plugin install hypermnesia-mcp-viz@cortex-plugins`; a raw pip
+install upgrades with `python3 -m pip install --upgrade "hypermnesia-mcp-viz>=3.1.0"`.
+Tool/permission references change from
+`mcp__plugin_cortex-viz_cortex-viz__open_visualization` to <!-- mcp-prefix-allow-legacy -->
+`mcp__plugin_hypermnesia-mcp-viz_hypermnesia-mcp-viz__open_visualization` (and
+the same pattern for `get_methodology_graph`).
+
+### Changed
+- `trace_impact.py`'s query orchestration is split along its real seams
+  (rules/coding-standards.md §4.2, issue #85): the Cypher fetchers (presence
+  gate, members, file-to-file edges, entry-point processes — one query per
+  function, no shaping) move to `trace_impact_graph.py`; member-list shaping
+  moves to `trace_impact_directions.py` alongside its sibling helpers;
+  `trace_impact.py` keeps only the call order and the member-direction
+  typed/fallback decision. Behaviour-preserving — every await still fires in
+  the same sequence, and `git diff -w` confirms every moved Cypher string and
+  dict key is untouched. Adds `tests/test_trace_impact_graph_contracts.py`,
+  closing the "no test references this module" gap #85 left open for the
+  parts that previously had none.
+
 ### Added
 - `--export <dir> --per-domain` writes one self-contained bundle per wiki domain
   plus a chooser `index.html` that links them. The single-file export is
@@ -144,7 +173,34 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
   introducer). Transitive under the JS test toolchain; it does not ship.
   `npm audit --package-lock-only` now reports zero vulnerabilities.
 
-## [3.0.0] - 2026-08-04
+### Fixed
+- The codebase-intelligence bridge no longer fails silently on a clean
+  marketplace install. `ap_bridge`'s discovery filtered
+  `installed_plugins.json` on the retired `automatised-pipeline@` key, so a
+  host that only ever installed the canonical `cdeust/ai-architect-mcp-codebase`
+  (canonical since its own v0.9.0) never matched, `_resolve_command` returned
+  `None`, and the AST layer disappeared without a message — visible only to a
+  developer box carrying `CORTEX_AP_COMMAND` or a self-install symlink. The
+  resolver and the two callers that validate its output by basename
+  (`mcp_client_spawn`, `ap_bridge`) now both read a single source,
+  `cortex_viz/infrastructure/upstream_identity.py`, so they cannot drift
+  apart again; legacy registry keys and the upstream `automatised-pipeline`
+  binary alias remain resolvable but are never preferred. A new CI check
+  (`upstream-identity.yml`) pins the producer's `mcp-contract.json` at a
+  commit rather than a tag, and fails if a legacy identity ever equals the
+  canonical one.
+
+## [3.0.0] - 2026-08-04 — cut in the tree, never tagged or published
+
+**This version number never shipped.** `2026-08-04` is when this work landed
+on `main`, not a release date: no `v3.0.0` git tag, no PyPI upload, no GitHub
+release, no MCP Registry publication exist for it, and none ever will —
+PyPI's most recent published version stayed `2.8.0` throughout. The entries
+below are real and describe what actually changed; they are recorded here,
+under this heading, because that is when and where the work happened. Every
+one of them ships to users for the first time in **`3.1.0`**, the first
+version of this line that was actually tagged and published — see that
+section above, including the upgrade note, before you read further.
 
 ### Security
 

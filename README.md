@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/MCP-Codex_%C2%B7_Gemini_%C2%B7_Claude-blue.svg" alt="Cross-platform MCP for Codex, Gemini CLI, and Claude Code">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License">
   <img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+">
-  <img src="https://img.shields.io/badge/version-3.0.0-brightgreen.svg" alt="Version 3.0.0">
+  <img src="https://img.shields.io/badge/version-3.1.0-brightgreen.svg" alt="Version 3.1.0">
   <a href="https://www.bestpractices.dev/projects/13846"><img src="https://www.bestpractices.dev/projects/13846/badge" alt="OpenSSF Best Practices"></a>
 </p>
 
@@ -170,7 +170,7 @@ Hypermnesia MCP Viz is a cross-platform MCP server with a Claude Code plugin. Po
 
 **As a plugin**: ships the MCP server, the `/cortex-visualize` skill, and the live session-activity hooks. The bundled `scripts/launcher.py` bootstraps its own dependencies on first launch (no manual `pip` needed). Configure the DB via the plugin's `database_url` user-config (defaults to `postgresql://127.0.0.1:5432/cortex`).
 
-**As a raw MCP (v3.0.0 and later):**
+**As a raw MCP (v3.1.0 and later):**
 
 ```bash
 pip install "hypermnesia-mcp-viz[data,viz-tile]"   # optional PG and large-graph extras
@@ -180,10 +180,14 @@ hypermnesia-mcp-viz                 # or: python -m cortex_viz (stdio MCP transp
 The published `2.8.0` `hypermnesia-mcp-viz` distribution owned the legacy
 `cortex-viz` console shim; there was no separate Python distribution by that
 name. Upgrade with the same interpreter/environment that installed it, and the
-installer removes the old distribution-owned shim while installing `3.0.0`:
+installer removes the old distribution-owned shim while installing `3.1.0`
+(the distribution-identity rename that removes the shim was cut into the tree
+as `3.0.0`, but that version was never tagged or published — see the
+CHANGELOG's `[3.0.0]` entry — so `3.1.0` is the first published release that
+carries it):
 
 ```bash
-python3 -m pip install --upgrade "hypermnesia-mcp-viz>=3.0.0"
+python3 -m pip install --upgrade "hypermnesia-mcp-viz>=3.1.0"
 ```
 
 If `cortex-viz` still resolves, first locate every shim and ask Python which
