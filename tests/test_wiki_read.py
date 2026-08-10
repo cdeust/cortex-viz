@@ -427,7 +427,11 @@ def test_read_bibliography_returns_content_and_byte_size(monkeypatch, tmp_path):
     (bib_dir / "refs.bib").write_text(content, encoding="utf-8")
     monkeypatch.setattr(mod, "WIKI_ROOT", root)
     got = mod.read_bibliography("_bibliography/refs.bib")
-    assert got == {"path": "_bibliography/refs.bib", "content": content, "size": len(content)}
+    assert got == {
+        "path": "_bibliography/refs.bib",
+        "content": content,
+        "size": len(content),
+    }
 
 
 def test_read_bibliography_refuses_a_bib_outside_the_bibliography_subtree(

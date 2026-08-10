@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import ClassVar
 
 from cortex_viz.server.git_diff_engine import (
     _MAX_LINES,
@@ -161,7 +162,9 @@ def test_resolve_by_relative_fragment_suffix_search_not_found_reports_reason(
     )
     abs_path, reason = _resolve_by_relative_fragment(object(), "src/missing.py")
     assert abs_path is None
-    assert reason == "unresolved relative name: not found in activity index or known repos"
+    assert reason == (
+        "unresolved relative name: not found in activity index or known repos"
+    )
 
 
 def test_resolve_by_relative_fragment_suffix_search_exception_reports_reason(
@@ -195,7 +198,7 @@ def test_resolve_by_relative_fragment_prefers_known_repo_over_suffix_search(
             self.fs_path = fs_path
 
     class _FakeRegistry:
-        repos = [_FakeRepoInfo(str(repo_dir))]
+        repos: ClassVar[list] = [_FakeRepoInfo(str(repo_dir))]
 
     monkeypatch.setattr(
         "cortex_viz.shared.domain_mapping._build_registry", lambda: _FakeRegistry()
