@@ -185,18 +185,45 @@ class GraphEventStream:
 
 
 # ── Process-wide singleton ──────────────────────────────────────────
-# One stream per process. Callers reach it through get_stream() and use the
-# GraphEventStream API directly (``activity_stream`` is the worked example);
-# there are deliberately no module-level emit/close/reset forwarders. Three
-# such wrappers existed and had never had a caller in this repository's
-# history, and once ``emit`` gained ``event_meta`` the wrapper silently
-# dropped it — a second, subtly weaker door onto the same stream.
+# One stream per process. get_stream() returns it for callers that want the
+# GraphEventStream API directly (``activity_stream`` is the worked example).
+# graph_build_run.py and graph_build_merge.py instead import this module
+# ONCE (as ``_events`` / ``events``) and call these module-level forwarders
+# for the lifetime of a build — that is the real production binding, not a
+# convenience wrapper, so each forwarder mirrors its GraphEventStream method
+# parameter-for-parameter. (Issue #134: a prior revision deleted these three
+# forwarders instead of fixing ``emit``'s forwarder, which had drifted out of
+# sync with ``GraphEventStream.emit`` and silently dropped ``event_meta``;
+# that took down every caller. Restored functional — the fix for a drifted
+# forwarder is to fix the forwarder.)
 
 _stream = GraphEventStream()
 
 
 def get_stream() -> GraphEventStream:
     return _stream
+
+
+def emit(
+    label: str,
+    nodes: list[dict[str, Any]],
+    edges: list[dict[str, Any]],
+    *,
+    chunk: int = 1000,
+    event_meta: dict[str, Any] | None = None,
+) -> int:
+    """Forward to the singleton's ``emit`` — see ``GraphEventStream.emit``."""
+    return _stream.emit(label, nodes, edges, chunk=chunk, event_meta=event_meta)
+
+
+def close() -> None:
+    """Forward to the singleton's ``close`` — see ``GraphEventStream.close``."""
+    _stream.close()
+
+
+def reset() -> None:
+    """Forward to the singleton's ``reset`` — see ``GraphEventStream.reset``."""
+    _stream.reset()
 
 
 # ── SSE wire helpers ────────────────────────────────────────────────
