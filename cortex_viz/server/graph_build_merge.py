@@ -4,8 +4,8 @@ Extracted verbatim from ``graph_build_run._run``'s inner ``_merge`` closure
 (behaviour-preserving split, 2026-06-14). ``make_merge`` reconstructs the exact
 same closure: the per-build dedup sets (``seen_n``/``seen_e``) and kind tallies
 (``kind_counts``) are captured locally — one fresh set per build, identical to
-the in-line original — and ``domain_filter`` + the ``graph_event_stream``
-module are bound from the caller.
+the in-line original — and ``domain_filter`` + the process-wide
+``GraphEventStream`` are bound from the caller.
 
 Shared cache state lives in ``graph_cache_state`` (the single owner): the
 merge mutates it via ``state.X = ...`` direct attribute assignment.
@@ -17,15 +17,19 @@ import sys
 
 from cortex_viz.server import graph_cache_state as state
 from cortex_viz.server.graph_build_helpers import _set_progress
+from cortex_viz.server.graph_event_stream import GraphEventStream
 from cortex_viz.server.graph_wire import _slim_node
 
 
-def make_merge(domain_filter: str | None, events):
+def make_merge(domain_filter: str | None, events: GraphEventStream):
     """Return the build's ``_merge`` callback with fresh dedup state.
 
-    ``events`` is the ``graph_event_stream`` module (the live SSE delivery
-    path). The returned closure has the SAME signature and behaviour as the
-    in-line ``_run._merge``.
+    ``events`` is the process-wide ``GraphEventStream`` from ``get_stream()``
+    (the live SSE delivery path) — the object, not the module: the module-level
+    forwarders were removed deliberately, and annotating the parameter is what
+    makes a caller that passes the module fail at type-check rather than at the
+    first emit, halfway through a build. The returned closure has the SAME
+    signature and behaviour as the in-line ``_run._merge``.
     """
     # ── Incremental merge state ──
     # Dedup sets + kind tallies persist across _merge calls instead

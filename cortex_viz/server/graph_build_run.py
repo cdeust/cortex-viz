@@ -150,13 +150,19 @@ def run_build(store, domain_filter: str | None) -> None:
         # graph grow instead of waiting for the full ingest to
         # finish. RESET on every kicked build so a previous build's
         # tail events don't leak into this run's subscribers.
-        from cortex_viz.server import graph_event_stream as _events
+        # Reached through get_stream() and used through the GraphEventStream
+        # API directly, as the singleton's contract requires: the module-level
+        # emit/close/reset forwarders were removed deliberately, because one of
+        # them silently dropped `event_meta` once emit grew it.
+        from cortex_viz.server.graph_event_stream import get_stream
+
+        _events = get_stream()
 
         _events.reset()
         state._source_totals.clear()
 
         # Construct the cumulative-cache merge closure now that the SSE
-        # event stream module is available. Fresh dedup state per build.
+        # event stream is available. Fresh dedup state per build.
         _merge = make_merge(domain_filter, _events)
 
         def _resolve_wiki_source_edges() -> None:
@@ -544,9 +550,9 @@ def run_build(store, domain_filter: str | None) -> None:
         # idempotent; the buffer survives for late-subscriber
         # replay until the next build's reset().
         try:
-            from cortex_viz.server import graph_event_stream as _ev
+            from cortex_viz.server.graph_event_stream import get_stream as _get_stream
 
-            _ev.close()
+            _get_stream().close()
         except Exception:
             # close() is idempotent and the buffer survives for late-subscriber replay;
             # a failure here must not mask the build outcome being unwound.
