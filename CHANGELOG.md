@@ -5,6 +5,21 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-08-10
+
+### Changed
+- `trace_impact.py`'s query orchestration is split along its real seams
+  (rules/coding-standards.md §4.2, issue #85): the Cypher fetchers (presence
+  gate, members, file-to-file edges, entry-point processes — one query per
+  function, no shaping) move to `trace_impact_graph.py`; member-list shaping
+  moves to `trace_impact_directions.py` alongside its sibling helpers;
+  `trace_impact.py` keeps only the call order and the member-direction
+  typed/fallback decision. Behaviour-preserving — every await still fires in
+  the same sequence, and `git diff -w` confirms every moved Cypher string and
+  dict key is untouched. Adds `tests/test_trace_impact_graph_contracts.py`,
+  closing the "no test references this module" gap #85 left open for the
+  parts that previously had none.
+
 ### Added
 - `--export <dir> --per-domain` writes one self-contained bundle per wiki domain
   plus a chooser `index.html` that links them. The single-file export is
@@ -143,6 +158,23 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
   GHSA-7p8r-x3mc-p8w7 (high, host confusion via a backslash authority
   introducer). Transitive under the JS test toolchain; it does not ship.
   `npm audit --package-lock-only` now reports zero vulnerabilities.
+
+### Fixed
+- The codebase-intelligence bridge no longer fails silently on a clean
+  marketplace install. `ap_bridge`'s discovery filtered
+  `installed_plugins.json` on the retired `automatised-pipeline@` key, so a
+  host that only ever installed the canonical `cdeust/ai-architect-mcp-codebase`
+  (canonical since its own v0.9.0) never matched, `_resolve_command` returned
+  `None`, and the AST layer disappeared without a message — visible only to a
+  developer box carrying `CORTEX_AP_COMMAND` or a self-install symlink. The
+  resolver and the two callers that validate its output by basename
+  (`mcp_client_spawn`, `ap_bridge`) now both read a single source,
+  `cortex_viz/infrastructure/upstream_identity.py`, so they cannot drift
+  apart again; legacy registry keys and the upstream `automatised-pipeline`
+  binary alias remain resolvable but are never preferred. A new CI check
+  (`upstream-identity.yml`) pins the producer's `mcp-contract.json` at a
+  commit rather than a tag, and fails if a legacy identity ever equals the
+  canonical one.
 
 ## [3.0.0] - 2026-08-04
 
