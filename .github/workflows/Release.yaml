@@ -43,7 +43,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install uv (pinned)
-        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
 
       # --all-extras, not [dev]: leidenalg lives in the graph extra, and
       # installing only [dev] silently skipped tests/test_community_detection.py
@@ -80,7 +80,7 @@ jobs:
       # bare `pip install <pkg>` as unpinned regardless of any version pin,
       # and `uv` is not scanned at all (ossf/scorecard shell_download_validate).
       - name: Install uv (pinned)
-        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
 
       - name: Build sdist and wheel
         run: uv build
