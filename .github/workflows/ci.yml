@@ -115,18 +115,49 @@ jobs:
         run: uv build
       - name: Verify distribution metadata and compatibility entry points
         run: uv run --no-sync python -m scripts.check_distribution_artifact
-      # Was pinned independently of Release.yaml's copy at v1.7.9 (Release.yaml
-      # had already moved to v1.8.1 with a different checksum — two pins of
-      # the same binary, already drifted apart). Now installed by the shared
-      # composite action, whose defaults are the only place the version+
-      # checksum pin lives — a future bump is one edit to that file, not two.
-      # v1.8.1 confirmed as the latest release via the registry's GitHub
-      # Releases API on 2026-08-10; both workflows are aligned to it.
+      # Was "download mcp-publisher and POST server.json to the live
+      # registry.modelcontextprotocol.io/v0/validate" (`mcp-publisher
+      # validate`), as a REQUIRED check. That made a required check depend
+      # on a third party being reachable from this runner with no retry
+      # budget: on PR #139 both `test` jobs failed with `dial tcp ...: i/o
+      # timeout` while 1335 tests passed, and a bare re-run went green.
+      #
+      # Reading the registry's own source (tag v1.8.1) shows /v0/validate
+      # runs `ValidateServerJSON(server, ValidationAll)`: full JSON Schema
+      # (draft-07) structural validation, against a schema the registry
+      # binary embeds at build time (`//go:embed schemas/*.json`) rather
+      # than fetches per-request -- so that half of the check is a pure
+      # function of server.json + a static schema document, reproducible
+      # offline with any spec-conformant draft-07 validator. This script
+      # does exactly that against a vendored copy of the same schema file
+      # (scripts/schemas/2025-12-11.json) and fails loudly if server.json
+      # ever moves to a schema version that hasn't been re-vendored.
+      #
+      # What is NOT replicated: ValidateServerJSON's Go-only semantic
+      # checks (version-is-not-a-range/"latest", per-source repository URL
+      # rules, https-only website/icon URLs, package argument and
+      # transport-templating rules) have no equivalent expressible in the
+      # JSON Schema document itself. Those are not silently dropped from
+      # the pipeline -- the registry's own /v0/publish handler runs the
+      # same semantic checks authoritatively, over the network, at release
+      # time (Release.yaml's publish-registry job), and fails the release
+      # loudly if violated. See scripts/validate_server_manifest.py's
+      # module docstring for the full source-backed breakdown.
+      - name: Validate MCP Registry manifest (offline schema check)
+        run: uv run --no-sync python -m scripts.validate_server_manifest
+      # Informational only (`continue-on-error`) — the Go-only semantic
+      # checks the offline step above cannot cover (see its comment). This
+      # is what used to be the required, flaky step; kept here non-blocking
+      # so a third-party outage never fails this job again, while a
+      # reachable registry still surfaces a real semantic problem in the PR
+      # checks list instead of only at release time. The offline step above
+      # is the gate; this is early warning, not a second gate.
       - name: Install mcp-publisher (checksum-verified)
         uses: ./.github/actions/install-mcp-publisher
         with:
           destination: /tmp
-      - name: Validate official MCP Registry manifest
+      - name: Validate MCP Registry manifest (live semantic pre-flight, non-blocking)
+        continue-on-error: true
         run: /tmp/mcp-publisher validate
 
   js-test:

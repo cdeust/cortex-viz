@@ -794,6 +794,7 @@ data = [
     { name = "psycopg-pool" },
 ]
 dev = [
+    { name = "jsonschema" },
     { name = "mutmut" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -818,6 +819,7 @@ requires-dist = [
     { name = "fastmcp", specifier = ">=2.0.0" },
     { name = "igraph", marker = "extra == 'community'", specifier = ">=0.11" },
     { name = "igraph", marker = "extra == 'viz-tile'", specifier = ">=0.11" },
+    { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4.23,<5" },
     { name = "leidenalg", marker = "extra == 'community'", specifier = ">=0.10" },
     { name = "mutmut", marker = "extra == 'dev'", specifier = ">=3.6.0" },
     { name = "numpy", specifier = ">=1.24.0" },
