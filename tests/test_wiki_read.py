@@ -7,6 +7,8 @@ client does ``tags.forEach`` / ``Array.isArray(meta.curation_gaps)`` on them.
 
 from __future__ import annotations
 
+import contextlib
+import locale
 from pathlib import Path
 
 import pytest
@@ -19,6 +21,42 @@ def _write_page(tmp_path, rel_path: str, content: str):
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(content, encoding="utf-8")
     return p
+
+
+# ── UTF-8 pinning under a non-UTF-8 process locale ──────────────────────
+# Every read_text/write_text call in this module pins encoding="utf-8"
+# explicitly rather than trusting the platform default -- the CI matrix
+# runs a Windows job specifically because that default is NOT UTF-8
+# everywhere. Killing an "encoding=None" mutant needs an environment where
+# the default genuinely differs from UTF-8.
+#
+# A subprocess with LC_ALL=C reproduces that divergence but is invisible to
+# mutmut's coverage-based test-to-mutant association: mutmut decides which
+# tests to run for a given mutant by tracing which lines a test's OWN
+# process executes during the stats pass, and a spawned child process's
+# execution is outside that trace -- a subprocess-based test is silently
+# never selected to run against the mutant it targets (verified empirically:
+# it passes locally in isolation, yet the mutant it exists to kill still
+# reports "survived" in the real run). `locale.setlocale` changes the SAME
+# process's C-library locale state at runtime, which `Path.read_text` /
+# `Path.write_text` genuinely consult (also verified empirically --
+# monkeypatching the higher-level `locale.getencoding` /
+# `locale.getpreferredencoding` Python functions does NOT reach them; only
+# the C-level `setlocale` call does) -- so this is both a real behavioural
+# probe and one mutmut's coverage tracer can see.
+
+
+@contextlib.contextmanager
+def _c_locale():
+    """Force the process's C-library locale to "C" (US-ASCII preferred
+    encoding) for the duration of the block, restoring the prior locale
+    afterward even on failure."""
+    original = locale.setlocale(locale.LC_ALL)
+    try:
+        locale.setlocale(locale.LC_ALL, "C")
+        yield
+    finally:
+        locale.setlocale(locale.LC_ALL, original)
 
 
 def test_read_page_normalises_tags_to_a_list(monkeypatch, tmp_path):
@@ -458,3 +496,276 @@ def test_save_page_reports_utf8_byte_length_not_character_length(monkeypatch, tm
     got = mod.save_page("page.md", content)
     assert got["bytes"] == 5
     assert len(content) == 4
+
+
+def test_save_page_success_returns_the_exact_response_shape(monkeypatch, tmp_path):
+    root = tmp_path / "wiki"
+    root.mkdir()
+    monkeypatch.setattr(mod, "WIKI_ROOT", root)
+    got = mod.save_page("page.md", "hi\n")
+    assert got == {"ok": True, "path": "page.md", "bytes": 3}
+
+
+def test_save_page_refuses_a_non_markdown_suffix(monkeypatch, tmp_path):
+    # _safe_path's suffix gate applies to writes exactly as it does to reads
+    # -- a non-".md" target must never be created, regardless of containment.
+    root = tmp_path / "wiki"
+    root.mkdir()
+    monkeypatch.setattr(mod, "WIKI_ROOT", root)
+    assert mod.save_page("notes.txt", "x") == {"error": "invalid path"}
+    assert not (root / "notes.txt").exists()
+
+
+def test_save_page_oserror_on_write_reports_the_exact_message(monkeypatch, tmp_path):
+    root = tmp_path / "wiki"
+    root.mkdir()
+    monkeypatch.setattr(mod, "WIKI_ROOT", root)
+
+    def _boom(self, content, encoding=None):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(Path, "write_text", _boom)
+    assert mod.save_page("page.md", "x") == {"error": "disk full"}
+
+
+def test_save_page_round_trips_non_ascii_content_under_a_non_utf8_locale(
+    monkeypatch, tmp_path
+):
+    root = tmp_path / "wiki"
+    root.mkdir()
+    monkeypatch.setattr(mod, "WIKI_ROOT", root)
+    with _c_locale():
+        got = mod.save_page("page.md", "café\n")
+    assert got["ok"] is True, got
+    assert (root / "page.md").read_bytes().decode("utf-8") == "café\n"
+
+
+# ── _parse_list: the exact strip-charsets, not any charset that happens
+#    to also remove brackets/quotes ──────────────────────────────────────
+
+
+def test_parse_list_only_strips_the_bracket_characters_not_arbitrary_chars():
+    # A value bracketed with 'X' rather than '[' / ']' must survive: proves
+    # the strip charset is exactly "[]", not a wider set that also matches
+    # mutmut's "XX[]XX" marker wrapping.
+    assert mod._parse_list("Xone, twoX") == ["Xone", "twoX"]
+
+
+def test_parse_list_only_strips_quote_characters_not_arbitrary_chars():
+    # A token bounded by 'X' (no quotes) must survive per-token stripping
+    # unchanged -- proves the per-token strip charset is exactly "'\"".
+    assert mod._parse_list("Xa, Xb") == ["Xa", "Xb"]
+
+
+# ── _page_item: "updated" precedence, and encoding/errors robustness ────
+
+
+def test_page_item_prefers_updated_over_tended_fallback(tmp_path):
+    root = tmp_path / "wiki"
+    root.mkdir()
+    _write_page(
+        root, "u.md", "---\nupdated: 2026-03-03\ntended: 2020-01-01\n---\nbody\n"
+    )
+    item = mod._page_item(root / "u.md", root)
+    assert item["updated"] == "2026-03-03"
+
+
+def test_page_item_replaces_invalid_utf8_bytes_instead_of_raising(tmp_path):
+    root = tmp_path / "wiki"
+    root.mkdir()
+    p = root / "bad.md"
+    p.write_bytes(b"---\ntitle: ok\n---\nbody \xff bytes\n")
+    item = mod._page_item(p, root)
+    assert item["title"] == "ok"  # must not raise, invalid byte gets replaced
+
+
+def test_page_item_decodes_utf8_regardless_of_process_locale(tmp_path):
+    root = tmp_path / "wiki"
+    root.mkdir()
+    p = root / "accent.md"
+    p.write_bytes("---\ntitle: café\n---\nbody\n".encode())
+    with _c_locale():
+        item = mod._page_item(p, root)
+    assert item["title"] == "café"
+
+
+# ── read_page: exact response shapes, and the OSError arm ────────────────
+
+
+def test_read_page_not_found_returns_the_exact_error_shape(monkeypatch, tmp_path):
+    root = tmp_path / "wiki"
+    root.mkdir()
+    monkeypatch.setattr(mod, "WIKI_ROOT", root)
+    assert mod.read_page("missing.md") == {"error": "not found"}
+
+
+def test_read_page_success_returns_the_exact_response_shape(monkeypatch, tmp_path):
+    root = tmp_path / "wiki"
+    root.mkdir()
+    monkeypatch.setattr(mod, "WIKI_ROOT", root)
+    _write_page(root, "page.md", "---\ntitle: X\n---\nhello\n")
+    assert mod.read_page("page.md") == {
+        "path": "page.md",
+        "meta": {"title": "X"},
+        "body": "hello",
+    }
+
+
+def test_read_page_oserror_on_read_reports_the_exact_message(monkeypatch, tmp_path):
+    root = tmp_path / "wiki"
+    root.mkdir()
+    monkeypatch.setattr(mod, "WIKI_ROOT", root)
+    _write_page(root, "page.md", "body\n")
+
+    def _boom(self, encoding=None, errors=None):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(Path, "read_text", _boom)
+    assert mod.read_page("page.md") == {"error": "permission denied"}
+
+
+def test_read_page_replaces_invalid_utf8_bytes_instead_of_raising(
+    monkeypatch, tmp_path
+):
+    root = tmp_path / "wiki"
+    root.mkdir()
+    monkeypatch.setattr(mod, "WIKI_ROOT", root)
+    (root / "bad.md").write_bytes(b"---\ntitle: ok\n---\nbody \xff bytes\n")
+    got = mod.read_page("bad.md")
+    assert "error" not in got
+    assert got["meta"]["title"] == "ok"
+
+
+def test_read_page_decodes_utf8_regardless_of_process_locale(monkeypatch, tmp_path):
+    root = tmp_path / "wiki"
+    root.mkdir()
+    monkeypatch.setattr(mod, "WIKI_ROOT", root)
+    _write_page(root, "accent.md", "---\ntitle: X\n---\ncafé\n")
+    with _c_locale():
+        got = mod.read_page("accent.md")
+    assert got["body"] == "café"
+
+
+# ── list_bibliography: leading-entry boundary, the else-arm, OSError
+#    continue-vs-break, and invalid-byte robustness ──────────────────────
+
+
+def test_list_bibliography_counts_a_leading_entry_preceded_only_by_whitespace(
+    monkeypatch, tmp_path
+):
+    # Leading SPACES (not a preceding "\n@") before the first "@" -- distinguishes
+    # lstrip() (strips them, sees "@...", counts it) from rstrip() (leaves them,
+    # the text does not start with "@", would NOT count it).
+    root = tmp_path / "wiki"
+    bib_dir = root / "_bibliography"
+    bib_dir.mkdir(parents=True)
+    (bib_dir / "lead.bib").write_text("   @book{a,\n  title={A}\n}\n", encoding="utf-8")
+    monkeypatch.setattr(mod, "WIKI_ROOT", root)
+    got = mod.list_bibliography()
+    assert got["files"][0]["entries"] == 1
+
+
+def test_list_bibliography_reports_zero_entries_for_a_file_with_no_at_sign(
+    monkeypatch, tmp_path
+):
+    root = tmp_path / "wiki"
+    bib_dir = root / "_bibliography"
+    bib_dir.mkdir(parents=True)
+    (bib_dir / "empty.bib").write_text("no entries in this file\n", encoding="utf-8")
+    monkeypatch.setattr(mod, "WIKI_ROOT", root)
+    got = mod.list_bibliography()
+    assert got["files"][0]["entries"] == 0
+
+
+def test_list_bibliography_skips_an_unreadable_file_and_still_lists_the_rest(
+    monkeypatch, tmp_path
+):
+    root = tmp_path / "wiki"
+    bib_dir = root / "_bibliography"
+    bib_dir.mkdir(parents=True)
+    (bib_dir / "a_broken.bib").write_text("@book{a}\n", encoding="utf-8")
+    (bib_dir / "b_ok.bib").write_text("@book{b}\n", encoding="utf-8")
+    monkeypatch.setattr(mod, "WIKI_ROOT", root)
+
+    real_read_text = Path.read_text
+
+    def _flaky(self, *a, **k):
+        if self.name == "a_broken.bib":
+            raise OSError("unreadable")
+        return real_read_text(self, *a, **k)
+
+    monkeypatch.setattr(Path, "read_text", _flaky)
+    got = mod.list_bibliography()
+    names = {f["path"] for f in got["files"]}
+    # "continue" (not "break") must let the loop reach b_ok.bib despite
+    # a_broken.bib raising first (sorted order puts a_broken.bib first).
+    assert names == {"_bibliography/b_ok.bib"}
+
+
+def test_list_bibliography_replaces_invalid_utf8_bytes_instead_of_raising(
+    monkeypatch, tmp_path
+):
+    root = tmp_path / "wiki"
+    bib_dir = root / "_bibliography"
+    bib_dir.mkdir(parents=True)
+    (bib_dir / "bad.bib").write_bytes(b"@book{a,\n  title={A \xff B}\n}\n")
+    monkeypatch.setattr(mod, "WIKI_ROOT", root)
+    got = mod.list_bibliography()
+    assert got["files"][0]["entries"] == 1  # did not raise; counted normally
+
+
+# ── read_bibliography: suffix gate, exact OSError shape, invalid bytes,
+#    and encoding robustness (content IS surfaced here, unlike list) ─────
+
+
+def test_read_bibliography_refuses_a_non_bib_suffix(monkeypatch, tmp_path):
+    root = tmp_path / "wiki"
+    bib_dir = root / "_bibliography"
+    bib_dir.mkdir(parents=True)
+    (bib_dir / "notes.txt").write_text("not a bib file", encoding="utf-8")
+    monkeypatch.setattr(mod, "WIKI_ROOT", root)
+    assert mod.read_bibliography("_bibliography/notes.txt") == {"error": "invalid path"}
+
+
+def test_read_bibliography_oserror_on_read_reports_the_exact_message(
+    monkeypatch, tmp_path
+):
+    root = tmp_path / "wiki"
+    bib_dir = root / "_bibliography"
+    bib_dir.mkdir(parents=True)
+    (bib_dir / "refs.bib").write_text("@book{a}\n", encoding="utf-8")
+    monkeypatch.setattr(mod, "WIKI_ROOT", root)
+
+    def _boom(self, encoding=None, errors=None):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(Path, "read_text", _boom)
+    assert mod.read_bibliography("_bibliography/refs.bib") == {
+        "error": "permission denied"
+    }
+
+
+def test_read_bibliography_replaces_invalid_utf8_bytes_instead_of_raising(
+    monkeypatch, tmp_path
+):
+    root = tmp_path / "wiki"
+    bib_dir = root / "_bibliography"
+    bib_dir.mkdir(parents=True)
+    (bib_dir / "bad.bib").write_bytes(b"@book{a,\n  title={A \xff B}\n}\n")
+    monkeypatch.setattr(mod, "WIKI_ROOT", root)
+    got = mod.read_bibliography("_bibliography/bad.bib")
+    assert "error" not in got
+    assert "�" in got["content"]
+
+
+def test_read_bibliography_decodes_utf8_regardless_of_process_locale(
+    monkeypatch, tmp_path
+):
+    root = tmp_path / "wiki"
+    bib_dir = root / "_bibliography"
+    bib_dir.mkdir(parents=True)
+    (bib_dir / "accent.bib").write_bytes("@book{a, title={café}}\n".encode())
+    monkeypatch.setattr(mod, "WIKI_ROOT", root)
+    with _c_locale():
+        got = mod.read_bibliography("_bibliography/accent.bib")
+    assert got["content"] == "@book{a, title={café}}\n"
