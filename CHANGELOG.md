@@ -5,6 +5,11 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 
 ## [Unreleased]
 
+## [3.1.1] - 2026-08-10
+
+**Upgrade urgency: build-breaking.** 3.1.0 cannot build a graph at all —
+install this release instead.
+
 ### Added
 - `publish-registry` job in `Release.yaml`: RELEASING.md step 5 (publishing
   `server.json` to the official MCP Registry) is now automated, running
@@ -12,6 +17,25 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
   `mcp-publisher login github-oidc` (no stored credential). A
   `workflow_dispatch` recovery path repairs a stale registry entry for an
   already-tagged release without re-publishing the package.
+
+### Fixed
+- The graph builder crashed on its first statement and `/api/graph/progress`
+  never left `starting` (#134). Commit `45d4a80` (published in 3.1.0) deleted
+  `graph_event_stream`'s module-level `emit`/`close`/`reset` forwarders on
+  the premise that nothing in this repository's history called them; they
+  had four callers (`graph_build_run.py`'s `reset()`/`emit()`/finally-`close()`
+  and `graph_build_merge.py`'s `emit()`), all binding the module once and
+  calling its functions for the lifetime of a build. Restored all three
+  forwarders, with `emit` now forwarding the `event_meta` parameter it had
+  been silently dropping — that drift was the commit's real defect and the
+  reason to fix the forwarder, not delete it.
+- A failing end-of-stream terminator was silently swallowed (#135).
+  `graph_build_run.py`'s `finally` block sent the stream-closing call inside
+  `except Exception: pass`, so a failure there produced no log line and no
+  counter — which is exactly why #134's `AttributeError` on this same call
+  reached a release unnoticed. The exception's type and message are now
+  reported to stderr before the lock releases; it is still never re-raised,
+  since a failure here must not mask the build outcome being unwound.
 
 ## [3.1.0] - 2026-08-10
 
