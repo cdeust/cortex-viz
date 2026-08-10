@@ -21,11 +21,31 @@ name: Release
 # `pypi` environment and id-token permission bind publication to this workflow,
 # repository, tag, and environment. The canonical console command is
 # `hypermnesia-mcp-viz`; no deprecated publication alias is emitted.
+#
+# docs/RELEASING.md step 5. The `publish-registry` job below publishes
+# `server.json` to the official MCP Registry (registry.modelcontextprotocol.io)
+# after `release` succeeds, so it can never point the registry at a PyPI
+# version that does not exist. It has no committed tooling before this
+# change — the registry drifted to 2.8.0 while PyPI and the GitHub Release
+# were already at 3.1.0, the same "checklist step nobody ran" shape as the
+# marketplace-pin lesson above. Auth is `mcp-publisher login github-oidc`, no
+# secret: the same no-long-lived-credential pattern as the PyPI publish job.
 
 on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: >-
+          Recovery path only. Existing release tag to (re)publish to the MCP
+          Registry, e.g. v3.1.0. The matching version must already be on
+          PyPI — this path does not rebuild or re-publish the package, it
+          only repairs a registry entry that fell behind. Required for
+          workflow_dispatch; the workflow refuses to guess.
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -33,6 +53,7 @@ permissions:
 jobs:
   test:
     name: Test before release
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -57,6 +78,7 @@ jobs:
   release:
     name: Build, fingerprint UI, SBOM, attest + GitHub Release
     needs: test
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -163,3 +185,106 @@ jobs:
             hypermnesia-mcp-viz-ui-manifest.sha256
             hypermnesia-mcp-viz-ui-manifest.sha256.sha256
           fail_on_unmatched_files: true
+
+  publish-registry:
+    # RELEASING.md step 5. Runs after PyPI publish + GitHub Release succeed
+    # (needs: [test, release]) so it can never publish a registry entry
+    # pointing at a package version that does not exist yet. Also runs on
+    # workflow_dispatch as a recovery path, for the case where a version was
+    # published to PyPI and tagged (test + release already succeeded on that
+    # tag's push) but this job did not exist yet or failed — exactly the gap
+    # that let the registry serve 2.8.0 while PyPI and the GitHub Release
+    # were already at 3.1.0.
+    name: Publish server.json to the MCP Registry
+    needs: [test, release]
+    if: |
+      always() &&
+      (github.event_name == 'workflow_dispatch' || needs.release.result == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # OIDC token the MCP Registry exchanges for a publish credential
+    steps:
+      # Fail loudly rather than silently skip: workflow_dispatch without an
+      # explicit tag would otherwise publish whatever ref happened to be
+      # selected in the UI, which is exactly the kind of unattended drift
+      # this job exists to close.
+      - name: Resolve target tag
+        id: resolve
+        run: |
+          set -euxo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+            if [ -z "$TAG" ]; then
+              echo "::error::workflow_dispatch requires a 'tag' input (e.g. v3.1.0) — refusing to guess which release to publish."
+              exit 1
+            fi
+          else
+            TAG="${{ github.ref_name }}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.resolve.outputs.tag }}
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      # mcp-publisher has no first-party GitHub Action wrapper, so it is
+      # fetched as a release binary and checksum-verified against the
+      # registry project's own published checksums — the same supply-chain
+      # discipline the pinned Actions above get via commit SHA, applied to a
+      # raw binary download. Bump both MCP_PUBLISHER_VERSION and the SHA-256
+      # together from https://github.com/modelcontextprotocol/registry/releases.
+      - name: Install mcp-publisher (checksum-verified)
+        env:
+          MCP_PUBLISHER_VERSION: v1.8.1
+          MCP_PUBLISHER_SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
+        run: |
+          set -euxo pipefail
+          curl -fsSLO "https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz"
+          echo "${MCP_PUBLISHER_SHA256}  mcp-publisher_linux_amd64.tar.gz" | sha256sum -c -
+          tar xzf mcp-publisher_linux_amd64.tar.gz mcp-publisher
+          chmod +x mcp-publisher
+
+      # The exact defect this job exists to prevent runs in both directions:
+      # a registry entry must never point at a PyPI version that does not
+      # exist. Check before authenticating, not after.
+      - name: Verify the PyPI package version exists before publishing
+        run: |
+          set -euxo pipefail
+          VERSION=$(python3 -c "import json; print(json.load(open('server.json'))['packages'][0]['version'])")
+          echo "Checking PyPI for hypermnesia-mcp-viz==${VERSION}"
+          curl -fsSL "https://pypi.org/pypi/hypermnesia-mcp-viz/${VERSION}/json" > /dev/null
+
+      # No secret: the `pypi` OIDC trusted-publishing pattern this repo
+      # already uses for PyPI (see the workflow header) has a registry
+      # equivalent — `mcp-publisher login github-oidc` exchanges this job's
+      # GitHub Actions OIDC token for a registry credential scoped to
+      # io.github.cdeust/*, using only the id-token: write permission above.
+      # Source: modelcontextprotocol/registry docs/reference/cli/commands.md
+      # ("GitHub OIDC (CI/CD)") and docs/modelcontextprotocol-io/github-actions.mdx
+      # ("OIDC authentication (recommended)"), verified 2026-08-10.
+      - name: Authenticate to the MCP Registry via GitHub OIDC
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish server.json to the MCP Registry
+        run: ./mcp-publisher publish
+
+      # A green `mcp-publisher publish` is not proof (Move 2: verify
+      # externally, not by exit code alone). Query the registry's own API
+      # and fail the job if it disagrees with server.json.
+      - name: Verify the registry now serves the published version
+        run: |
+          set -euxo pipefail
+          VERSION=$(python3 -c "import json; print(json.load(open('server.json'))['packages'][0]['version'])")
+          ACTUAL=$(curl -fsSL "https://registry.modelcontextprotocol.io/v0/servers?search=hypermnesia-mcp-viz" \
+            | python3 -c "import json, sys; d = json.load(sys.stdin); latest = next(s for s in d['servers'] if s['_meta']['io.modelcontextprotocol.registry/official']['isLatest']); print(latest['server']['version'])")
+          echo "Registry reports latest version: ${ACTUAL} (expected ${VERSION})"
+          if [ "$ACTUAL" != "$VERSION" ]; then
+            echo "::error::MCP Registry serves ${ACTUAL}, expected ${VERSION} after publish"
+            exit 1
+          fi
