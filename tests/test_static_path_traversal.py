@@ -204,3 +204,121 @@ def test_http_server_static_reader_still_serves_legitimate_files(
     _serve_static(h, flat_dir, "config.js", "application/javascript")
     assert h.status == 200
     assert h.body == b"// cfg"
+
+
+# ── response framing — headers are part of the contract, not incidental ──
+# A body-only assertion cannot distinguish "sent the right Content-Type" from
+# "sent an empty/wrong one" -- these pin the framing headers both readers
+# promise on a 200.
+
+
+def test_static_success_sends_correct_framing_headers(flat_dir: Path) -> None:
+    h = FakeHandler()
+    serve_static(h, flat_dir, "config.js", "application/javascript")
+    assert h.status == 200
+    assert h.headers["Content-Type"] == "application/javascript; charset=utf-8"
+    assert h.headers["Content-Length"] == str(len(b"// cfg"))
+    assert h.headers["Cache-Control"] == "no-cache"
+
+
+def test_shared_asset_success_sends_correct_framing_headers(sandbox: Path) -> None:
+    h = FakeHandler()
+    serve_shared_asset(h, sandbox, "tokens/colors.css")
+    assert h.status == 200
+    body = b"/* colors */"
+    assert h.headers["Content-Type"] == "text/css; charset=utf-8"
+    assert h.headers["Content-Length"] == str(len(body))
+    assert h.headers["Cache-Control"] == "no-cache"
+
+
+# ── shared-asset content-type table — every mapped extension, plus the
+#    unmapped fallback, pinned individually (a swapped dict value produces
+#    a wrong-but-still-served response no status/body assertion catches) ──
+
+
+@pytest.mark.parametrize(
+    ("filename", "expected_type"),
+    [
+        ("f.css", "text/css"),
+        ("f.js", "application/javascript"),
+        ("f.mjs", "application/javascript"),
+        ("f.json", "application/json"),
+        ("f.woff2", "font/woff2"),
+        ("f.woff", "font/woff"),
+        ("f.ttf", "font/ttf"),
+        ("f.svg", "image/svg+xml"),
+        ("f.unknownext", "text/plain"),
+    ],
+)
+def test_shared_asset_content_type_table(
+    tmp_path: Path, filename: str, expected_type: str
+) -> None:
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    (shared / filename).write_bytes(b"data")
+    h = FakeHandler()
+    serve_shared_asset(h, shared, filename)
+    assert h.status == 200
+    assert h.headers["Content-Type"] == f"{expected_type}; charset=utf-8"
+
+
+def test_shared_asset_content_type_lookup_is_case_insensitive_on_suffix(
+    tmp_path: Path,
+) -> None:
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    (shared / "f.CSS").write_bytes(b"data")
+    h = FakeHandler()
+    serve_shared_asset(h, shared, "f.CSS")
+    assert h.status == 200
+    assert h.headers["Content-Type"] == "text/css; charset=utf-8"
+
+
+# ── serve_static filename-whitelist regex — each admitted/rejected class
+#    of first character and body character, pinned independently ────────
+
+
+@pytest.mark.parametrize(
+    ("filename", "should_serve"),
+    [
+        ("123.js", True),  # digit-led name is a legal identifier
+        ("_private.js", True),  # underscore-led name is a legal identifier
+        ("-leading-dash.js", False),  # '-' is not \w -- rejected as first char
+        ("a b.js", False),  # embedded space is not in the allowed class
+    ],
+)
+def test_static_filename_whitelist_boundary(
+    tmp_path: Path, filename: str, should_serve: bool
+) -> None:
+    d = tmp_path / "js"
+    d.mkdir()
+    (d / filename).write_text("x", encoding="utf-8")
+    h = FakeHandler()
+    serve_static(h, d, filename, "application/javascript")
+    if should_serve:
+        assert h.status == 200
+        assert h.body == b"x"
+    else:
+        assert h.status == 403
+        assert h.body == b""
+
+
+def test_static_directory_entry_is_not_served(tmp_path: Path) -> None:
+    """A directory sharing a name with a would-be file must 404, not be
+    treated as content -- the whitelist is built with ``is_file()`` only."""
+    d = tmp_path / "js"
+    d.mkdir()
+    (d / "sub").mkdir()
+    h = FakeHandler()
+    serve_static(h, d, "sub", "application/javascript")
+    assert h.status == 404
+    assert h.body == b""
+
+
+def test_static_unknown_filename_is_404_not_403(flat_dir: Path) -> None:
+    """A name that passes the regex whitelist but names nothing on disk is a
+    plain 404 (unknown), distinct from a 403 (rejected shape)."""
+    h = FakeHandler()
+    serve_static(h, flat_dir, "does-not-exist.js", "application/javascript")
+    assert h.status == 404
+    assert h.body == b""

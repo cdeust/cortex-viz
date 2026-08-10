@@ -7,6 +7,8 @@ client does ``tags.forEach`` / ``Array.isArray(meta.curation_gaps)`` on them.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 import cortex_viz.infrastructure.wiki_read as mod
@@ -192,3 +194,263 @@ def test_read_bibliography_refuses_a_path_outside_the_wiki_root(monkeypatch, tmp
     (tmp_path / "outside.bib").write_text("@book{x}\n", encoding="utf-8")
     monkeypatch.setattr(mod, "WIKI_ROOT", root)
     assert mod.read_bibliography("../outside.bib") == {"error": "invalid path"}
+
+
+# ── _parse_list ──────────────────────────────────────────────────────────
+# Frontmatter list values arrive in three raw shapes from the flat-KV
+# parser: an already-materialised list (only via direct dict construction,
+# never from the parser itself, but the function must still honour it),
+# a bracketed comma-separated string, and a bare comma-separated string.
+
+
+def test_parse_list_passes_through_a_real_list():
+    assert mod._parse_list(["a", " b ", ""]) == ["a", "b"]
+
+
+def test_parse_list_falsy_value_is_empty():
+    assert mod._parse_list(None) == []
+    assert mod._parse_list("") == []
+
+
+def test_parse_list_strips_brackets_and_splits_on_comma():
+    assert mod._parse_list("[a, b, c]") == ["a", "b", "c"]
+
+
+def test_parse_list_without_brackets_still_splits():
+    assert mod._parse_list("a, b") == ["a", "b"]
+
+
+def test_parse_list_strips_quotes_from_each_token():
+    assert mod._parse_list("['a', \"b\"]") == ["a", "b"]
+
+
+def test_parse_list_drops_whitespace_only_tokens():
+    assert mod._parse_list("a, , b") == ["a", "b"]
+
+
+# ── _title_from ──────────────────────────────────────────────────────────
+
+
+def test_title_from_uses_frontmatter_title_when_present():
+    assert mod._title_from({"title": "Explicit Title"}, Path("/x/ignored.md")) == (
+        "Explicit Title"
+    )
+
+
+def test_title_from_falls_back_to_stem_with_separators_as_spaces():
+    assert mod._title_from({}, Path("/x/my-cool_page.md")) == "my cool page"
+
+
+def test_title_from_falls_back_to_filename_when_stem_is_all_separators():
+    # stem.replace("-", " ").replace("_", " ").strip() == "" for a stem made
+    # only of separators -- the final fallback is the literal file name.
+    assert mod._title_from({}, Path("/x/--__.md")) == "--__.md"
+
+
+# ── _page_item / list_pages / list_projects / _iter_md ─────────────────
+
+
+def test_page_item_reads_frontmatter_fields(tmp_path):
+    root = tmp_path / "wiki"
+    root.mkdir()
+    _write_page(
+        root,
+        "a/b.md",
+        "---\n"
+        "title: B Page\n"
+        "kind: adr\n"
+        "domain: cortex\n"
+        "tags: [x, y]\n"
+        "status: draft\n"
+        "date: 2026-01-01\n"
+        "tended: 2026-02-02\n"
+        "---\n"
+        "body\n",
+    )
+    item = mod._page_item(root / "a" / "b.md", root)
+    assert item == {
+        "path": "a/b.md",
+        "title": "B Page",
+        "kind": "adr",
+        "domain": "cortex",
+        "tags": ["x", "y"],
+        "maturity": "draft",
+        "created": "2026-01-01",
+        "updated": "2026-02-02",
+    }
+
+
+def test_page_item_defaults_kind_to_page_when_absent(tmp_path):
+    root = tmp_path / "wiki"
+    root.mkdir()
+    _write_page(root, "c.md", "no frontmatter\n")
+    item = mod._page_item(root / "c.md", root)
+    assert item["kind"] == "page"
+    assert item["domain"] == ""
+    assert item["tags"] == []
+    assert item["maturity"] == ""
+    assert item["created"] == ""
+    assert item["updated"] == ""
+
+
+def test_page_item_prefers_maturity_over_status_fallback(tmp_path):
+    root = tmp_path / "wiki"
+    root.mkdir()
+    _write_page(root, "m.md", "---\nmaturity: stable\nstatus: draft\n---\nbody\n")
+    item = mod._page_item(root / "m.md", root)
+    assert item["maturity"] == "stable"
+
+
+def test_page_item_prefers_created_over_date_fallback(tmp_path):
+    root = tmp_path / "wiki"
+    root.mkdir()
+    _write_page(root, "d.md", "---\ncreated: 2026-01-01\ndate: 2020-01-01\n---\nbody\n")
+    item = mod._page_item(root / "d.md", root)
+    assert item["created"] == "2026-01-01"
+
+
+def test_page_item_unreadable_file_yields_empty_meta(monkeypatch, tmp_path):
+    root = tmp_path / "wiki"
+    root.mkdir()
+    p = _write_page(root, "u.md", "---\ntitle: X\n---\nbody\n")
+
+    def _boom(*a, **k):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(Path, "read_text", _boom)
+    item = mod._page_item(p, root)
+    assert item["title"] == "u"  # falls back to the filename stem
+    assert item["kind"] == "page"
+
+
+def test_iter_md_skips_the_bibliography_subtree(tmp_path):
+    root = tmp_path / "wiki"
+    root.mkdir()
+    _write_page(root, "keep.md", "keep\n")
+    _write_page(root, "_bibliography/refs.md", "skip me\n")
+    found = [str(p.relative_to(root)) for p in mod._iter_md(root)]
+    assert found == ["keep.md"]
+
+
+def test_list_pages_returns_empty_when_root_missing(monkeypatch, tmp_path):
+    monkeypatch.setattr(mod, "WIKI_ROOT", tmp_path / "does-not-exist")
+    assert mod.list_pages() == {"pages": []}
+
+
+def test_list_pages_returns_every_page(monkeypatch, tmp_path):
+    root = tmp_path / "wiki"
+    root.mkdir()
+    _write_page(root, "one.md", "---\ntitle: One\n---\nbody\n")
+    _write_page(root, "two.md", "---\ntitle: Two\n---\nbody\n")
+    monkeypatch.setattr(mod, "WIKI_ROOT", root)
+    got = mod.list_pages()
+    titles = sorted(p["title"] for p in got["pages"])
+    assert titles == ["One", "Two"]
+
+
+def test_list_projects_returns_empty_when_root_missing(monkeypatch, tmp_path):
+    monkeypatch.setattr(mod, "WIKI_ROOT", tmp_path / "does-not-exist")
+    assert mod.list_projects() == {"projects": []}
+
+
+def test_list_projects_groups_by_domain_with_kind_counts(monkeypatch, tmp_path):
+    root = tmp_path / "wiki"
+    root.mkdir()
+    _write_page(root, "a.md", "---\ndomain: cortex\nkind: adr\n---\nbody\n")
+    _write_page(root, "b.md", "---\ndomain: cortex\nkind: adr\n---\nbody\n")
+    _write_page(root, "c.md", "---\ndomain: cortex\nkind: note\n---\nbody\n")
+    _write_page(root, "d.md", "no frontmatter\n")  # domain absent -> _general
+    monkeypatch.setattr(mod, "WIKI_ROOT", root)
+    got = mod.list_projects()
+    by_domain = {p["domain"]: p for p in got["projects"]}
+    assert by_domain["cortex"]["page_total"] == 3
+    assert by_domain["cortex"]["page_counts_by_kind"] == {"adr": 2, "note": 1}
+    assert by_domain["_general"]["page_total"] == 1
+
+
+def test_list_projects_sorts_by_descending_page_total(monkeypatch, tmp_path):
+    root = tmp_path / "wiki"
+    root.mkdir()
+    _write_page(root, "big1.md", "---\ndomain: big\n---\nb\n")
+    _write_page(root, "big2.md", "---\ndomain: big\n---\nb\n")
+    _write_page(root, "small.md", "---\ndomain: small\n---\nb\n")
+    monkeypatch.setattr(mod, "WIKI_ROOT", root)
+    got = mod.list_projects()
+    domains_in_order = [p["domain"] for p in got["projects"]]
+    assert domains_in_order == ["big", "small"]
+
+
+# ── list_bibliography / read_bibliography ───────────────────────────────
+
+
+def test_list_bibliography_empty_when_dir_missing(monkeypatch, tmp_path):
+    root = tmp_path / "wiki"
+    root.mkdir()
+    monkeypatch.setattr(mod, "WIKI_ROOT", root)
+    assert mod.list_bibliography() == {"files": []}
+
+
+def test_list_bibliography_counts_entries_and_reports_size(monkeypatch, tmp_path):
+    root = tmp_path / "wiki"
+    bib_dir = root / "_bibliography"
+    bib_dir.mkdir(parents=True)
+    content = "@book{a,\n  title={A}\n}\n@article{b,\n  title={B}\n}\n"
+    (bib_dir / "refs.bib").write_text(content, encoding="utf-8")
+    monkeypatch.setattr(mod, "WIKI_ROOT", root)
+    got = mod.list_bibliography()
+    assert len(got["files"]) == 1
+    entry = got["files"][0]
+    assert entry["path"] == "_bibliography/refs.bib"
+    assert entry["entries"] == 2
+    assert entry["size"] == len(content.encode("utf-8"))
+
+
+def test_list_bibliography_counts_a_leading_entry_with_no_preceding_newline(
+    monkeypatch, tmp_path
+):
+    root = tmp_path / "wiki"
+    bib_dir = root / "_bibliography"
+    bib_dir.mkdir(parents=True)
+    # The file's very first byte is '@' -- no "\n@" occurs, so the leading
+    # entry would be undercounted without the lstrip().startswith("@") arm.
+    (bib_dir / "solo.bib").write_text("@book{a,\n  title={A}\n}\n", encoding="utf-8")
+    monkeypatch.setattr(mod, "WIKI_ROOT", root)
+    got = mod.list_bibliography()
+    assert got["files"][0]["entries"] == 1
+
+
+def test_read_bibliography_returns_content_and_byte_size(monkeypatch, tmp_path):
+    root = tmp_path / "wiki"
+    bib_dir = root / "_bibliography"
+    bib_dir.mkdir(parents=True)
+    content = "@book{a}\n"
+    (bib_dir / "refs.bib").write_text(content, encoding="utf-8")
+    monkeypatch.setattr(mod, "WIKI_ROOT", root)
+    got = mod.read_bibliography("_bibliography/refs.bib")
+    assert got == {"path": "_bibliography/refs.bib", "content": content, "size": len(content)}
+
+
+def test_read_bibliography_refuses_a_bib_outside_the_bibliography_subtree(
+    monkeypatch, tmp_path
+):
+    # _safe_path alone would accept this (it's under WIKI_ROOT and ends in
+    # .bib) -- the "_bibliography" in p.parts guard is a second, independent
+    # gate that must reject it too.
+    root = tmp_path / "wiki"
+    root.mkdir()
+    (root / "stray.bib").write_text("@book{a}\n", encoding="utf-8")
+    monkeypatch.setattr(mod, "WIKI_ROOT", root)
+    assert mod.read_bibliography("stray.bib") == {"error": "invalid path"}
+
+
+# ── save_page byte accounting ───────────────────────────────────────────
+
+
+def test_save_page_reports_utf8_byte_length_not_character_length(monkeypatch, tmp_path):
+    root = tmp_path / "wiki"
+    root.mkdir()
+    monkeypatch.setattr(mod, "WIKI_ROOT", root)
+    content = "café"  # 4 chars, 5 UTF-8 bytes
+    got = mod.save_page("page.md", content)
+    assert got["bytes"] == 5
+    assert len(content) == 4
