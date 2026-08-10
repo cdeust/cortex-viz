@@ -8,7 +8,7 @@ Anything with an issue number is tracked; anything without one is an intention.
 
 ## Where the project is
 
-Current version **3.1.0**. All six views (Graph, Brain, Trace, Knowledge, Wiki,
+Current version **3.1.1**. All six views (Graph, Brain, Trace, Knowledge, Wiki,
 Board) are bridged to live data. The galaxy builds end to end at 75k+ nodes and
 the 3D brain streams the full graph into a cortical mesh. Trace works with no
 database at all. The supply-chain wave ([#37](https://github.com/cdeust/cortex-viz/issues/37))
