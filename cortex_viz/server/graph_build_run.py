@@ -542,13 +542,22 @@ def run_build(store, domain_filter: str | None) -> None:
         # early return, or error. Subscribers drain whatever was
         # emitted, receive ``done``, and close. close() is
         # idempotent; the buffer survives for late-subscriber
-        # replay until the next build's reset().
+        # replay until the next build's reset(). A failure here must
+        # not mask the build outcome being unwound, so it is never
+        # re-raised — but not-masking and not-reporting are
+        # different things (#135): silently swallowing it is exactly
+        # why #134's AttributeError on this same call went unnoticed
+        # for a release. Report it on stderr instead; subscribers
+        # still never receive ``done`` and are left on an open
+        # connection, but now there is a line naming why.
         try:
             from cortex_viz.server import graph_event_stream as _ev
 
             _ev.close()
-        except Exception:
-            # close() is idempotent and the buffer survives for late-subscriber replay;
-            # a failure here must not mask the build outcome being unwound.
-            pass
+        except Exception as _close_exc:
+            print(
+                f"[cortex] end-of-stream terminator failed: "
+                f"{type(_close_exc).__name__}: {_close_exc}",
+                file=sys.stderr,
+            )
         state._graph_build_lock.release()
