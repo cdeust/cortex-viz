@@ -358,14 +358,21 @@ def test_resolve_name_basename_resolves_via_activity_store(monkeypatch):
     import cortex_viz.infrastructure.activity_store as activity_store
     from cortex_viz.server.http_file_diff import _resolve_name
 
-    monkeypatch.setattr(
-        activity_store,
-        "find_abs_path_by_label",
-        lambda store, label: "/Users/dev/repo/foo.py" if label == "foo.py" else None,
-    )
-    abs_path, reason = _resolve_name(object(), "foo.py")
+    sentinel_store = object()
+    seen_stores = []
+
+    def _fake(store, label):
+        seen_stores.append(store)
+        return "/Users/dev/repo/foo.py" if label == "foo.py" else None
+
+    monkeypatch.setattr(activity_store, "find_abs_path_by_label", _fake)
+    abs_path, reason = _resolve_name(sentinel_store, "foo.py")
     assert abs_path == "/Users/dev/repo/foo.py"
     assert reason is None
+    # The exact store object must cross every layer (_resolve_name ->
+    # _resolve_by_basename -> find_abs_path_by_label) unchanged, not be
+    # swapped for None along the way.
+    assert seen_stores == [sentinel_store]
 
 
 def test_resolve_name_basename_unresolved_reports_reason(monkeypatch):
@@ -379,8 +386,7 @@ def test_resolve_name_basename_unresolved_reports_reason(monkeypatch):
     )
     abs_path, reason = _resolve_name(object(), "missing.py")
     assert abs_path is None
-    assert reason is not None
-    assert "unresolved basename" in reason
+    assert reason == "unresolved basename: not found in activity index"
 
 
 def test_resolve_name_never_falls_back_to_server_cwd(monkeypatch):

@@ -203,5 +203,41 @@ this change).
 
 ## `cortex_viz/server/http_file_diff.py`
 
-Tests: `tests/test_git_diff_engine.py,tests/test_file_diff.py`. *(recorded
-after that module's run — see PR for the exact counts.)*
+Tests: `tests/test_git_diff_engine.py,tests/test_file_diff.py`. **120
+mutants generated, 120 killed, 0 equivalent, 0 survivors** (was 16
+survivors before this change).
+
+### Notable kills — the *why*, not just the assertion
+
+- **`x__resolve_by_basename__mutmut_5`, `x__resolve_by_relative_fragment__mutmut_23`,
+  `x__resolve_name__mutmut_7`, `x_serve_file_diff__mutmut_33`
+  (`store` swapped for `None` at four distinct call sites along the
+  resolution chain: `_resolve_by_basename` -> `find_abs_path_by_label`,
+  `_resolve_by_relative_fragment` -> `find_abs_path_by_suffix`,
+  `_resolve_name` -> `_resolve_by_relative_fragment`, and
+  `serve_file_diff` -> `_resolve_name`)** — the existing store-forwarding
+  tests monkeypatched the lookup functions with lambdas that *ignored*
+  their `store` parameter, so a dropped/`None`-swapped store was
+  invisible to them. Each of the four call sites needed its own
+  independent proof: a lambda/closure that records every `store` value it
+  actually received and asserts the list equals `[sentinel_store]` — a
+  passed-through `None` swap shows up as `[None]` or a length mismatch
+  instead.
+
+- **`x__resolve_by_basename__mutmut_11` (`"unresolved basename: not found
+  in activity index"` wrapped in mutmut's `"XX...XX"` marker)** — the
+  existing test asserted `"unresolved basename" in reason` (substring),
+  which the wrapped string still contains. Tightened to exact string
+  equality, which the JS notes precedent already established as the
+  right default for reason/error strings in this codebase.
+
+- **`x_serve_file_diff__mutmut_49/50/51/52/53` (the "unresolved name"
+  response dict's `"lines"`/`"truncated"` keys and the `False` -> `True`
+  value mutant)** — the existing test asserted three of the five keys
+  individually (`available`, `diff_type`, `reason`), missing `lines` and
+  `truncated` entirely. Switched to full-dict equality against the
+  literal five-key response, matching the pattern already used for the
+  "no file given" branch's equivalent full-dict test.
+
+No equivalent mutants in this module — every survivor from the original
+run was a genuine test gap, not an unobservable difference.

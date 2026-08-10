@@ -141,14 +141,42 @@ def test_resolve_by_relative_fragment_falls_back_to_activity_suffix_search(
     import cortex_viz.infrastructure.activity_store as activity_store
     from cortex_viz.server.http_file_diff import _resolve_by_relative_fragment
 
-    monkeypatch.setattr(
-        activity_store,
-        "find_abs_path_by_suffix",
-        lambda store, name: "/repo/src/found.py" if name == "src/found.py" else None,
-    )
-    abs_path, reason = _resolve_by_relative_fragment(object(), "src/found.py")
+    sentinel_store = object()
+    seen_stores = []
+
+    def _fake(store, name):
+        seen_stores.append(store)
+        return "/repo/src/found.py" if name == "src/found.py" else None
+
+    monkeypatch.setattr(activity_store, "find_abs_path_by_suffix", _fake)
+    abs_path, reason = _resolve_by_relative_fragment(sentinel_store, "src/found.py")
     assert abs_path == "/repo/src/found.py"
     assert reason is None
+    assert seen_stores == [sentinel_store]
+
+
+def test_resolve_name_forwards_the_exact_store_to_the_relative_fragment_resolver(
+    monkeypatch,
+):
+    # _resolve_name's relative-path branch delegates to
+    # _resolve_by_relative_fragment(store, ...) -- distinct call site from
+    # the basename branch (covered above), and must forward the same store
+    # object rather than defaulting it to None along the way.
+    import cortex_viz.infrastructure.activity_store as activity_store
+    from cortex_viz.server.http_file_diff import _resolve_name
+
+    sentinel_store = object()
+    seen_stores = []
+
+    def _fake(store, name):
+        seen_stores.append(store)
+        return "/repo/src/found.py" if name == "src/found.py" else None
+
+    monkeypatch.setattr(activity_store, "find_abs_path_by_suffix", _fake)
+    abs_path, reason = _resolve_name(sentinel_store, "src/found.py")
+    assert abs_path == "/repo/src/found.py"
+    assert reason is None
+    assert seen_stores == [sentinel_store]
 
 
 def test_resolve_by_relative_fragment_suffix_search_not_found_reports_reason(
@@ -266,9 +294,33 @@ def test_serve_file_diff_unresolvable_name_reports_reason_and_unavailable():
     mod_local.serve_file_diff(h, store=None)
     assert h.status == 200
     payload = _decode_json(h)
-    assert payload["available"] is False
-    assert payload["diff_type"] == "none"
-    assert payload["reason"] == "unresolved basename: activity store unavailable"
+    assert payload == {
+        "available": False,
+        "diff_type": "none",
+        "lines": [],
+        "truncated": False,
+        "reason": "unresolved basename: activity store unavailable",
+    }
+
+
+def test_serve_file_diff_forwards_the_exact_store_to_resolve_name(monkeypatch):
+    # serve_file_diff's own call to _resolve_name(store, name) is a distinct
+    # call site from every store-forwarding test above (those exercise the
+    # resolver functions directly) -- must not default/drop `store` at the
+    # top of the HTTP entry point itself.
+    import cortex_viz.server.http_file_diff as mod_local
+
+    sentinel_store = object()
+    seen_stores = []
+
+    def _fake_resolve_name(store, name):
+        seen_stores.append(store)
+        return None, "stub reason"
+
+    monkeypatch.setattr(mod_local, "_resolve_name", _fake_resolve_name)
+    h = _FakeHandler("/api/file-diff?name=foo.py")
+    mod_local.serve_file_diff(h, store=sentinel_store)
+    assert seen_stores == [sentinel_store]
 
 
 def test_serve_file_diff_resolves_absolute_path_and_delegates_to_the_engine(
