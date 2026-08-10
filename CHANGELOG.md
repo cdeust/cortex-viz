@@ -7,6 +7,20 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 
 ## [3.1.0] - 2026-08-10
 
+**Upgrading from 2.8.0:** this release carries a breaking distribution-identity
+rename that was cut into the tree as `3.0.0` but never tagged or published —
+see the `[3.0.0]` entry below for the full detail, and read it before you
+upgrade. In short: `hypermnesia-mcp-viz` is now the *only* Claude Code plugin,
+MCP server, Python distribution, and console identity; the `cortex-viz`
+plugin and console entry point are gone. Run
+`claude plugin uninstall cortex-viz@cortex-plugins`, refresh `cortex-plugins`,
+then `claude plugin install hypermnesia-mcp-viz@cortex-plugins`; a raw pip
+install upgrades with `python3 -m pip install --upgrade "hypermnesia-mcp-viz>=3.1.0"`.
+Tool/permission references change from
+`mcp__plugin_cortex-viz_cortex-viz__open_visualization` to <!-- mcp-prefix-allow-legacy -->
+`mcp__plugin_hypermnesia-mcp-viz_hypermnesia-mcp-viz__open_visualization` (and
+the same pattern for `get_methodology_graph`).
+
 ### Changed
 - `trace_impact.py`'s query orchestration is split along its real seams
   (rules/coding-standards.md §4.2, issue #85): the Cypher fetchers (presence
@@ -176,7 +190,17 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
   commit rather than a tag, and fails if a legacy identity ever equals the
   canonical one.
 
-## [3.0.0] - 2026-08-04
+## [3.0.0] - 2026-08-04 — cut in the tree, never tagged or published
+
+**This version number never shipped.** `2026-08-04` is when this work landed
+on `main`, not a release date: no `v3.0.0` git tag, no PyPI upload, no GitHub
+release, no MCP Registry publication exist for it, and none ever will —
+PyPI's most recent published version stayed `2.8.0` throughout. The entries
+below are real and describe what actually changed; they are recorded here,
+under this heading, because that is when and where the work happened. Every
+one of them ships to users for the first time in **`3.1.0`**, the first
+version of this line that was actually tagged and published — see that
+section above, including the upgrade note, before you read further.
 
 ### Security
 

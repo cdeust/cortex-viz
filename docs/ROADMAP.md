@@ -66,9 +66,10 @@ remediation in #49 are complete; they are no longer listed as open work.
 
 - **A separate legacy `cortex-viz` PyPI distribution.** The canonical PyPI and
   MCP Registry name is `hypermnesia-mcp-viz`, matching the published sibling
-  `hypermnesia-mcp`. Version 3.0.0 removes the legacy console shim that 2.8.0
-  exposed; publishing a second distribution would split the release identity
-  instead of completing the migration.
+  `hypermnesia-mcp`. The legacy console shim that 2.8.0 exposed is removed as
+  of 3.1.0 (the removal was cut into the tree as 3.0.0, which was never
+  tagged or published); publishing a second distribution would split the
+  release identity instead of completing the migration.
 - **Writing to Cortex's memory tables.** Hypermnesia MCP Viz renders, it never
   remembers. That boundary is the point of the extraction and is not up for
   negotiation.
