@@ -5,6 +5,14 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 
 ## [Unreleased]
 
+### Added
+- `publish-registry` job in `Release.yaml`: RELEASING.md step 5 (publishing
+  `server.json` to the official MCP Registry) is now automated, running
+  after PyPI publish and the GitHub Release succeed, authenticated via
+  `mcp-publisher login github-oidc` (no stored credential). A
+  `workflow_dispatch` recovery path repairs a stale registry entry for an
+  already-tagged release without re-publishing the package.
+
 ## [3.1.0] - 2026-08-10
 
 **Upgrading from 2.8.0:** this release carries a breaking distribution-identity
