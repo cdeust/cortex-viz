@@ -7,4 +7,4 @@ entry points all use this single identity. The Python import package remains
 
 DISTRIBUTION_NAME = "hypermnesia-mcp-viz"
 MCP_REGISTRY_ID = "io.github.cdeust/hypermnesia-mcp-viz"
-VERSION = "3.1.0"
+VERSION = "3.1.1"

@@ -13,6 +13,43 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
   `workflow_dispatch` recovery path repairs a stale registry entry for an
   already-tagged release without re-publishing the package.
 
+## [3.1.1] - 2026-08-10
+
+**Upgrade from 3.1.0 immediately: on 3.1.0 the graph never builds.** The Graph,
+Brain, Knowledge, Board and Wiki views stay empty forever; `/api/graph/progress`
+reports `phase: "starting", pct: 0.0` and never advances. The Trace view is
+unaffected. No data was lost or corrupted — the build died before reading
+anything.
+
+### Fixed
+- **The background graph build crashed on its first statement.** 3.1.0 removed
+  the module-level `emit`/`close`/`reset` forwarders from `graph_event_stream`
+  — deliberately, because one of them silently dropped `event_meta` once `emit`
+  grew it — on the stated grounds that they "had never had a caller in this
+  repository's history". They had four: `graph_build_run` called `reset`,
+  `emit` and `close` on the module, and `graph_build_merge` called `emit` on
+  what it was handed. `run_build` therefore raised
+  `AttributeError: module 'cortex_viz.server.graph_event_stream' has no
+  attribute 'reset'` at `graph_build_run.py:155`, before any source loaded.
+  The callers now reach the singleton through `get_stream()` and use the
+  `GraphEventStream` API directly, which is what the singleton's own contract
+  asks for and what `activity_stream` already did. The forwarders stay removed.
+- **The end-of-build stream terminator failed silently.** The same defect in
+  the `finally` block (`_ev.close()` on the module) sat inside
+  `except Exception: pass`, so subscribers never received `done` and never
+  disconnected — a second failure the crash was masking.
+- `make_merge`'s `events` parameter is now annotated `GraphEventStream`, so a
+  caller that passes the module fails at type-check rather than at the first
+  emit, halfway through a build.
+
+### Added
+- `tests/test_graph_build_event_stream_contract.py`: pins that the module keeps
+  exactly one door (re-adding a forwarder re-opens the weaker `event_meta`-
+  dropping path), and that the build reaches the stream through `get_stream()`.
+  Three of its four tests fail on 3.1.0. The existing merge tests could not
+  catch this — they all inject a fake stream, so the defect lived in how the
+  production caller *obtains* the stream, not in what it does with it.
+
 ## [3.1.0] - 2026-08-10
 
 **Upgrading from 2.8.0:** this release carries a breaking distribution-identity
