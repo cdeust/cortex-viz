@@ -836,7 +836,7 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0.0" },
     { name = "pytest-timeout", marker = "extra == 'dev'", specifier = ">=2.3.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.15.0,<0.16.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.15.0,<0.17.0" },
 ]
 provides-extras = ["viz-tile", "data", "community", "dev"]
 

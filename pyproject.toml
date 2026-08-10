@@ -104,7 +104,7 @@ dev = [
     # adds rules, so an open range would fail CI on a commit that changed
     # nothing. Bumping it is a deliberate edit with the new findings fixed
     # in the same PR — the same contract dependabot already applies to npm.
-    "ruff>=0.15.0,<0.16.0",
+    "ruff>=0.15.0,<0.17.0",
 ]
 
 [tool.hatch.build.targets.wheel]
