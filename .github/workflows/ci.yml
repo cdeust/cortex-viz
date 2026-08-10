@@ -115,16 +115,19 @@ jobs:
         run: uv build
       - name: Verify distribution metadata and compatibility entry points
         run: uv run --no-sync python -m scripts.check_distribution_artifact
+      # Was pinned independently of Release.yaml's copy at v1.7.9 (Release.yaml
+      # had already moved to v1.8.1 with a different checksum — two pins of
+      # the same binary, already drifted apart). Now installed by the shared
+      # composite action, whose defaults are the only place the version+
+      # checksum pin lives — a future bump is one edit to that file, not two.
+      # v1.8.1 confirmed as the latest release via the registry's GitHub
+      # Releases API on 2026-08-10; both workflows are aligned to it.
+      - name: Install mcp-publisher (checksum-verified)
+        uses: ./.github/actions/install-mcp-publisher
+        with:
+          destination: /tmp
       - name: Validate official MCP Registry manifest
-        run: |
-          set -euxo pipefail
-          curl --fail --location --silent --show-error \
-            https://github.com/modelcontextprotocol/registry/releases/download/v1.7.9/mcp-publisher_linux_amd64.tar.gz \
-            --output /tmp/mcp-publisher.tar.gz
-          echo "ab128162b0616090b47cf245afe0a23f3ef08936fdce19074f5ba0a4469281ac  /tmp/mcp-publisher.tar.gz" \
-            | sha256sum --check
-          tar -xzf /tmp/mcp-publisher.tar.gz -C /tmp mcp-publisher
-          /tmp/mcp-publisher validate
+        run: /tmp/mcp-publisher validate
 
   js-test:
     # Required job: the browser UI (ui/, ~25.5k lines) is the product's primary

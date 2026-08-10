@@ -1,0 +1,56 @@
+name: Install mcp-publisher
+description: >-
+  Download and checksum-verify the mcp-publisher CLI (modelcontextprotocol/registry).
+  Single source of truth for the pinned version AND checksum, used by every
+  workflow that needs the binary — before this action existed, ci.yml and
+  Release.yaml pinned it independently and had already drifted apart
+  (v1.7.9 vs v1.8.1, two different checksums, one bump forgotten). Callers
+  do not pass `version`/`sha256`: the defaults below are the only place the
+  pin lives, so bumping mcp-publisher is one edit to this file, in every
+  workflow, in one PR.
+
+inputs:
+  version:
+    description: >-
+      mcp-publisher release tag. Defaulted, not passed by callers — see the
+      top of this file. Get the new version and sha256 together from
+      https://github.com/modelcontextprotocol/registry/releases and never
+      bump one without the other.
+    required: false
+    default: v1.8.1
+  sha256:
+    description: >-
+      sha256 of mcp-publisher_linux_amd64.tar.gz for `version`. Defaulted,
+      not passed by callers.
+    required: false
+    default: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
+  destination:
+    description: 'Directory to place the mcp-publisher binary in'
+    required: false
+    default: '.'
+
+outputs:
+  path:
+    description: 'Path to the installed mcp-publisher binary'
+    value: ${{ steps.install.outputs.path }}
+
+runs:
+  using: composite
+  steps:
+    # mcp-publisher has no first-party GitHub Action wrapper, so it is
+    # fetched as a release binary and checksum-verified against the
+    # registry project's own published checksums — the same
+    # supply-chain discipline the pinned Actions elsewhere in this repo
+    # get via commit SHA, applied to a raw binary download.
+    - name: Download, verify, and install mcp-publisher
+      id: install
+      shell: bash
+      run: |
+        set -euxo pipefail
+        curl -fsSLO "https://github.com/modelcontextprotocol/registry/releases/download/${{ inputs.version }}/mcp-publisher_linux_amd64.tar.gz"
+        echo "${{ inputs.sha256 }}  mcp-publisher_linux_amd64.tar.gz" | sha256sum -c -
+        mkdir -p "${{ inputs.destination }}"
+        tar xzf mcp-publisher_linux_amd64.tar.gz -C "${{ inputs.destination }}" mcp-publisher
+        chmod +x "${{ inputs.destination }}/mcp-publisher"
+        rm mcp-publisher_linux_amd64.tar.gz
+        echo "path=${{ inputs.destination }}/mcp-publisher" >> "$GITHUB_OUTPUT"

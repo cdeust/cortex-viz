@@ -233,22 +233,12 @@ jobs:
         with:
           python-version: "3.12"
 
-      # mcp-publisher has no first-party GitHub Action wrapper, so it is
-      # fetched as a release binary and checksum-verified against the
-      # registry project's own published checksums — the same supply-chain
-      # discipline the pinned Actions above get via commit SHA, applied to a
-      # raw binary download. Bump both MCP_PUBLISHER_VERSION and the SHA-256
-      # together from https://github.com/modelcontextprotocol/registry/releases.
+      # Version+checksum pin lives in the action's defaults, not here —
+      # .github/actions/install-mcp-publisher/action.yml. Before this action
+      # existed, this pin and ci.yml's lived in two places and had already
+      # drifted apart (v1.7.9 vs v1.8.1). A bump is one edit to that file.
       - name: Install mcp-publisher (checksum-verified)
-        env:
-          MCP_PUBLISHER_VERSION: v1.8.1
-          MCP_PUBLISHER_SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
-        run: |
-          set -euxo pipefail
-          curl -fsSLO "https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz"
-          echo "${MCP_PUBLISHER_SHA256}  mcp-publisher_linux_amd64.tar.gz" | sha256sum -c -
-          tar xzf mcp-publisher_linux_amd64.tar.gz mcp-publisher
-          chmod +x mcp-publisher
+        uses: ./.github/actions/install-mcp-publisher
 
       # The exact defect this job exists to prevent runs in both directions:
       # a registry entry must never point at a PyPI version that does not
