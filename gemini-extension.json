@@ -1,6 +1,6 @@
 {
   "name": "hypermnesia-mcp-viz",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Read-only visualization and graph MCP for Cortex, packaged for Gemini CLI.",
   "mcpServers": {
     "hypermnesia-mcp-viz": {
