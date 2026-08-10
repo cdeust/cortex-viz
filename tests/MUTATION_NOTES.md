@@ -128,8 +128,78 @@ equivalent, 0 unexplained survivors** (was 67 survivors before this change).
 
 ## `cortex_viz/server/http_standalone_static.py`
 
-Tests: `tests/test_static_path_traversal.py`. *(recorded after that
-module's run — see PR for the exact counts.)*
+Tests: `tests/test_static_path_traversal.py`. **152 mutants generated, 147
+killed, 5 equivalent, 0 unexplained survivors** (was 53 survivors before
+this change).
+
+### Equivalent mutants (documented, not ignored)
+
+- **`x_serve_static__mutmut_4/5/8/9` — the `or`-chain in `serve_static`'s
+  filename guard** (`startswith(".") or "\x00" in name` fused into `and`,
+  or either literal turned into a mutmut marker string that can never
+  match a real filename). `serve_static`'s guard ends with
+  `re.match(r"^[\w][\w.\-]*$", safe_name)`, and this regex **already
+  independently implies** every property the earlier clauses check:
+  empty (`^[\w]` requires one char), dot-prefixed (`.` is never `\w`),
+  and null-byte-containing (`\x00` is in none of `\w`, `.`, `-`) names
+  all fail the regex on their own. Verified directly —
+  `re.compile(r"^[\w][\w.\-]*$").match(x)` returns `False` for `''`,
+  `'.'`, `'.hidden'`, and every string containing `'\x00'`, tested
+  exhaustively for the relevant classes. Weakening or disabling the
+  earlier clauses changes nothing observable: the regex is the load-
+  bearing check; the clauses ahead of it are early-exit optimizations
+  over an already-total condition, not independently-observable guards.
+
+- **`x_serve_shared_asset__mutmut_10` — `part in ("", "..")` with `".."`
+  replaced by a mutmut marker string that can never match a real path
+  segment.** The same segment-rejection `any(...)` also checks
+  `part.startswith(".")`, and `".."` trivially satisfies that (every
+  string starting with two dots starts with one). Any segment equal to
+  literal `".."` is therefore always also caught by the dot-prefix
+  clause; the explicit `".."` membership check is redundant for that
+  specific value. (Distinct from the OR→AND fusion mutant on this same
+  line, which killed cleanly — that one disables both clauses
+  simultaneously for a plain empty segment, which does NOT start with
+  `"."` and has no other catching clause.)
+
+### Notable kills — the *why*, not just the assertion
+
+- **`x_serve_static__mutmut_36`, `x_serve_shared_asset__mutmut_19` (403 →
+  404 on the containment/segment-rejection refusal paths)** — the existing
+  traversal-payload tests asserted `status in (403, 404)` (both are "safe"
+  outcomes), which cannot distinguish a deliberate refusal from a plain
+  not-found. Added exact-403 assertions for a symlink escape (`serve_static`)
+  and an empty `rel_path` (`serve_shared_asset`) specifically.
+
+- **`x_serve_shared_asset__mutmut_7/9/12/13/14`
+  (the `any(part in ("", "..") or part.startswith(".") for part in
+  rel_path.split("/"))` segment-rejection predicate — OR fused to AND,
+  each literal replaced by a dead marker string, and the split delimiter
+  itself replaced by `None` or a dead marker)** — killed by three
+  payloads chosen so each nets to a *legitimately contained* file if the
+  pre-check is bypassed, proving the pre-check is genuine defense-in-depth
+  and not redundant with `resolve_under`'s containment check alone: a
+  dot-prefixed file that actually exists in the sandbox
+  (`.hidden-but-real.css`), a doubled separator that POSIX would collapse
+  to a real file (`tokens//colors.css`), and a literal `..` segment that
+  nets back inside the sandbox (`tokens/../ds.css`). All three must be
+  refused with exactly 403 even though `resolve_under` alone would have
+  accepted the resolved path.
+
+- **`x_serve_file_diff__mutmut_1/2/3/4` (`_serve(None, store)`,
+  `_serve(handler, None)`, `_serve(store)` — wrong argument, dropped
+  argument, wrong arity) — 0 tests were associated with this function at
+  all before this change.** `serve_file_diff` here is a documented thin
+  delegate to `http_file_diff.serve_file_diff`; its entire observable
+  contract is "forwards both arguments intact." Killed with two tests
+  that route a bare-basename query through the delegate: one with
+  `store=None` (yields `"unresolved basename: activity store
+  unavailable"`), one with a real store object (`store=object()`, yields
+  the *different* `"unresolved basename: activity store lookup failed"`
+  reason via `_resolve_by_basename`'s real lookup-exception arm). Reaching
+  either reason at all rules out `handler=None` (which crashes resolving
+  `handler.path` before any JSON is written); the reason *differing*
+  between the two calls rules out `store` being dropped or defaulted.
 
 ## `cortex_viz/server/http_file_diff.py`
 
