@@ -1,11 +1,16 @@
 """Impact / blast-radius computation for the execution-trace file drill.
 
 Split out of ``http_standalone_trace.py`` (was 772 lines) to respect the
-500-line file limit. Holds the warm AP AST-source singleton plus the pure
-impact-graph computation (``_impact_for_graph``, ``_ast_and_impact``,
-path normalisation). The serve/format glue stays in
-``http_standalone_trace``, which re-exports these so call sites and tests
-keep resolving.
+500-line file limit. Holds the warm AP AST-source singleton plus the
+impact-graph orchestration (``_impact_for_graph``, ``_ast_and_impact``,
+path normalisation). The Cypher fetchers it calls live in
+``trace_impact_graph`` (issue #85: presence/members/file-edges/processes,
+one query per function, no shaping) and the result-shaping lives in
+``trace_impact_directions`` (dedup, rollup, direction dicts). This module
+is the thin sequencer that decides *what* to call and *in what order*; it
+owns none of the query text and none of the row-shaping. The serve/format
+glue stays in ``http_standalone_trace``, which re-exports these so call
+sites and tests keep resolving.
 """
 
 from __future__ import annotations
@@ -15,10 +20,18 @@ from cortex_viz.server.trace_impact_directions import (
     _blast_radius,
     _fallback_directions,
     _file_edges,
+    _member_items,
     _processes_from,
     _rollup,
-    _short_name,
     _typed_directions,
+)
+from cortex_viz.server.trace_impact_graph import (
+    _entry_point_process_rows,
+    _file_import_edges,
+    _file_members,
+    _file_present,
+    _file_reference_edges,
+    _query,
 )
 
 # Re-exported for ``http_standalone_trace``, which imports ``_basename``
@@ -153,17 +166,9 @@ def _impact_for_graph(graph_path: str, rel_path: str) -> dict | None:
     references, referenced_by, depends_on, depended_on_by`` plus the new
     ``implements``, ``community``, ``communities_affected``,
     ``processes_affected``) or None if the file has no symbols in this
-    graph (so the caller can try the next graph).
-
-    Symbol-level direction (calls/imports/callers/implements) is derived
-    from AP's typed ``get_context`` tool — one call per member symbol,
-    capped at N=20. Files with more than N members fall back to the
-    targeted per-file Cypher path (bounds AP fan-out). File→File edges,
-    the present-gate, the members list, and the rollup stay on Cypher —
-    AP exposes no file-level typed tool for those.
+    graph (so the caller can try the next graph). See
+    ``_collect_file_impact`` for the query sequence.
     """
-    from cortex_viz.infrastructure.workflow_graph_source_ast import _as_list
-
     # Reuse the warm AST source's pinned loop + persistent AP connection.
     # A fresh APBridge + asyncio.run() per HTTP request collides with the
     # warm bridge on the same AP subprocess (relationship MATCH queries
@@ -173,122 +178,144 @@ def _impact_for_graph(graph_path: str, rel_path: str) -> dict | None:
     loop_run = src._loop_owner.run  # noqa: SLF001
     bridge = src._bridge  # noqa: SLF001
 
-    async def _run() -> dict | None:
-        async def q(cypher):
-            rows = await bridge.query_graph(graph_path, cypher)
-            return _as_list(rows)
+    return loop_run(_collect_file_impact(bridge, graph_path, rel_path))
 
-        esc = rel_path.replace("'", "")
-        # LEGITIMATE query_graph use: present-gate. AP has no typed
-        # "is this file in the graph" tool. (cheap gate)
-        present = await q(
-            f"MATCH (f:File) WHERE f.id = '{esc}' RETURN f.id AS id LIMIT 1"
-        )
-        if not present:
-            return None
 
-        # LEGITIMATE query_graph use: members list. This is the N source
-        # that drives the typed get_context fan-out below; AP has no
-        # file-scoped "list members" typed tool.
-        members_rows = await q(
-            f"MATCH (s:Function) WHERE s.qualified_name STARTS WITH '{esc}::' "
-            "RETURN DISTINCT s.qualified_name AS name LIMIT 200"
-        )
-        member_qns = [r.get("name") for r in members_rows if r.get("name")]
+async def _collect_file_impact(bridge, graph_path: str, rel_path: str) -> dict | None:
+    """The impact query sequence for one file against one code-graph.
 
-        implements: list[dict] = []
-        community: dict = {}
-        if member_qns and len(member_qns) <= _AST_CONTEXT_CAP:
-            # Typed path: AP's get_context per member (capped at N).
-            downstream, upstream, implements, community = await _typed_directions(
-                bridge, graph_path, member_qns
-            )
-        else:
-            # FALLBACK path: file has >N members (or none).
-            downstream, upstream = await _fallback_directions(q, esc)
+    Two phases, run strictly in this order on the caller's warm loop —
+    identical to the original inline coroutine, just no longer anonymous:
+    ``_resolve_members_and_edges`` (present-gate → members → member
+    directions → file-to-file edges) then blast radius → entry-point
+    processes. Each ``await`` still completes before the next step starts
+    (no ``gather``/``create_task`` here or in the original), so splitting
+    the steps into named functions changes nothing about when AP/Cypher
+    calls fire or how exceptions propagate — only where the coroutine
+    boundary sits.
+    """
+    esc = rel_path.replace("'", "")
 
-        # LEGITIMATE query_graph use: File→File edges. AP all-file
-        # indexing (>= 0.2.0): Imports_File_File = .js import/require;
-        # References_File_File = Markdown/doc links. No typed tool covers
-        # these non-AST direct file edges.
-        file_imports = await q(
-            "MATCH (f:File)-[r:Imports_File_File]->(d:File) "
-            f"WHERE f.id = '{esc}' "
-            "RETURN DISTINCT d.id AS name, r.confidence AS conf LIMIT 200"
-        )
-        file_imported_by = await q(
-            "MATCH (s:File)-[r:Imports_File_File]->(f:File) "
-            f"WHERE f.id = '{esc}' "
-            "RETURN DISTINCT s.id AS name, r.confidence AS conf LIMIT 200"
-        )
-        doc_refs = await q(
-            "MATCH (f:File)-[r:References_File_File]->(d:File) "
-            f"WHERE f.id = '{esc}' "
-            "RETURN DISTINCT d.id AS name, r.confidence AS conf LIMIT 200"
-        )
-        doc_referenced_by = await q(
-            "MATCH (s:File)-[r:References_File_File]->(f:File) "
-            f"WHERE f.id = '{esc}' "
-            "RETURN DISTINCT s.id AS name, r.confidence AS conf LIMIT 200"
-        )
+    resolved = await _resolve_members_and_edges(bridge, graph_path, esc)
+    if resolved is None:
+        return None
 
-        members = [
-            {
-                "file": rel_path,
-                "name": qn,
-                "label": _short_name(qn),
-                "kind": "member",
-                "confidence": None,
-            }
-            for qn in member_qns
-        ]
+    # Blast-radius counts via AP's typed get_impact (first member); the
+    # entry-point process list stays on Cypher (get_processes is graph-wide).
+    communities_affected, processes_affected = await _blast_radius(
+        bridge, graph_path, resolved["member_qns"]
+    )
+    processes = _processes_from(
+        await _entry_point_process_rows(bridge, graph_path, esc)
+    )
 
-        # Blast-radius counts via AP's typed get_impact (first member).
-        # processes/communities affected are the headline numbers the
-        # panel shows; the entry-point process list below stays on Cypher.
-        communities_affected, processes_affected = await _blast_radius(
-            bridge, graph_path, member_qns
-        )
+    return _assemble_file_impact(
+        rel_path=rel_path,
+        processes=processes,
+        communities_affected=communities_affected,
+        processes_affected=processes_affected,
+        **resolved,
+    )
 
-        # LEGITIMATE query_graph use: entry-point processes (causal
-        # chains ENTERED from this file). AP's get_processes is graph-wide
-        # (not file-scoped); this targeted Cypher filters to this file's
-        # entry points. entry_point_id is ``file::symbol``.
-        processes_rows = await q(
-            f"MATCH (p:Process) WHERE p.entry_point_id STARTS WITH '{esc}::' "
-            "RETURN DISTINCT p.entry_point_id AS entry, p.entry_kind AS kind, "
-            "p.depth AS depth, p.symbol_count AS n "
-            "ORDER BY p.symbol_count DESC LIMIT 40"
-        )
-        processes = _processes_from(processes_rows)
 
-        # Direct File→File edges (AP all-file indexing): code imports for
-        # non-AST files (.js) and doc references (Markdown). Folded into the
-        # file-level direction so the panel shows them even when a file has
-        # no AST symbols at all.
-        imports_files = _file_edges(file_imports, "imports", rel_path)
-        imported_by_files = _file_edges(file_imported_by, "imports", rel_path)
-        references = _file_edges(doc_refs, "references", rel_path)
-        referenced_by = _file_edges(doc_referenced_by, "references", rel_path)
+async def _resolve_members_and_edges(bridge, graph_path: str, esc: str) -> dict | None:
+    """Present-gate, members, member directions, file-to-file edges — in order.
 
-        return {
-            "downstream": downstream,
-            "upstream": upstream,
-            "members": members,
-            "processes": processes,
-            "references": references,
-            "referenced_by": referenced_by,
-            "depends_on": _rollup(downstream + imports_files, rel_path),
-            "depended_on_by": _rollup(upstream + imported_by_files, rel_path),
-            # New AP-typed enrichment fields (additive — frontend may
-            # ignore them without breaking the existing direction view).
-            "implements": implements,
-            "community": community,
-            "communities_affected": communities_affected,
-            "processes_affected": processes_affected,
-        }
+    Returns ``None`` when the file has no File node in this graph (so the
+    caller tries the next graph), else the kwargs ``_assemble_file_impact``
+    expects. Order matches the original inline coroutine exactly: presence
+    before members (the members query assumes the file exists), members
+    before directions (directions need ``member_qns``), directions before
+    file edges (independent, but issued in this order originally and
+    nothing here reorders it).
+    """
+    if not await _file_present(bridge, graph_path, esc):
+        return None
+    member_qns = await _file_members(bridge, graph_path, esc)
+    downstream, upstream, implements, community = await _member_directions(
+        bridge, graph_path, esc, member_qns
+    )
+    file_imports, file_imported_by = await _file_import_edges(bridge, graph_path, esc)
+    doc_refs, doc_referenced_by = await _file_reference_edges(bridge, graph_path, esc)
+    return {
+        "member_qns": member_qns,
+        "downstream": downstream,
+        "upstream": upstream,
+        "implements": implements,
+        "community": community,
+        "file_imports": file_imports,
+        "file_imported_by": file_imported_by,
+        "doc_refs": doc_refs,
+        "doc_referenced_by": doc_referenced_by,
+    }
 
-    return loop_run(_run())
+
+async def _member_directions(
+    bridge, graph_path: str, esc: str, member_qns: list[str]
+) -> tuple[list[dict], list[dict], list[dict], dict]:
+    """Direction lists for the file's members.
+
+    Returns (downstream, upstream, implements, community).
+
+    Typed path: AP's ``get_context`` per member (capped at N). Fallback
+    path: file has >N members (or none) — the targeted per-file Cypher
+    path bounds AP fan-out. Same branch, same order as the original inline
+    code; only the decision now has a name.
+    """
+    if member_qns and len(member_qns) <= _AST_CONTEXT_CAP:
+        return await _typed_directions(bridge, graph_path, member_qns)
+    downstream, upstream = await _fallback_directions(
+        lambda cypher: _query(bridge, graph_path, cypher), esc
+    )
+    return downstream, upstream, [], {}
+
+
+def _assemble_file_impact(
+    *,
+    rel_path: str,
+    downstream: list[dict],
+    upstream: list[dict],
+    member_qns: list[str],
+    processes: list[dict],
+    file_imports: list[dict],
+    file_imported_by: list[dict],
+    doc_refs: list[dict],
+    doc_referenced_by: list[dict],
+    implements: list[dict],
+    community: dict,
+    communities_affected,
+    processes_affected,
+) -> dict:
+    """Shape the collected rows into the ``/api/trace/impact`` response contract.
+
+    Pure — no AP/Cypher calls, just the result-shaping the original inline
+    tail of ``_run`` did after its last ``await``. Direct File→File edges
+    (AP all-file indexing: code imports for non-AST files, doc references
+    for Markdown) are folded into the file-level direction so the panel
+    shows them even when a file has no AST symbols at all.
+    """
+    members = _member_items(rel_path, member_qns)
+    imports_files = _file_edges(file_imports, "imports", rel_path)
+    imported_by_files = _file_edges(file_imported_by, "imports", rel_path)
+    references = _file_edges(doc_refs, "references", rel_path)
+    referenced_by = _file_edges(doc_referenced_by, "references", rel_path)
+
+    return {
+        "downstream": downstream,
+        "upstream": upstream,
+        "members": members,
+        "processes": processes,
+        "references": references,
+        "referenced_by": referenced_by,
+        "depends_on": _rollup(downstream + imports_files, rel_path),
+        "depended_on_by": _rollup(upstream + imported_by_files, rel_path),
+        # AP-typed enrichment fields (additive — frontend may ignore them
+        # without breaking the existing direction view).
+        "implements": implements,
+        "community": community,
+        "communities_affected": communities_affected,
+        "processes_affected": processes_affected,
+    }
 
 
 def _to_repo_relative(path: str) -> str:

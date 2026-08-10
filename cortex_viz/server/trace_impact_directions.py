@@ -216,6 +216,20 @@ def _rollup(items: list[dict], rel_path: str) -> list[dict]:
     return out
 
 
+def _member_items(rel_path: str, member_qns: list[str]) -> list[dict]:
+    """Shape a file's member qualified names into the panel's member list."""
+    return [
+        {
+            "file": rel_path,
+            "name": qn,
+            "label": _short_name(qn),
+            "kind": "member",
+            "confidence": None,
+        }
+        for qn in member_qns
+    ]
+
+
 def _file_edges(rows: list[dict], kind: str, rel_path: str) -> list[dict]:
     """Direct File→File edges, excluding the file's own self-reference."""
     return [
