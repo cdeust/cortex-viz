@@ -4,9 +4,6 @@ Standalone read-only visualization MCP for Cortex (published as hypermnesia-mcp-
 
 Global rules are imported, not restated:
 
-@~/.claude/rules/model-behavior.md
-@~/.claude/rules/coding-standards.md
-
 ## Repo-specific constraints
 
 - Read-only over Cortex's store: this server never writes memories.
