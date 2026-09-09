@@ -5,6 +5,38 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 
 ## [Unreleased]
 
+## [3.1.2] - 2026-09-09
+
+### Fixed
+- The release workflow's "Verify the registry now serves the published
+  version" step read the MCP Registry one second after publish with zero
+  tolerance, so the v3.1.1 workflow reported failure on a release that had
+  in fact published (PyPI, GitHub Release and registry all agreed). The
+  verification now retries within a bounded window (12 attempts x 5 s) before
+  concluding the registry never converged; it still fails, with the same
+  message, when the expected version never appears (#139). On the
+  `workflow_dispatch` recovery path, `cannot publish duplicate version` from
+  `mcp-publisher` counts as already published, still subject to that same
+  verification; on the tag path it remains a failure.
+- `ci.yml` and `Release.yaml` each pinned `mcp-publisher` on their own and had
+  drifted apart (v1.7.9 vs v1.8.1, two checksums). One composite action,
+  `.github/actions/install-mcp-publisher`, now holds the single pin: v1.8.1,
+  its sha256 re-derived from the published asset (#140).
+- The required "Validate official MCP Registry manifest" CI step no longer
+  needs a live registry call, which timed out on PR #139 while every test
+  passed (#142). `scripts/validate_server_manifest.py` validates `server.json`
+  offline with a draft-07 validator against a vendored copy of the schema the
+  registry embeds, re-vendored from the CDN the `$schema` field points to
+  (the registry-tag copy carried a stray `maxLength` the source does not
+  have); `scripts/check_vendored_schema_drift.py` reports drift from that
+  source. The live `mcp-publisher validate` semantic pre-flight stays as a
+  non-blocking step.
+
+### Changed
+- `CLAUDE.md` carries only the project line, the commands and the
+  non-negotiables; the rest moved to `docs/agent-guidance.md`, and the two
+  dead `@~/.claude/rules/` imports are gone (#151, #152).
+
 ## [3.1.1] - 2026-08-10
 
 **Upgrade urgency: build-breaking.** 3.1.0 cannot build a graph at all —
