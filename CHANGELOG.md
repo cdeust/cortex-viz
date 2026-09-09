@@ -32,6 +32,12 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
   source. The live `mcp-publisher validate` semantic pre-flight stays as a
   non-blocking step.
 
+### Security
+- Dev toolchain only: `qs` is held at the patched 6.16.0 line through a
+  `package.json` override, so the JS test and lint install no longer pulls
+  the vulnerable transitive version (#154). Nothing in the published wheel
+  changes.
+
 ### Changed
 - `CLAUDE.md` carries only the project line, the commands and the
   non-negotiables; the rest moved to `docs/agent-guidance.md`, and the two
