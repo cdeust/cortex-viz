@@ -1,11 +1,20 @@
-"""Filesystem reader for the wiki view (``~/.claude/methodology/wiki``).
+"""Filesystem reader for the wiki view.
 
 Serves the page tree, single pages, project grouping, and bibliography files
-straight off disk — the hand-curated half of the wiki. The PG-backed half
+straight off disk: the hand-curated half of the wiki. The PG-backed half
 (thermodynamic page state, backlinks, memos) lives in ``wiki_pg``.
 
-Pure I/O over ``WIKI_ROOT``. Response shapes match the parent Cortex viz
-server so the extracted ``wiki.js`` consumes them unchanged.
+Pages come from every root ``wiki_roots`` knows: the global
+``~/.claude/methodology/wiki`` (``WIKI_ROOT``) and each project wiki Cortex
+publishes into a repository (``<repo>/wiki/``, filesystem-only by contract,
+so it is reachable from nowhere else). Project pages carry a
+``@<project>/`` path prefix; ``save_page`` refuses them because that
+publication (page, manifest, ``docs/adr`` mirror) is Cortex's transaction,
+not a file the viz may overwrite on its own. The bibliography stays
+global-root only.
+
+Response shapes match the parent Cortex viz server so the extracted
+``wiki.js`` consumes them unchanged.
 """
 
 from __future__ import annotations
@@ -14,14 +23,20 @@ import os
 from pathlib import Path
 from typing import Any
 
+from cortex_viz.infrastructure import wiki_roots
 from cortex_viz.infrastructure.config import WIKI_ROOT
+from cortex_viz.infrastructure.wiki_roots import WikiRoot
 from cortex_viz.shared.path_containment import resolve_under
 from cortex_viz.shared.yaml_parser import parse_yaml_frontmatter
 
 
-def _safe_path(rel_path: str, *, suffix: str | None = None) -> Path | None:
-    """Resolve ``rel_path`` under WIKI_ROOT, defeating path traversal.
+def _safe_path(
+    rel_path: str, *, suffix: str | None = None
+) -> tuple[WikiRoot, Path] | None:
+    """Resolve ``rel_path`` under its wiki root, defeating path traversal.
 
+    The root is the global ``WIKI_ROOT`` for a plain path and the named
+    project wiki for a ``@<project>/...`` path (``wiki_roots.locate``).
     Containment goes through ``shared.path_containment.resolve_under``.
     The previous form (``os.path.commonpath([root, cand]) != root``) is a
     correct containment check but, like ``pathlib.is_relative_to`` before
@@ -29,17 +44,21 @@ def _safe_path(rel_path: str, *, suffix: str | None = None) -> Path | None:
     ``save_page``'s ``mkdir``/``write_text`` on every scan. See that
     module's docstring for the difference between correct and provable.
 
-    Returns None if the resolved path escapes the wiki root, IS the wiki
-    root, or fails an optional suffix gate.
+    Returns None if the resolved path escapes its wiki root, IS the wiki
+    root, names an unknown project, or fails an optional suffix gate.
     """
     if not rel_path:
         return None
-    cand = resolve_under(str(WIKI_ROOT), os.path.join(str(WIKI_ROOT), rel_path))
+    located = wiki_roots.locate(rel_path, WIKI_ROOT)
+    if located is None:
+        return None
+    root, inside = located
+    cand = resolve_under(str(root.directory), os.path.join(str(root.directory), inside))
     if cand is None:
         return None
     if suffix is not None and not cand.endswith(suffix):
         return None
-    return Path(cand)
+    return root, Path(cand)
 
 
 def _parse_list(value: Any) -> list[str]:
@@ -77,8 +96,16 @@ def _title_from(meta: dict, path: Path) -> str:
     )
 
 
-def _page_item(md: Path, root: Path) -> dict[str, Any]:
-    """Lightweight tree item for one .md file (frontmatter only, no body)."""
+def _page_item(
+    md: Path, root: Path, *, prefix: str = "", domain: str = ""
+) -> dict[str, Any]:
+    """Lightweight tree item for one .md file (frontmatter only, no body).
+
+    ``prefix`` namespaces the path (``@<project>/`` for a project wiki) and
+    ``domain`` is the fallback when the frontmatter carries none: a project
+    wiki's pages belong to that project, so the tree files them under it
+    instead of the ``_general`` catch-all.
+    """
     rel = str(md.relative_to(root))
     try:
         meta, _ = parse_yaml_frontmatter(
@@ -87,10 +114,10 @@ def _page_item(md: Path, root: Path) -> dict[str, Any]:
     except OSError:
         meta = {}
     return {
-        "path": rel,
+        "path": prefix + rel,
         "title": _title_from(meta, md),
         "kind": meta.get("kind") or "page",
-        "domain": meta.get("domain") or "",
+        "domain": meta.get("domain") or domain,
         "tags": _parse_list(meta.get("tags")),
         "maturity": meta.get("maturity") or meta.get("status") or "",
         "created": meta.get("created") or meta.get("date") or "",
@@ -106,19 +133,32 @@ def _iter_md(root: Path):
         yield md
 
 
+def _all_roots() -> list[WikiRoot]:
+    """The global root first, then every discovered project wiki."""
+    return [WikiRoot("", WIKI_ROOT), *wiki_roots.project_roots()]
+
+
+def _iter_items():
+    """Every page item across every root, global root first."""
+    for wiki_root in _all_roots():
+        root = Path(os.path.realpath(str(wiki_root.directory)))
+        if not root.is_dir():
+            continue
+        for md in _iter_md(root):
+            yield _page_item(md, root, prefix=wiki_root.prefix, domain=wiki_root.name)
+
+
 def list_pages() -> dict[str, Any]:
     """``{pages: [...]}`` — the whole wiki tree (frontmatter only)."""
-    root = Path(os.path.realpath(str(WIKI_ROOT)))
-    if not root.is_dir():
-        return {"pages": []}
-    return {"pages": [_page_item(md, root) for md in _iter_md(root)]}
+    return {"pages": list(_iter_items())}
 
 
 def read_page(rel_path: str) -> dict[str, Any]:
     """``{path, meta, body}`` for one page, or ``{error}`` if missing/unsafe."""
-    p = _safe_path(rel_path, suffix=".md")
-    if p is None:
+    located = _safe_path(rel_path, suffix=".md")
+    if located is None:
         return {"error": "invalid path"}
+    root, p = located
     if not p.is_file():
         return {"error": "not found"}
     try:
@@ -135,17 +175,19 @@ def read_page(rel_path: str) -> dict[str, Any]:
     for key in _LIST_KEYS:
         if key in meta:
             meta[key] = _parse_list(meta[key])
+    # A project wiki's page belongs to that project even when its
+    # frontmatter says nothing about a domain (Cortex's ADR template has no
+    # ``domain`` key); the breadcrumb reads ``meta.domain``, so the same
+    # fallback ``_page_item`` applies to the tree is applied here.
+    if root.name and not meta.get("domain"):
+        meta["domain"] = root.name
     return {"path": rel_path, "meta": meta, "body": body}
 
 
 def list_projects() -> dict[str, Any]:
     """``{projects: [...]}`` — pages grouped by domain with per-kind counts."""
-    root = Path(os.path.realpath(str(WIKI_ROOT)))
-    if not root.is_dir():
-        return {"projects": []}
     by_domain: dict[str, dict[str, Any]] = {}
-    for md in _iter_md(root):
-        item = _page_item(md, root)
+    for item in _iter_items():
         dom = item["domain"] or "_general"
         proj = by_domain.setdefault(
             dom, {"domain": dom, "page_total": 0, "page_counts_by_kind": {}}
@@ -182,8 +224,11 @@ def list_bibliography() -> dict[str, Any]:
 
 def read_bibliography(rel_path: str) -> dict[str, Any]:
     """``{path, content, size}`` for one .bib file (must be under _bibliography)."""
-    p = _safe_path(rel_path, suffix=".bib")
-    if p is None or "_bibliography" not in p.parts or not p.is_file():
+    located = _safe_path(rel_path, suffix=".bib")
+    if located is None:
+        return {"error": "invalid path"}
+    root, p = located
+    if root.name or "_bibliography" not in p.parts or not p.is_file():
         return {"error": "invalid path"}
     try:
         content = p.read_text(encoding="utf-8", errors="replace")
@@ -199,10 +244,23 @@ def save_page(rel_path: str, content: str) -> dict[str, Any]:
     a malicious ``rel_path`` can't escape the wiki tree. Creates parent dirs
     for a brand-new page. User-initiated (the editor's Save button); returns
     ``{ok, path}`` or ``{error}``.
+
+    A project wiki page (``@<project>/...``) is refused: Cortex publishes it
+    together with ``wiki/manifest.json`` and the ``docs/adr`` mirror in one
+    transaction, and a bare overwrite would leave the mirror stale.
     """
-    p = _safe_path(rel_path, suffix=".md")
-    if p is None:
+    located = _safe_path(rel_path, suffix=".md")
+    if located is None:
         return {"error": "invalid path"}
+    root, p = located
+    if root.name:
+        return {
+            "error": (
+                "project wiki pages are published by Cortex "
+                "(wiki_write / wiki_adr with project_root); "
+                "the viz does not overwrite them"
+            )
+        }
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
