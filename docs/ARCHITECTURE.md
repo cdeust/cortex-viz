@@ -61,7 +61,7 @@ Cortex's live Python objects.
 | Data | Source | Access |
 |---|---|---|
 | Memories, entities, relationships | Cortex PG store (`DATABASE_URL`) | read-only, via `MemoryReader` |
-| Wiki pages, thermodynamic state | `~/.claude/methodology/wiki/` plus the `wiki.*` PG schema | read-only |
+| Wiki pages, thermodynamic state | `~/.claude/methodology/wiki/`, every discovered repository's `wiki/` carrying a `wiki/manifest.json` (Cortex project mode), plus the `wiki.*` PG schema | read-only |
 | Archived sessions and execution traces | `~/.claude/projects/*.jsonl` | read-only |
 | Live host activity | `POST /api/activity`, `docs/host-event-v1.schema.json` | append-only derived activity |
 | Cognitive profiles | `~/.claude/methodology/profiles.json` | read-only |

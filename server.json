@@ -6,13 +6,13 @@
     "url": "https://github.com/cdeust/cortex-viz",
     "source": "github"
   },
-  "version": "3.1.1",
+  "version": "3.2.0",
   "websiteUrl": "https://ai-architect.tools/cortex",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "hypermnesia-mcp-viz",
-      "version": "3.1.1",
+      "version": "3.2.0",
       "runtimeHint": "python",
       "transport": {
         "type": "stdio"
