@@ -5,6 +5,22 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 
 ## [Unreleased]
 
+### Fixed
+- The Wiki view lists the pages Cortex publishes into a repository's own
+  wiki. Cortex's `project_root` mode (`wiki_write`, `wiki_adr`,
+  `wiki_reindex` with a `project_root`) writes a page under `<repo>/wiki/`
+  with `wiki/manifest.json` and the `docs/adr` mirror, and nothing else:
+  no `wiki.pages` row, nothing under `~/.claude/methodology/wiki`. The view
+  walked that global directory only, so a project ADR (Cortex ADR-1060 to
+  1062, 2026-09-09) existed on disk and never appeared in the tree. The
+  reader now walks every repository the domain registry discovers that
+  carries a `wiki/manifest.json` (`infrastructure.wiki_roots`), lists those
+  pages under a `@<project>/` path prefix filed under the project's domain,
+  and serves them through `/api/wiki/page`. Saving a project page through
+  the editor is refused with a message naming the Cortex tools: that
+  publication is Cortex's transaction (page, manifest, mirror), not a file
+  the viz may overwrite.
+
 ## [3.1.2] - 2026-09-09
 
 ### Fixed
