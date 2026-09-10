@@ -14,6 +14,16 @@ from pathlib import Path
 import pytest
 
 import cortex_viz.infrastructure.wiki_read as mod
+import cortex_viz.infrastructure.wiki_roots as wiki_roots
+
+
+@pytest.fixture(autouse=True)
+def _global_root_only(monkeypatch):
+    """These tests describe the global root alone. The reader also walks
+    every project wiki the repo registry discovers on this machine, which
+    would leak real pages into a ``tmp_path`` store, so discovery yields
+    nothing here (``tests/test_wiki_roots.py`` covers project roots)."""
+    monkeypatch.setattr(wiki_roots, "candidate_repo_paths", list)
 
 
 def _write_page(tmp_path, rel_path: str, content: str):
