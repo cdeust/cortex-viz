@@ -5,6 +5,8 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-09-10
+
 ### Fixed
 - The Wiki view lists the pages Cortex publishes into a repository's own
   wiki. Cortex's `project_root` mode (`wiki_write`, `wiki_adr`,
