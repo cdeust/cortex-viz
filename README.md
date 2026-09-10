@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/MCP-Codex_%C2%B7_Gemini_%C2%B7_Claude-blue.svg" alt="Cross-platform MCP for Codex, Gemini CLI, and Claude Code">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License">
   <img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+">
-  <img src="https://img.shields.io/badge/version-3.1.1-brightgreen.svg" alt="Version 3.1.1">
+  <img src="https://img.shields.io/badge/version-3.2.0-brightgreen.svg" alt="Version 3.2.0">
   <a href="https://www.bestpractices.dev/projects/13846"><img src="https://www.bestpractices.dev/projects/13846/badge" alt="OpenSSF Best Practices"></a>
 </p>
 
@@ -152,7 +152,7 @@ Five columns by consolidation stage (`labile` · `early_ltp` · `late_ltp` · `c
 
 - **Trace** *(default)*: the live execution-trace drill: collapsed domain hubs → sessions → the ordered prompt → action → file chain of what actually happened → a file's AST symbols, impact neighbourhood, and git history. Discussions and Cortex `remember`/`recall` ops are woven into the chain. Served live from session JSONL, the code graph, and git on every request (no snapshots, always current).
 - **Knowledge**: curated memory cards with the feeling (word + signed valence/arousal, never colour alone), the MEANING line and verbatim excerpt, stage/domain/HOT badges, and four measured meters in fixed order (heat · importance · valence · arousal; a zero shows an empty track, never hides); filter by domain, stage, or feeling with exact facet counts.
-- **Wiki**: the per-project knowledge base as a browsable Project → Kind → Pages tree with a dossier-style page reader: serif prose with numbered section heads and mono identifier chips, boxed status and kind badges, dated provenance, and an Edit · PDF · TEX · DOCX · HTML export strip. A CodeMirror split-pane editor with live preview sits behind Edit. (The wiki *content* is authored autonomously by [Cortex](https://github.com/cdeust/Cortex#the-autonomous-wiki); Hypermnesia MCP Viz is its reading + editing surface.)
+- **Wiki**: the per-project knowledge base as a browsable Project → Kind → Pages tree with a dossier-style page reader: serif prose with numbered section heads and mono identifier chips, boxed status and kind badges, dated provenance, and an Edit · PDF · TEX · DOCX · HTML export strip. A CodeMirror split-pane editor with live preview sits behind Edit. (The wiki *content* is authored autonomously by [Cortex](https://github.com/cdeust/Cortex#the-autonomous-wiki); Hypermnesia MCP Viz is its reading + editing surface.) Pages Cortex publishes into a repository's own `wiki/` (its `project_root` mode, recognised by `wiki/manifest.json`) are listed under that project with a `@<project>/` path prefix; they are read-only here, since Cortex publishes each with its manifest and `docs/adr` mirror.
 
 <p align="center">
 <img src="docs/assets/cortex-knowledge.png" width="100%" alt="Knowledge view, curated memory cards on the paper surface: each card carries its tool source, feeling word with signed valence/arousal deltas, MEANING line with verbatim path, stage badge (LABILE · EARLY-LTP), domain chip, HOT flag, four measured meters (heat, importance, valence, arousal), and capture provenance; the filter bar above states exact counts per domain, stage, and feeling" />
@@ -256,7 +256,7 @@ Hypermnesia MCP Viz consumes Cortex's **artifacts on disk + PostgreSQL**, never 
 | Data | Source |
 |---|---|
 | Memories, entities, relationships (graph nodes) | Cortex PG store (shared `DATABASE_URL`), read-only via `MemoryReader` |
-| Wiki pages + thermodynamic state | `~/.claude/methodology/wiki/` + the `wiki.*` PG schema |
+| Wiki pages + thermodynamic state | `~/.claude/methodology/wiki/`, every discovered repository's `wiki/` carrying a `wiki/manifest.json` (Cortex project mode), + the `wiki.*` PG schema |
 | Sessions / execution traces | `~/.claude/projects/*.jsonl` |
 | Cognitive profiles | `~/.claude/methodology/profiles.json` |
 | Codebase graph (AST symbols, impact) | [`ai-architect-mcp-codebase`](https://github.com/cdeust/ai-architect-mcp-codebase) MCP (stdio) |
