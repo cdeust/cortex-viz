@@ -50,6 +50,20 @@ updates:
         patterns:
           - "vitest"
           - "@vitest/*"
+    # Hold vitest and its coverage provider on 4.x. `ignore` is a property of
+    # the update entry, not of a group: it filters candidate versions before
+    # grouping, so the `vitest` group above simply receives no 5.x member.
+    # source: stryker-mutator/stryker-js#6210 (open). On Vitest 5 the
+    # vitest-runner's per-test name filter matches nothing, so covered mutants
+    # are never killed while Stryker's peer range still admits 5 and CI stays
+    # green. Measured on PR #158 (vitest 4 -> 5): 2 mutants killed instead of
+    # 63, mutation score 2.08 vs 65.63. Remove these entries once #6210 is
+    # fixed and a released vitest-runner is verified against Vitest 5.
+    ignore:
+      - dependency-name: "vitest"
+        versions: [">=5"]
+      - dependency-name: "@vitest/coverage-v8"
+        versions: [">=5"]
 
   # SHA-pinned actions are immune to tag re-pointing but also never pick up a
   # security fix on their own. Dependabot rewrites the pin and the trailing
