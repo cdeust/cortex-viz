@@ -5,6 +5,13 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 
 ## [Unreleased]
 
+### Changed
+- Dependabot no longer proposes `vitest` or `@vitest/coverage-v8` 5.x. On
+  Vitest 5 the Stryker vitest-runner kills 2 mutants instead of 63 (score
+  2.08 against 65.63) because of the open upstream bug
+  stryker-mutator/stryker-js#6210, which silently disables the mutation gate
+  while CI stays green.
+
 ## [3.2.0] - 2026-09-10
 
 ### Fixed
