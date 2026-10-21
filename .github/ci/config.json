@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "python_version": "3.12",
+  "node_version": "24",
+  "rust_toolchain": "",
+  "linux_packages": [],
+  "postgres": false,
+  "auxiliary_python_versions": [],
+  "uv_version": "0.11.3",
+  "pnpm_version": "",
+  "claude_version": "",
+  "categories": {
+    "unit": "bash .github/ci/run.sh unit",
+    "regression": "bash .github/ci/run.sh regression",
+    "e2e": "bash .github/ci/run.sh e2e",
+    "environment": "bash .github/ci/run.sh environment",
+    "installation": "bash .github/ci/run.sh installation"
+  },
+  "version_source": "pyproject.toml:[project].version",
+  "tag_prefix": "v",
+  "release_workflows": ["Release.yaml"],
+  "environment_runners": [],
+  "source_sha": "2169b84d70a5266a24ab3cdf1c915c0cba475efc",
+  "setup_sources": [
+    ".github/workflows/ci.yml",
+    "uv.lock",
+    "package-lock.json"
+  ],
+  "required_environment": {
+    "CORTEX_VIZ_REQUIRE_EXTRAS": "1"
+  },
+  "evidence": "README.md"
+}

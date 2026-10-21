@@ -1,208 +1,27 @@
 name: CI
-
 on:
-  push:
   pull_request:
-
-# Least privilege for GITHUB_TOKEN. Without this block the token inherits the
-# repository default, which can be read/write across every scope — on a
-# workflow that runs untrusted pull-request code, that hands a writable token
-# to any fork that opens a PR. Nothing here writes: both jobs check out,
-# install, and run tests. Any job that needs more must widen it at the JOB
-# level (Release.yaml is the worked example), never here.
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+  workflow_dispatch:
 permissions:
   contents: read
-
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
-  # Required gate (issue #45). Ruff was configured in pyproject.toml but
-  # nothing ran it, which makes it a preference, not a standard. The rule
-  # set enforced here is `[tool.ruff.lint].select` — wider than ruff's
-  # default E4/E7/E9+F, which the tree already passed and which is not
-  # "maximally strict with warnings" (OpenSSF `warnings_strict`).
-  #
-  # `--output-format=github` turns each finding into a PR annotation on the
-  # offending line, so a contributor sees the violation in the diff rather
-  # than having to read the job log.
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.12"
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-      # `--extra dev`, not `--only-dev`: this project declares `dev` as a
-      # project EXTRA in [project.optional-dependencies], and `--only-dev`
-      # selects PEP 735 dependency-GROUPS, of which there are none here. It
-      # therefore installs no ruff, and `uv run` silently falls back to
-      # whatever ruff is on PATH — a different binary from the locked one,
-      # or none at all on a clean runner. Verified locally: --only-dev
-      # resolved to /opt/homebrew/bin/ruff 0.15.20 instead of the locked
-      # 0.15.22.
-      #
-      # `--all-extras` is not needed: ruff parses source, it never imports
-      # it, so the runtime + viz extras are wasted install time here.
-      - name: Install ruff from the lock
-        run: uv sync --locked --extra dev --python 3.12
-      - name: ruff check
-        run: uv run --no-sync ruff check --output-format=github .
-      # Separate step so a formatting-only failure is distinguishable from
-      # a rule violation at a glance in the checks list.
-      - name: ruff format --check
-        run: uv run --no-sync ruff format --check .
-
-  # Required gate for the browser UI. Narrow by design — see the rationale
-  # in eslint.config.mjs: vanilla script-tag JavaScript with hand-maintained
-  # load order, so the rules that pay are the cross-file ones (no-undef,
-  # no-implicit-globals), not style.
-  js-lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "24"
-          cache: "npm"
-      - name: Install JS dependencies
-        run: npm ci
-      - name: Run ESLint
-        run: npm run lint
-
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.12"
-      # Install from uv.lock, not by resolving fresh at CI time. The lock
-      # carries a sha256 for all 1932 artifacts, so the dependency set is
-      # hash-verified — `pip install -e ".[dev]"` accepted whatever the index
-      # served for an open range, which is the supply-chain hole Scorecard's
-      # PinnedDependencies check flags.
-      #
-      # `--locked`, not `--frozen`: only `--locked` asserts the lock is still
-      # consistent with pyproject.toml and fails when it has drifted.
-      # `--frozen` skips that check entirely, so a dependency edit that never
-      # reached the lock would install silently — the opposite of the intent
-      # stated when this was pinned.
-      #
-      # `--all-extras`, not `--extra dev`: leidenalg lives in the graph extra,
-      # so a [dev]-only environment skips tests/test_community_detection.py and
-      # leaves 10 further tests uncollected. Measured on one commit —
-      # `--extra dev` → 660 passed, 1 skipped; `--all-extras` → 671 passed.
-      #
-      # `uv run --no-sync`: `uv run` re-syncs the DEFAULT environment before
-      # running, which drops the extras just installed. Verified locally: the
-      # re-sync silently reverted an --all-extras env mid-measurement.
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-      - name: Install package with test dependencies
-        run: uv sync --locked --all-extras --python 3.12
-      - name: Run test suite with 80% coverage gate
-        run: |
-          uv run --no-sync coverage run -m pytest
-          uv run --no-sync coverage report
-        env:
-          # Arms tests/test_optional_extras_present.py: with this set, an
-          # extra that failed to install FAILS the job instead of silently
-          # skipping every test behind its importorskip. That silence is
-          # the defect #88 reports — test_community_detection.py's 11 tests
-          # never ran in CI until --all-extras landed above, and the job
-          # was green throughout. Unset locally, where the extras are
-          # genuinely optional and skipping is the honest answer.
-          CORTEX_VIZ_REQUIRE_EXTRAS: "1"
-      - name: Build canonical distribution
-        run: uv build
-      - name: Verify distribution metadata and compatibility entry points
-        run: uv run --no-sync python -m scripts.check_distribution_artifact
-      # Was "download mcp-publisher and POST server.json to the live
-      # registry.modelcontextprotocol.io/v0/validate" (`mcp-publisher
-      # validate`), as a REQUIRED check. That made a required check depend
-      # on a third party being reachable from this runner with no retry
-      # budget: on PR #139 both `test` jobs failed with `dial tcp ...: i/o
-      # timeout` while 1335 tests passed, and a bare re-run went green.
-      #
-      # Reading the registry's own source (tag v1.8.1) shows /v0/validate
-      # runs `ValidateServerJSON(server, ValidationAll)`: full JSON Schema
-      # (draft-07) structural validation, against a schema the registry
-      # binary embeds at build time (`//go:embed schemas/*.json`) rather
-      # than fetches per-request -- so that half of the check is a pure
-      # function of server.json + a static schema document, reproducible
-      # offline with any spec-conformant draft-07 validator. This script
-      # does exactly that against a vendored copy of the same schema file
-      # (scripts/schemas/2025-12-11.json) and fails loudly if server.json
-      # ever moves to a schema version that hasn't been re-vendored.
-      #
-      # What is NOT replicated: ValidateServerJSON's Go-only semantic
-      # checks (version-is-not-a-range/"latest", per-source repository URL
-      # rules, https-only website/icon URLs, package argument and
-      # transport-templating rules) have no equivalent expressible in the
-      # JSON Schema document itself. Those are not silently dropped from
-      # the pipeline -- the registry's own /v0/publish handler runs the
-      # same semantic checks authoritatively, over the network, at release
-      # time (Release.yaml's publish-registry job), and fails the release
-      # loudly if violated. See scripts/validate_server_manifest.py's
-      # module docstring for the full source-backed breakdown.
-      - name: Validate MCP Registry manifest (offline schema check)
-        run: uv run --no-sync python -m scripts.validate_server_manifest
-      # Informational only (`continue-on-error`) — the Go-only semantic
-      # checks the offline step above cannot cover (see its comment). This
-      # is what used to be the required, flaky step; kept here non-blocking
-      # so a third-party outage never fails this job again, while a
-      # reachable registry still surfaces a real semantic problem in the PR
-      # checks list instead of only at release time. The offline step above
-      # is the gate; this is early warning, not a second gate.
-      - name: Install mcp-publisher (checksum-verified)
-        uses: ./.github/actions/install-mcp-publisher
-        with:
-          destination: /tmp
-      - name: Validate MCP Registry manifest (live semantic pre-flight, non-blocking)
-        continue-on-error: true
-        run: /tmp/mcp-publisher validate
-      # A copied file drifts silently -- documenting its provenance
-      # (scripts/schemas/README.md) is the minimum, not a guarantee.
-      # scripts/schemas/2025-12-11.json's own $id IS the canonical URL, so
-      # this fetches it and compares structurally. Non-blocking for the
-      # same reason as the step above: useful signal when the network is
-      # reachable, never a required-check failure when it isn't -- the
-      # offline schema check earlier in this job is the only gate.
-      - name: Check vendored MCP Registry schema for drift (non-blocking)
-        continue-on-error: true
-        run: uv run --no-sync python -m scripts.check_vendored_schema_drift
-
-  js-test:
-    # Required job: the browser UI (ui/, ~25.5k lines) is the product's primary
-    # surface. A failing JS test fails CI exactly like a failing pytest.
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          # Node 20 is end-of-life and deprecated on GitHub runners, and the
-          # test harness has now outgrown it: jsdom >=30 declares
-          # `^22.22.2 || ^24.15.0 || >=26.0.0` and pulls undici >=8
-          # (`>=22.19.0`), whose webidl layer does
-          # `require('node:worker_threads').markAsUncloneable` at import time.
-          # That export does not exist on Node 20, so it binds to undefined and
-          # every vitest worker dies at startup with
-          # `webidl.util.markAsUncloneable is not a function` — measured
-          # 2026-07-28 on Node v20.20.2 (fails) vs v24.13.0 (192/192 pass).
-          node-version: "24"
-          cache: "npm"
-      - name: Install JS test dependencies
-        run: npm ci
-      # Python, in the JS job, for exactly one reason: the static wiki export
-      # (#112) is produced by Python and consumed by a browser, and criterion 1
-      # requires the test to launch the BUILT ARTIFACT rather than the sources.
-      # So `wiki_export_artifact.test.mjs` shells out to the real exporter and
-      # loads its output in JSDOM over a file:// URL. Without this the file's 11
-      # tests do not fail — they skip, and the one criterion that proves the
-      # bundle opens offline silently stops being checked.
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.12"
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-      - name: Install the exporter the artifact test builds with
-        run: uv sync --locked --all-extras --python 3.12
-      - name: Run JS test suite
-        run: npm test
+  tests:
+    uses: cdeust/Cortex/.github/workflows/shared-tests.yml@4f2e993b026ebb4d2e4de171f51cc422ebf26aef
+    with:
+      engine-ref: 4f2e993b026ebb4d2e4de171f51cc422ebf26aef
+      runners: '["ubuntu-latest"]'
+  release-tag:
+    needs: [tests]
+    if: always() && !cancelled() && needs.tests.result == 'success' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      actions: write
+    uses: cdeust/Cortex/.github/workflows/shared-release.yml@4f2e993b026ebb4d2e4de171f51cc422ebf26aef
+    with:
+      engine-ref: 4f2e993b026ebb4d2e4de171f51cc422ebf26aef

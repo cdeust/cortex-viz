@@ -1,35 +1,6 @@
+# source: cdeust/cortex-viz@2169b84d70a5266a24ab3cdf1c915c0cba475efc .github/workflows/Release.yaml
+# Existing artifact build, signing and publication commands retained.
 name: Release
-
-# Filename casing is part of PyPI's Trusted Publisher identity. Keep this file
-# as `Release.yaml` to match the verified publisher record exactly.
-
-# Issue #37. Until now Hypermnesia MCP Viz had NO release workflow: 2.7.1 was cut by
-# hand, so there was no committed, reproducible build path and therefore no
-# artifact to attest. This workflow is the build that was missing — it is now
-# the ONLY way a release is produced, and provenance layers on top of it.
-#
-# Delivery reality (do not confuse with "released"): hypermnesia-mcp-viz is consumed
-# through Anthropic's plugin marketplace, PINNED in Cortex's marketplace
-# manifest. Tagging + this GitHub Release do not reach installs by themselves;
-# the release checklist still ENDS with bumping that pin. This is the same
-# pin-gate lesson that let six zetetic-team-subagents releases and two
-# hypermnesia-mcp-viz releases ship to zero installs (Cortex #179) — a release workflow
-# that runs is necessary but not sufficient.
-#
-# The canonical distribution is published to PyPI as `hypermnesia-mcp-viz`
-# through Trusted Publishing. No long-lived PyPI token exists: the protected
-# `pypi` environment and id-token permission bind publication to this workflow,
-# repository, tag, and environment. The canonical console command is
-# `hypermnesia-mcp-viz`; no deprecated publication alias is emitted.
-#
-# docs/RELEASING.md step 5. The `publish-registry` job below publishes
-# `server.json` to the official MCP Registry (registry.modelcontextprotocol.io)
-# after `release` succeeds, so it can never point the registry at a PyPI
-# version that does not exist. It has no committed tooling before this
-# change — the registry drifted to 2.8.0 while PyPI and the GitHub Release
-# were already at 3.1.0, the same "checklist step nobody ran" shape as the
-# marketplace-pin lesson above. Auth is `mcp-publisher login github-oidc`, no
-# secret: the same no-long-lived-credential pattern as the PyPI publish job.
 
 on:
   push:
@@ -39,11 +10,8 @@ on:
     inputs:
       tag:
         description: >-
-          Recovery path only. Existing release tag to (re)publish to the MCP
-          Registry, e.g. v3.1.0. The matching version must already be on
-          PyPI — this path does not rebuild or re-publish the package, it
-          only repairs a registry entry that fell behind. Required for
-          workflow_dispatch; the workflow refuses to guess.
+          Tag-ref dispatch builds and publishes that tag. Dispatch from a
+          branch with this input only repairs its existing registry entry.
         required: false
         type: string
 
@@ -53,7 +21,7 @@ permissions:
 jobs:
   test:
     name: Test before release
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/tags/'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -66,9 +34,6 @@ jobs:
       - name: Install uv (pinned)
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
 
-      # --all-extras, not [dev]: leidenalg lives in the graph extra, and
-      # installing only [dev] silently skipped tests/test_community_detection.py
-      # and left 10 further tests uncollected — 660 run instead of 671.
       - name: Install package with test dependencies
         run: uv sync --locked --all-extras --python 3.12
 
@@ -78,7 +43,7 @@ jobs:
   release:
     name: Build, fingerprint UI, SBOM, attest + GitHub Release
     needs: test
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/tags/'))
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -95,12 +60,6 @@ jobs:
         with:
           python-version: "3.12"
 
-      # uv is the repo's own resolver (uv.lock is the source of truth) and it
-      # builds through the same PEP 517 backend `python -m build` used, so the
-      # sdist/wheel are byte-for-byte the same artifacts. It also removes the
-      # unpinned `pip install build` step: Scorecard's pip predicate treats a
-      # bare `pip install <pkg>` as unpinned regardless of any version pin,
-      # and `uv` is not scanned at all (ossf/scorecard shell_download_validate).
       - name: Install uv (pinned)
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
 
@@ -110,13 +69,6 @@ jobs:
       - name: Verify canonical distribution identity and entry point
         run: python -m scripts.check_distribution_artifact
 
-      # Fingerprint the browser-executed UI (issue #37 criterion 2). The 91 JS
-      # files + HTML/CSS under ui/ are first-party STATIC assets — there is no
-      # bundler to run, so "built and fingerprinted" means: pin every byte a
-      # user's browser will execute to this exact commit. The manifest is a
-      # sorted `sha256sum` over the whole tree; a tampered UI asset changes its
-      # line, and the manifest is itself attested below. LC_ALL=C fixes sort
-      # order so the manifest is reproducible across runners.
       - name: Fingerprint UI assets
         run: |
           set -euxo pipefail
@@ -126,13 +78,6 @@ jobs:
           echo "UI files fingerprinted: $(wc -l < hypermnesia-mcp-viz-ui-manifest.sha256)"
           head -5 hypermnesia-mcp-viz-ui-manifest.sha256
 
-      # CycloneDX SBOM from uv.lock (issue #37 criterion 5). This covers the
-      # Python dependency graph, including the viz-tile stack (datashader,
-      # pyarrow, numba/llvmlite) that is the heaviest third-party surface. The
-      # "vendored JS" the criterion mentions is first-party source, not
-      # third-party packages, so it is inventoried by the UI manifest above
-      # rather than duplicated here — the two together enumerate everything
-      # that ships.
       - name: Build the SBOM
         run: |
           set -euxo pipefail
@@ -143,8 +88,6 @@ jobs:
             sbom-requirements.txt --output-format JSON --output-file hypermnesia-mcp-viz.cdx.json
           ls -la hypermnesia-mcp-viz.cdx.json
 
-      # Publish while dist/ contains distributions only. The checksum step
-      # below adds *.sha256 sidecars that Twine rejects as unknown formats.
       - name: Publish canonical distribution to PyPI with OIDC
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
@@ -158,10 +101,6 @@ jobs:
             sha256sum "$f" | tee "$f.sha256"
           done
 
-      # Provenance before the GitHub Release upload binds each artifact digest
-      # to this workflow, commit and runner. PyPI publication happens above so
-      # dist/ is still free of checksum sidecars. Verify provenance with
-      #   gh attestation verify <file> --repo cdeust/cortex-viz
       - name: Attest build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
@@ -187,40 +126,33 @@ jobs:
           fail_on_unmatched_files: true
 
   publish-registry:
-    # RELEASING.md step 5. Runs after PyPI publish + GitHub Release succeed
-    # (needs: [test, release]) so it can never publish a registry entry
-    # pointing at a package version that does not exist yet. Also runs on
-    # workflow_dispatch as a recovery path, for the case where a version was
-    # published to PyPI and tagged (test + release already succeeded on that
-    # tag's push) but this job did not exist yet or failed — exactly the gap
-    # that let the registry serve 2.8.0 while PyPI and the GitHub Release
-    # were already at 3.1.0.
     name: Publish server.json to the MCP Registry
     needs: [test, release]
     if: |
       always() &&
-      (github.event_name == 'workflow_dispatch' || needs.release.result == 'success')
+      (needs.release.result == 'success' || (github.event_name == 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/')))
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write   # OIDC token the MCP Registry exchanges for a publish credential
     steps:
-      # Fail loudly rather than silently skip: workflow_dispatch without an
-      # explicit tag would otherwise publish whatever ref happened to be
-      # selected in the UI, which is exactly the kind of unattended drift
-      # this job exists to close.
       - name: Resolve target tag
         id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          TARGET_REF_TYPE: ${{ github.ref_type }}
+          INPUT_TAG: ${{ inputs.tag }}
+          TAG_REF: ${{ github.ref_name }}
         run: |
           set -euxo pipefail
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="${{ inputs.tag }}"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$TARGET_REF_TYPE" != "tag" ]; then
+            TAG="$INPUT_TAG"
             if [ -z "$TAG" ]; then
               echo "::error::workflow_dispatch requires a 'tag' input (e.g. v3.1.0) — refusing to guess which release to publish."
               exit 1
             fi
           else
-            TAG="${{ github.ref_name }}"
+            TAG="$TAG_REF"
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
@@ -233,16 +165,9 @@ jobs:
         with:
           python-version: "3.12"
 
-      # Version+checksum pin lives in the action's defaults, not here —
-      # .github/actions/install-mcp-publisher/action.yml. Before this action
-      # existed, this pin and ci.yml's lived in two places and had already
-      # drifted apart (v1.7.9 vs v1.8.1). A bump is one edit to that file.
       - name: Install mcp-publisher (checksum-verified)
         uses: ./.github/actions/install-mcp-publisher
 
-      # The exact defect this job exists to prevent runs in both directions:
-      # a registry entry must never point at a PyPI version that does not
-      # exist. Check before authenticating, not after.
       - name: Verify the PyPI package version exists before publishing
         run: |
           set -euxo pipefail
@@ -250,28 +175,9 @@ jobs:
           echo "Checking PyPI for hypermnesia-mcp-viz==${VERSION}"
           curl -fsSL "https://pypi.org/pypi/hypermnesia-mcp-viz/${VERSION}/json" > /dev/null
 
-      # No secret: the `pypi` OIDC trusted-publishing pattern this repo
-      # already uses for PyPI (see the workflow header) has a registry
-      # equivalent — `mcp-publisher login github-oidc` exchanges this job's
-      # GitHub Actions OIDC token for a registry credential scoped to
-      # io.github.cdeust/*, using only the id-token: write permission above.
-      # Source: modelcontextprotocol/registry docs/reference/cli/commands.md
-      # ("GitHub OIDC (CI/CD)") and docs/modelcontextprotocol-io/github-actions.mdx
-      # ("OIDC authentication (recommended)"), verified 2026-08-10.
       - name: Authenticate to the MCP Registry via GitHub OIDC
         run: ./mcp-publisher login github-oidc
 
-      # A "cannot publish duplicate version" 400 means the registry already
-      # has this exact version — the desired end state for the
-      # workflow_dispatch recovery path (RELEASING.md step 5: re-run this
-      # job for a tag whose publish was missed or failed). On the normal
-      # push-tag path the same error means something is wrong: this job
-      # only runs once per tag (needs: [test, release]), so an existing
-      # entry there is unexpected and must still fail loudly. The verify
-      # step below still runs after a swallowed duplicate and independently
-      # confirms the registry serves this version before the job can pass —
-      # this branch narrows *which* mcp-publisher exit codes are treated as
-      # non-fatal, it never widens what "passing" means.
       - name: Publish server.json to the MCP Registry
         run: |
           set +e
@@ -288,25 +194,6 @@ jobs:
             fi
           fi
 
-      # A green `mcp-publisher publish` (or a swallowed duplicate-version
-      # error above) is not proof (Move 2: verify externally, not by exit
-      # code alone). Query the registry's own API and fail the job if it
-      # disagrees with server.json.
-      #
-      # Bounded retry, not zero-tolerance: the registry API sits behind a
-      # CDN cache in front of all public read endpoints (modelcontextprotocol/
-      # registry docs/design/tech-architecture.md, "CDN Layer"), so a read
-      # immediately after publish can observe a stale, pre-publish entry.
-      # Measured on the v3.1.1 release (2026-08-09): publish completed at
-      # 16:48:46 UTC and a read one second later, 16:48:47, still returned
-      # the prior version — an empirical floor of >1s of staleness. No SLA
-      # for the cache TTL is published, so the bound below is a stated
-      # engineering assumption, not a measured constant: 12 attempts x 5s
-      # = 60s, an order of magnitude above the observed 1s staleness, meant
-      # to absorb ordinary CDN propagation without masking a genuine
-      # publish failure. It still fails — this is a timeout, not an
-      # unbounded retry-until-pass — when the registry never converges,
-      # which is exactly the case this check exists to catch.
       - name: Verify the registry now serves the published version
         run: |
           set -euo pipefail
