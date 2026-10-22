@@ -25,6 +25,7 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 - `.github/workflows/claude.yml`: every push to a PR runs a Claude Code review (`/code-review` then `/security-review`, one cycle), applies the findings and arms squash auto-merge; `@claude` in a comment or issue runs Claude on that request. Action pinned by SHA (anthropics/claude-code-action v1.0.256).
 
 ### Changed
+- The `@claude` mention workflow (`.github/workflows/claude.yml`) checks out full history and can run git, gh and the test runners.
 - Dependabot no longer proposes `vitest` or `@vitest/coverage-v8` 5.x. On
   Vitest 5 the Stryker vitest-runner kills 2 mutants instead of 63 (score
   2.08 against 65.63) because of the open upstream bug
