@@ -5,6 +5,10 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 
 ## [Unreleased]
 
+### Fixed
+
+- The `merge` job of `.github/workflows/pipeline.yml` sets `GH_REPO: ${{ github.repository }}` on its `gh pr merge` step: the job runs without a checkout, so gh could not infer the repository and failed with `fatal: not a git repository` after every stage was green (session-optimizer #65, run 39756969927, 2026-10-22).
+
 ### Added
 - `.github/workflows/pipeline.yml` and `ci.json`: the single CI pipeline every
   repository of the owner runs (contract, unit with one merged Cobertura report

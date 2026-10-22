@@ -376,6 +376,7 @@ jobs:
         if: steps.guard.outputs.has_deploy_key == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
         run: gh pr merge "$PR" --auto --squash
       - name: Summarize the merge decision
