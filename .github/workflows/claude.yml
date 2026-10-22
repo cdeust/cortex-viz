@@ -1,8 +1,8 @@
 name: Claude Code
 
 # @claude in a comment, review or issue runs Claude on that request.
-# The PR review runs in claude-review.yml on the pull_request trigger only; this
-# workflow's triggers are privileged, so its checkout sets no PR head ref.
+# The PR review and the auto-merge live in pipeline.yml (jobs review, merge)
+# on the pull_request trigger only; this workflow's triggers are privileged.
 # Action pinned by SHA: anthropics/claude-code-action v1.0.256.
 
 on:

@@ -5,6 +5,17 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 
 ## [Unreleased]
 
+### Added
+- `.github/workflows/pipeline.yml` and `ci.json`: the single CI pipeline every
+  repository of the owner runs (contract, unit with one merged Cobertura report
+  gated at 90 %, regression, e2e, environment and install on ubuntu/macOS/Windows
+  with only the pinned Claude Code CLI, the bot's review and fix pass, squash
+  auto-merge, release tag from `plugin.json`). `scripts/merge_cobertura.py` merges
+  the coverage.py and vitest reports; `scripts/ci_environment.py` starts the
+  launcher without PostgreSQL and requires the Trace view to answer. Design:
+  zetetic-team-subagents `docs/superpowers/specs/2026-10-22-single-ci-design.md`.
+  The existing workflows are untouched in this change.
+
 ### Security
 
 - The Claude Code PR review no longer checks out PR code in a privileged workflow (CodeQL `actions/untrusted-checkout/high`, `actions/untrusted-checkout-toctou/high`): the review job moves to `.github/workflows/claude-review.yml`, triggered by `pull_request` only, and `.github/workflows/claude.yml` keeps only the `@claude` job on its comment, review and issue triggers, with no PR head checkout.
