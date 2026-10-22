@@ -144,6 +144,12 @@ export default [
         afterAll: "readonly",
         process: "readonly",
         global: "readonly",
+        // jsdom DOM constructors the behaviour tests dispatch.
+        Event: "readonly",
+        KeyboardEvent: "readonly",
+        MouseEvent: "readonly",
+        Storage: "readonly",
+        dispatchEvent: "readonly",
       },
     },
     rules: {
