@@ -318,25 +318,49 @@ jobs:
           claude_args: >-
             --allowedTools "Read,Edit,Write,MultiEdit,Glob,Grep,Bash(git:*),Bash(gh:*),Bash(python3:*),Bash(python:*),Bash(pytest:*),Bash(coverage:*),Bash(uv:*),Bash(uvx:*),Bash(npm:*),Bash(npx:*),Bash(pnpm:*),Bash(cargo:*),Bash(node:*),Bash(bash:*),Bash(sh:*),Bash(jq:*)"
 
-  # A failed review blocks; a skipped review does not (decision 4). Arms
-  # squash auto-merge; GitHub merges once this required check is green on
-  # the commit the bot last pushed (design, "The bot step"). Same credential
-  # mechanism as tag (decision 1).
+  # Runs on every non-draft same-repo pull request and FAILS when any stage
+  # is not green or the review failed: a skipped required check satisfies
+  # GitHub, a failed one does not (claude-mods #38, session-optimizer #73
+  # merged on a red pipeline). Arms squash auto-merge without a checkout.
   merge:
-    needs: [unit, regression, e2e, environment, install, review]
+    needs: [contract, unit, regression, e2e, environment, install, review]
     if: >-
       always() && github.event_name == 'pull_request' &&
-      needs.review.result != 'failure' &&
-      needs.unit.result == 'success' &&
-      needs.regression.result == 'success' &&
-      needs.e2e.result == 'success' &&
-      needs.environment.result == 'success' &&
-      needs.install.result == 'success'
+      !github.event.pull_request.draft &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
     steps:
+      - name: Require every stage green
+        env:
+          R_CONTRACT: ${{ needs.contract.result }}
+          R_UNIT: ${{ needs.unit.result }}
+          R_REGRESSION: ${{ needs.regression.result }}
+          R_E2E: ${{ needs.e2e.result }}
+          R_ENVIRONMENT: ${{ needs.environment.result }}
+          R_INSTALL: ${{ needs.install.result }}
+          R_REVIEW: ${{ needs.review.result }}
+        run: |
+          red=0
+          for stage in CONTRACT UNIT REGRESSION E2E ENVIRONMENT INSTALL; do
+            var="R_$stage"
+            result="${!var}"
+            if [ "$result" != "success" ]; then
+              echo "::error::stage ${stage,,} is '${result}', not success"
+              red=1
+            fi
+          done
+          if [ "$R_REVIEW" = "failure" ]; then
+            echo "::error::stage review failed"
+            red=1
+          fi
+          if [ "$red" -ne 0 ]; then
+            echo "## Merge: refused — a stage is not green" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "every stage is green (review: ${R_REVIEW})"
       - name: Guard — skip cleanly when RELEASE_TAG_SSH_KEY is missing
         id: guard
         env:
@@ -348,12 +372,6 @@ jobs:
           else
             echo "has_deploy_key=true" >> "$GITHUB_OUTPUT"
           fi
-      - name: Checkout over the deploy key
-        if: steps.guard.outputs.has_deploy_key == 'true'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          ssh-key: ${{ secrets.RELEASE_TAG_SSH_KEY }}
       - name: Arm squash auto-merge
         if: steps.guard.outputs.has_deploy_key == 'true'
         env:
@@ -361,7 +379,7 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
         run: gh pr merge "$PR" --auto --squash
       - name: Summarize the merge decision
-        if: always()
+        if: success()
         env:
           HAS_KEY: ${{ steps.guard.outputs.has_deploy_key }}
           REVIEW: ${{ needs.review.result }}
