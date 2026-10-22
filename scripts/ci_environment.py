@@ -37,7 +37,7 @@ def capabilities(port: int) -> dict | None:
     try:
         with urllib.request.urlopen(url, timeout=5) as resp:  # noqa: S310
             return json.load(resp)
-    except OSError:
+    except (OSError, ValueError):  # refused, reset, or a non-JSON body while booting
         return None
 
 
