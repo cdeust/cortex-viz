@@ -60,6 +60,7 @@ def _resolve_paths() -> tuple[str, str]:
 # ``[community]`` and its Traag et al. 2019/2011 citations.
 _REQUIRED = [
     ("fastmcp", "fastmcp>=2.0.0"),
+    ("certifi", "certifi>=2026.10.19"),
     ("pydantic", "pydantic>=2.0.0"),
     ("pydantic_settings", "pydantic-settings>=2.0.0"),
     ("numpy", "numpy>=1.24.0"),
@@ -94,6 +95,87 @@ def _importable(import_name: str, deps_dir: str) -> bool:
 
         shutil.rmtree(husk, ignore_errors=True)
     return False
+
+
+# Published fixed versions, also enforced by pyproject.toml for pip/uv installs.
+# https://github.com/advisories/GHSA-6q48-6c7w-9gw2
+# https://github.com/advisories/GHSA-5x8w-8jj5-q52h
+_SECURITY_REQUIREMENTS = {"certifi": "certifi>=2026.10.19", "PIL": "Pillow>=13.0.0"}
+
+
+def _installed_versions(name: str) -> list[str]:
+    """Reject ambiguous metadata only in the selected installation directory."""
+    from importlib import metadata
+
+    selected = metadata.distribution(name)
+    # from_name selects the first match; interrupted older installs can leave
+    # another version in that same target. Do not accept ambiguity.
+    candidates = metadata.distributions(path=[str(selected.locate_file(""))])
+    return [
+        item.version
+        for item in candidates
+        if item.metadata.get("Name", "").lower() == name.lower()
+    ]
+
+
+def _security_updates() -> list[str]:
+    """Check installed metadata before importing packages that consume TLS/images."""
+    from importlib import metadata, util
+
+    from packaging.requirements import Requirement
+    from packaging.version import InvalidVersion
+
+    updates = []
+    for module, spec in _SECURITY_REQUIREMENTS.items():
+        requirement = Requirement(spec)
+        try:
+            versions = _installed_versions(requirement.name)
+            if len(versions) == 1 and versions[0] in requirement.specifier:
+                continue
+        except metadata.PackageNotFoundError:
+            if module == "PIL" and util.find_spec(module) is None:
+                continue  # The image renderer remains an optional extra.
+        except InvalidVersion:
+            pass  # Unverifiable metadata cannot satisfy a security floor.
+        updates.append(spec)
+    return updates
+
+
+def _obsolete_security_metadata(deps_dir: str, staging: str) -> list[Path]:
+    """Identify only replaced certifi/Pillow metadata inside this private target."""
+    from importlib.metadata import PathDistribution
+
+    replacements = {}
+    for path in Path(staging).glob("*.dist-info"):
+        name = PathDistribution(path).metadata.get("Name", "").lower()
+        if name in {"certifi", "pillow"}:
+            replacements[name] = path.name
+    obsolete = []
+    for path in Path(deps_dir).glob("*.dist-info"):
+        name = PathDistribution(path).metadata.get("Name", "").lower()
+        if name in replacements and path.name != replacements[name]:
+            obsolete.append(path)
+    return obsolete
+
+
+def _publish_dependencies(deps_dir: str, staging: str) -> None:
+    """Publish the successful private install, then discard replaced metadata."""
+    import shutil
+
+    os.makedirs(deps_dir, exist_ok=True)
+    obsolete = _obsolete_security_metadata(deps_dir, staging)
+    for entry in os.listdir(staging):
+        dest = os.path.join(deps_dir, entry)
+        if os.path.isdir(dest):
+            shutil.rmtree(dest, ignore_errors=True)
+        elif os.path.exists(dest):
+            os.remove(dest)
+        os.replace(os.path.join(staging, entry), dest)
+    for path in obsolete:
+        try:
+            shutil.rmtree(path)
+        except FileNotFoundError:
+            pass  # Another install already removed this obsolete metadata only.
 
 
 def _pip_install(deps_dir: str, packages: list[str]) -> None:
@@ -137,26 +219,39 @@ def _pip_install(deps_dir: str, packages: list[str]) -> None:
                 file=sys.stderr,
             )
             return
-        os.makedirs(deps_dir, exist_ok=True)
-        for entry in os.listdir(tmp_dir):
-            dest = os.path.join(deps_dir, entry)
-            if os.path.isdir(dest):
-                shutil.rmtree(dest, ignore_errors=True)
-            elif os.path.exists(dest):
-                os.remove(dest)
-            os.replace(os.path.join(tmp_dir, entry), dest)
+        _publish_dependencies(deps_dir, tmp_dir)
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 def _ensure_deps(deps_dir: str) -> None:
     os.makedirs(deps_dir, exist_ok=True)
+    if not _importable("packaging", deps_dir):
+        _pip_install(deps_dir, ["packaging"])
+    updates = _security_updates()
+    if updates:
+        _pip_install(deps_dir, updates)
+        remaining = _security_updates()
+        if remaining:
+            raise RuntimeError(
+                f"security dependency update failed: {', '.join(remaining)}"
+            )
     missing = [spec for name, spec in _REQUIRED if not _importable(name, deps_dir)]
     if missing:
         _pip_install(deps_dir, missing)
+    remaining = _security_updates()
+    if remaining:
+        raise RuntimeError(f"security dependency update failed: {', '.join(remaining)}")
 
 
 def main() -> None:
+    # Pillow 13's published Requires-Python is >=3.11, matching pyproject.toml.
+    if sys.version_info < (3, 11):
+        print(
+            "[cortex-viz-launcher] Python 3.11 or newer is required; upgrade Python.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
     if len(sys.argv) < 2:
         print("Usage: python3 scripts/launcher.py <module>", file=sys.stderr)
         sys.exit(1)

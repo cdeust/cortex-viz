@@ -8,7 +8,7 @@ version = "3.2.0"
 description = "Visualization and graph MCP server for Cortex — neural graph, methodology map, workflow graph, and trace UI extracted from the Cortex memory engine"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [
     { name = "Clement Deust", email = "admin@ai-architect.tools" },
 ]
@@ -22,6 +22,9 @@ classifiers = [
 ]
 dependencies = [
     "fastmcp>=2.0.0",
+    # GHSA-6q48-6c7w-9gw2: remove compromised emSign CA trust roots.
+    "certifi>=2026.10.19",
+    "packaging",
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
     "numpy>=1.24.0",
@@ -59,12 +62,10 @@ viz-tile = [
     "pyarrow>=15.0",
     "pandas>=2.2",
     "cachetools>=5.0",
-    # Floor is the fix version, not the API floor: 12.3.0 closes 13 advisories
-    # that all land on the image decoders this extra feeds (PYSEC-2026-2253..2257,
-    # -3451..3454, -3493..3496 — OOB read, TGA/JPEG2000 memory disclosure, PDF
-    # decompression-bomb DoS). Pillow 12.3.0 requires Python >=3.10, which this
-    # project already requires. source: osv.dev, resolved 2026-07-28.
-    "Pillow>=12.3.0",
+    # Pillow 13 fixes the decoder advisories affecting 12.3.0 and requires
+    # Python >=3.11: https://pypi.org/project/pillow/13.0.0/
+    # https://github.com/advisories/GHSA-5x8w-8jj5-q52h
+    "Pillow>=13.0.0",
 ]
 # The viz read contract: hypermnesia-mcp-viz reads Cortex's PG store + ~/.claude
 # artifacts directly. These read-path drivers were PROMOTED to core
@@ -115,6 +116,10 @@ packages = ["cortex_viz"]
 "ui" = "cortex_viz/ui"
 
 [tool.ruff]
+# Preserve the existing syntax baseline: the standalone Git launcher must still
+# parse on Python 3.10 to explain the upgrade. Package installation requires 3.11.
+# Avoid unrelated API modernization while applying the security dependency fixes.
+target-version = "py310"
 # `scratchpad*` are untracked local working directories; a local `ruff format .`
 # reformatting a throwaway script is noise, and CI never sees them anyway.
 extend-exclude = [".claude", "scratchpad", "scratchpad-session"]
@@ -134,7 +139,7 @@ select = [
     "F",    # pyflakes
     "I",    # isort — import ordering
     "N",    # pep8-naming
-    "UP",   # pyupgrade — the floor is Python 3.10
+    "UP",   # pyupgrade — retain the bootstrap syntax baseline above
     "B",    # flake8-bugbear — real bug patterns
     "C4",   # flake8-comprehensions
     "SIM",  # flake8-simplify

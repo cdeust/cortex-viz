@@ -26,6 +26,14 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 
 ### Security
 
+- Require Pillow 13.0.0 or newer for tile rendering and certifi 2026.10.19 or
+  newer for TLS trust roots. These are the fixed versions for the Pillow decoder
+  advisories and GHSA-6q48-6c7w-9gw2. Python 3.10 users must upgrade to Python
+  3.11 or newer before updating, because Pillow 13 requires Python 3.11.
+  The plugin launcher also checks existing certifi and optional Pillow versions
+  before startup, refreshes outdated copies in its private dependency directory
+  and refuses startup if the security floors remain unmet.
+
 - The Claude Code PR review no longer checks out PR code in a privileged workflow (CodeQL `actions/untrusted-checkout/high`, `actions/untrusted-checkout-toctou/high`): the review job moves to `.github/workflows/claude-review.yml`, triggered by `pull_request` only, and `.github/workflows/claude.yml` keeps only the `@claude` job on its comment, review and issue triggers, with no PR head checkout.
 
 ### Added
