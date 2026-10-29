@@ -5,11 +5,36 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 
 ## [Unreleased]
 
+### Removed
+
+- Pull requests run only the Pipeline workflow; the legacy CI, CodeQL, fuzz, identity and scanner workflows are removed; security is reviewed locally with the security-review skill.
+
+### Fixed
+
+- The `merge` job of `.github/workflows/pipeline.yml` sets `GH_REPO: ${{ github.repository }}` on its `gh pr merge` step: the job runs without a checkout, so gh could not infer the repository and failed with `fatal: not a git repository` after every stage was green (session-optimizer #65, run 39756969927, 2026-10-22).
+
+### Added
+- `.github/workflows/pipeline.yml` and `ci.json`: the single CI pipeline every
+  repository of the owner runs (contract, unit with one merged Cobertura report
+  gated at 90 %, regression, e2e, environment and install on ubuntu/macOS/Windows
+  with only the pinned Claude Code CLI, the bot's review and fix pass, squash
+  auto-merge, release tag from `plugin.json`). `scripts/merge_cobertura.py` merges
+  the coverage.py and vitest reports; `scripts/ci_environment.py` starts the
+  launcher without PostgreSQL and requires the Trace view to answer. Design:
+  zetetic-team-subagents `docs/superpowers/specs/2026-10-22-single-ci-design.md`.
+  The existing workflows are untouched in this change.
+
+### Security
+
+- The Claude Code PR review no longer checks out PR code in a privileged workflow (CodeQL `actions/untrusted-checkout/high`, `actions/untrusted-checkout-toctou/high`): the review job moves to `.github/workflows/claude-review.yml`, triggered by `pull_request` only, and `.github/workflows/claude.yml` keeps only the `@claude` job on its comment, review and issue triggers, with no PR head checkout.
+
 ### Added
 
 - `.github/workflows/claude.yml`: every push to a PR runs a Claude Code review (`/code-review` then `/security-review`, one cycle), applies the findings and arms squash auto-merge; `@claude` in a comment or issue runs Claude on that request. Action pinned by SHA (anthropics/claude-code-action v1.0.256).
 
 ### Changed
+- `.github/workflows/claude.yml`: the @claude mention workflow can run ruff, uv, pipx, coverage, tsc, shellcheck and the Claude CLI.
+- The `@claude` mention workflow (`.github/workflows/claude.yml`) checks out full history and can run git, gh and the test runners.
 - Dependabot no longer proposes `vitest` or `@vitest/coverage-v8` 5.x. On
   Vitest 5 the Stryker vitest-runner kills 2 mutants instead of 63 (score
   2.08 against 65.63) because of the open upstream bug
