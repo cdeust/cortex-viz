@@ -1,0 +1,17 @@
+{
+  "source_repository": "cdeust/zetetic-team-subagents",
+  "source_sha": "1b7ad1f63dbe38b51a5f5576f3a57f0c35b52847",
+  "template_blob": "81171da29ddcc1146bcaaffb415c53481bd6fa00",
+  "base_sha": "c134295c4ced82082aef32a112fec269ad5c33ec",
+  "command": "env -u CLAUDE_PLUGIN_ROOT bash <source>/scripts/setup.sh render-ci <target> --native-review",
+  "before_native_mismatches": 31,
+  "after_native_mismatches": 0,
+  "ci_json_sha256_unchanged": "cb94b6ba5d60d7ca45a733ddb9e1d035e8b778880d9db1c3a838cfec1b8f5479",
+  "checks": {
+    "source_renderer_pytest": "74 passed, 33 subtests passed",
+    "native_reader_fixtures": "96 passed, 6 subtests passed",
+    "actionlint_exit": 0,
+    "git_diff_check_exit": 0
+  },
+  "hosted_native_execution": "pending; generated-file presence does not prove either native agent executed"
+}
