@@ -1,0 +1,7 @@
+{
+  "unit": "python3 -m pip install --quiet uv && uv sync --locked --all-extras --python 3.12 && CORTEX_VIZ_REQUIRE_EXTRAS=1 uv run --no-sync coverage run -m pytest && uv run --no-sync coverage xml -o coverage-py.xml && npm ci && npx vitest run --coverage --coverage.reporter=cobertura && python3 scripts/merge_cobertura.py coverage-py.xml coverage/cobertura-coverage.xml -o coverage.xml",
+  "regression": "python3 -m pip install --quiet uv && uv sync --locked --all-extras --python 3.12 && npm ci && npm test",
+  "e2e": "python3 -m pip install --quiet uv && uv sync --locked --all-extras --python 3.12 && npm ci && node --test tests/e2e/*.test.mjs",
+  "environment": "\"$(command -v python3 || command -v python)\" scripts/ci_environment.py",
+  "install": "claude plugin marketplace add \"${GITHUB_WORKSPACE:-$PWD}\" && claude plugin install hypermnesia-mcp-viz@hypermnesia-mcp-viz-marketplace && claude plugin list"
+}
