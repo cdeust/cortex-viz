@@ -12,8 +12,8 @@
     "lint": "eslint ."
   },
   "devDependencies": {
-    "@stryker-mutator/core": "^10.0.0",
-    "@stryker-mutator/vitest-runner": "^10.0.0",
+    "@stryker-mutator/core": "^10.1.1",
+    "@stryker-mutator/vitest-runner": "^10.1.1",
     "@vitest/coverage-v8": "^4.1.12",
     "eslint": "^10.13.0",
     "fast-check": "^4.10.2",
