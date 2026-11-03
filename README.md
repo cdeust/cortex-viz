@@ -11,7 +11,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/MCP-Codex_%C2%B7_Gemini_%C2%B7_Claude-blue.svg" alt="Cross-platform MCP for Codex, Gemini CLI, and Claude Code">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License">
-  <img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+">
+  <img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/version-3.2.0-brightgreen.svg" alt="Version 3.2.0">
   <a href="https://www.bestpractices.dev/projects/13846"><img src="https://www.bestpractices.dev/projects/13846/badge" alt="OpenSSF Best Practices"></a>
 </p>
@@ -30,6 +30,9 @@ The whole UI ships on the **AI Architect design system**: a paper-first reading 
 ---
 
 ## Getting Started
+
+Python 3.11 or newer is required. Upgrade Python 3.10 installations before
+updating: the fixed Pillow 13 release requires Python 3.11.
 
 Claude Code users can install Hypermnesia MCP Viz from the same
 `cortex-plugins` marketplace as Cortex:

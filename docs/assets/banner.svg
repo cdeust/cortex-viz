@@ -29,7 +29,7 @@
   <rect x="16" y="16" width="788" height="308" rx="6" fill="none" stroke="#3b3129" stroke-opacity="0.28" stroke-width="1"/>
 
   <!-- Header corners (chrome micro-caps, mono) : DS pfg-2 #61554e (scripted oklch->srgb) -->
-  <text class="mono" x="30" y="35" fill="#61554e" font-size="9.5" letter-spacing="1.4">PYTHON 3.10+  ·  MIT  ·  6 VIEWS</text>
+  <text class="mono" x="30" y="35" fill="#61554e" font-size="9.5" letter-spacing="1.4">PYTHON 3.11+  ·  MIT  ·  6 VIEWS</text>
   <text class="mono" x="790" y="35" fill="#61554e" font-size="9.5" letter-spacing="1.4" text-anchor="end">ai-architect.tools</text>
 
   <!-- Brand mark: terracotta diamond-in-square with centre node -->
@@ -64,5 +64,5 @@
   <circle cx="464" cy="283" r="3.4" fill="#753e81"/>
 
   <!-- Measured ledger line (mono) : DS pfg-2 #61554e -->
-  <text class="mono" x="410" y="309" fill="#61554e" font-size="9.5" letter-spacing="0.8" text-anchor="middle">2 MCP TOOLS  ·  6 VIEWS  ·  169 TESTS  ·  PYTHON 3.10+</text>
+  <text class="mono" x="410" y="309" fill="#61554e" font-size="9.5" letter-spacing="0.8" text-anchor="middle">2 MCP TOOLS  ·  6 VIEWS  ·  169 TESTS  ·  PYTHON 3.11+</text>
 </svg>
