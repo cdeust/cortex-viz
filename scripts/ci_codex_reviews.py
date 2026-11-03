@@ -25,7 +25,8 @@ if "ci_codex_review_runtime" not in sys.modules:
 import ci_codex_review_runtime as runtime  # noqa: E402
 from ci_codex_review_runtime import _outputs  # noqa: E402
 from ci_codex_review_comments import _authenticate_editor, _bot_author, _canonical  # noqa: E402
-from ci_codex_review_comments import BLOCKED_REASONS, BLOCKING, security_receipt  # noqa: E402
+from ci_codex_review_comments import security_receipt  # noqa: E402
+from ci_codex_review_agreement import conclude  # noqa: E402
 
 Record = dict[str, Any]
 SUMMARY = "<!-- codex-pull-request-review-summary -->"
@@ -156,8 +157,8 @@ def _reviews(latest, target, comments):
     states = []
     for kind in KINDS:
         state, reviews[kind] = _review(data.get(kind), expected_sha)
-        proof = None
-        if kind == "security_review" and state == "pending" and repo and pr:
+        proof, attested = None, state == "success" and reviews[kind]["has_any_findings"] is True
+        if kind == "security_review" and (state == "pending" or attested) and repo and pr:
             proof = runtime.resolve_security(
                 (repo, pr, expected_sha), latest["body"], reviews[kind], security
             ) or security_receipt(
@@ -183,7 +184,7 @@ def review_evidence(
             raise EvidenceError("protocol")
         candidates = [comment for comment in comments if _canonical(comment)]
         if not candidates:
-            return result
+            return {**result, **conclude(None, comments, expected_sha)}
         latest = max(candidates, key=_order)
         result.update(comment_id=latest["id"], updated_at=latest["updated_at"])
         latest_order = _order(latest)
@@ -195,17 +196,7 @@ def review_evidence(
             raise EvidenceError("protocol")
         states, details = _reviews(latest, (expected_sha, repo, pr), comments)
         result.update(details)
-        result["reviews_complete"] = all(s in ("success", "unresolved") for s in states)
-        result["state"] = (
-            "blocked"
-            if any(s in BLOCKING for s in states)
-            else ("pending" if "pending" in states else "success")
-        )
-        result["reason"] = {
-            "blocked": next((r for s, r in BLOCKED_REASONS if s in states), "review_unresolved"),
-            "pending": "review_pending",
-            "success": "reviews_complete",
-        }[result["state"]]
+        result.update(conclude(states, comments, expected_sha))  # Codex, then Claude.
     except runtime.EvidenceError as exc:
         result.update(state="blocked", reason=str(exc), reviews_complete=False)
         if isinstance(exc, runtime.APIError):
