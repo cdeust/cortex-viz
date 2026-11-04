@@ -1750,13 +1750,7 @@ jobs:
   # mutation here: the completed-run resolver performs the protected merge.
   merge:
     # The aggregate of the test jobs of this run: green when they all are. It reads
-    # nothing else (no main, no review state, no live PR label). When they are
-    # green it arms GitHub's native auto-merge on this PR, so the merge happens
-    # with this PR's own definition in the path and nothing from main's: a PR
-    # that fixes the pipeline is merged by the pipeline it fixes (owner rule
-    # 2026-11-03: a CI that blocks itself and cannot correct itself is not
-    # autonomous). Branch protection stays the only gate: GitHub squashes as
-    # soon as the required checks pass, this job included.
+    # nothing else (no main, no review state, no live PR label).
     needs: [contract, unit, regression, e2e, environment, install]
     if: >-
       always() && !cancelled() && github.event_name == 'pull_request'
@@ -1764,8 +1758,7 @@ jobs:
       && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     steps:
       - name: Require the test jobs of this run
         env:
@@ -1788,55 +1781,6 @@ jobs:
             exit 1
           fi
           echo "## Merge: the test jobs are green on this commit" >> "$GITHUB_STEP_SUMMARY"
-
-      # This job is itself a required check and still running, so a direct merge
-      # here would be refused; auto-merge lets GitHub perform the squash the
-      # moment branch protection is satisfied. --match-head-commit binds the
-      # arming to this head: a later push disarms it until its own run passes.
-      # source: https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/incorporating-changes-from-a-pull-request/automatically-merging-a-pull-request
-      # and https://cli.github.com/manual/gh_pr_merge (--auto, --match-head-commit).
-      - name: Arm auto-merge, GitHub merges when the required checks pass
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
-          HEAD: ${{ github.event.pull_request.head.sha }}
-          BASE: ${{ github.event.pull_request.base.ref }}
-        run: |
-          # Only PRs into main are merged by this path, the boundary the resolve
-          # job keeps (base.ref == main). Codex finding on #238 (P2).
-          if [ "$BASE" != "main" ]; then
-            echo "## Merge: tests green; base is $BASE, not main, auto-merge not armed" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          # Owner holds stay owner holds: a do-not-merge label or a "do not merge"
-          # title is read live before arming, the same two the resolve job reads,
-          # and a hold found here revokes any earlier arming (GitHub keeps an armed
-          # request across a writer's push). Codex findings on #238 (P1).
-          held="$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json title,labels \
-            --jq '[(.title | ascii_downcase | contains("do not merge")), ([.labels[].name | ascii_downcase] | index("do-not-merge") != null)] | any')"
-          if [ "$held" = "true" ]; then
-            if ! gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --disable-auto >disarm.log 2>&1; then
-              grep -qiE "not enabled|not allowed|no auto-merge|is not in auto-merge" disarm.log || { cat disarm.log; echo "::error::disarming auto-merge failed"; exit 1; }
-            fi
-            echo "## Merge: tests green, owner hold on the PR (do-not-merge label or title), auto-merge not armed, any earlier arming revoked" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          if gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --auto --squash --match-head-commit "$HEAD" >arm.log 2>&1; then
-            echo "## Merge: auto-merge armed for $HEAD, GitHub merges when the required checks pass" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          cat arm.log
-          if grep -qiE "already enabled|clean status|already (been )?merged" arm.log; then
-            echo "## Merge: auto-merge was already armed or the PR is already merged" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          if grep -qiE "not allowed|not enabled" arm.log; then
-            echo "::warning::auto-merge is disabled in this repository's settings (Allow auto-merge); the completion resolver merges instead"
-            echo "## Merge: auto-merge is disabled in Settings, the completion resolver merges" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          echo "::error::arming auto-merge failed"
-          exit 1
 
 
   # Decision 1: the release gate of Cortex (.github/workflows/ci.yml, ADR-0802)
@@ -1875,39 +1819,13 @@ jobs:
             echo "has_deploy_key=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # No working tree of the tested commit is checked out here. This job holds
-      # a write-enabled deploy key and runs after a workflow_run event, so a
-      # checkout is the CodeQL finding actions/untrusted-checkout (Cortex PR839,
-      # ai-architect-mcp-codebase PR471, high). The publish step needs only the
-      # commit object and an authenticated origin: a bare repository with the
-      # commit fetched by SHA gives both and executes nothing from the commit.
-      # GitHub's SSH host keys are read from api.github.com/meta over TLS at run
-      # time (source: docs.github.com, "GitHub's SSH key fingerprints"), the
-      # same keys actions/checkout installs, without a hard-coded copy to age.
-      - name: Fetch the tested commit into a bare repository
+      - name: Checkout the tested commit for release publication
         if: steps.guard.outputs.has_deploy_key == 'true'
-        env:
-          SSH_KEY: ${{ secrets.RELEASE_TAG_SSH_KEY }}
-          TESTED_SHA: ${{ needs.contract.outputs.tested_sha }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          case "$TESTED_SHA" in
-            *[!0-9a-f]* | '') echo "::error::tested_sha is not a lowercase hex SHA"; exit 1 ;;
-          esac
-          [ "${#TESTED_SHA}" -eq 40 ] || { echo "::error::tested_sha is not 40 hex chars"; exit 1; }
-          key_dir="$RUNNER_TEMP/release-key"
-          (umask 077 && mkdir -p "$key_dir" && printf '%s\n' "$SSH_KEY" > "$key_dir/id")
-          gh api meta --jq '.ssh_keys[] | "github.com " + .' > "$key_dir/known_hosts"
-          [ -s "$key_dir/known_hosts" ] || { echo "::error::api.github.com/meta returned no SSH host keys"; exit 1; }
-          ssh_command="ssh -i $key_dir/id -o IdentitiesOnly=yes -o UserKnownHostsFile=$key_dir/known_hosts -o StrictHostKeyChecking=yes"
-          echo "GIT_SSH_COMMAND=$ssh_command" >> "$GITHUB_ENV"
-          export GIT_SSH_COMMAND="$ssh_command"
-          repo="$RUNNER_TEMP/release-repo"
-          git init --quiet --bare "$repo"
-          git -C "$repo" remote add origin "git@github.com:${GITHUB_REPOSITORY}.git"
-          git -C "$repo" fetch --quiet --depth=1 origin "$TESTED_SHA"
-          [ "$(git -C "$repo" cat-file -t "$TESTED_SHA")" = commit ] || { echo "::error::fetched object is not a commit"; exit 1; }
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.contract.outputs.tested_sha }}
+          fetch-depth: 0
+          ssh-key: ${{ secrets.RELEASE_TAG_SSH_KEY }}
 
       - name: Set up Python
         if: steps.guard.outputs.has_deploy_key == 'true'
@@ -1918,7 +1836,6 @@ jobs:
       - name: Publish declared package tags
         id: publish
         if: steps.guard.outputs.has_deploy_key == 'true'
-        working-directory: ${{ runner.temp }}/release-repo
         env:
           RELEASE_TAGS: ${{ needs.contract.outputs.release_tags }}
           TESTED_SHA: ${{ needs.contract.outputs.tested_sha }}
