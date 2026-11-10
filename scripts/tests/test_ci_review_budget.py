@@ -13,10 +13,10 @@ import subprocess
 import sys
 import tempfile
 import unittest
-import unittest.mock
 from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
+import unittest.mock
 
 import yaml
 
@@ -141,8 +141,28 @@ class JqFilterTests(unittest.TestCase):
             {"name": "Checkout repository", "conclusion": "success"},
             {"name": budget.ACTION_STEP, "conclusion": "skipped"},
         ]
-        got = json.loads(self.jq(expr, {"jobs": [{"steps": steps}]}))
+        gate = {"name": budget.BUDGET_JOB, "steps": []}
+        review = {"name": "Claude review", "steps": steps}
+        got = json.loads(self.jq(expr, {"jobs": [gate, review]}))
         self.assertEqual(got, ["skipped"])
+
+    def test_a_review_of_the_workflow_before_the_contract_does_not_count(self):
+        # ADR-1129: no budget job in the run, so it posted no verdict the merge
+        # could read. ai-architect-mcp-spec #182, 2026-11-10: such reviews used
+        # the whole budget and the pull request could never be merged.
+        calls = []
+        record = lambda a: calls.append(a) or "[]"  # noqa: E731
+        budget.ran_the_action(record, "o/r", {"id": 1})
+        expr = calls[0][calls[0].index("--jq") + 1]
+        done = [{"name": budget.ACTION_STEP, "conclusion": "success"}]
+        old = {"jobs": [{"name": "Claude review", "steps": done}]}
+        self.assertEqual(json.loads(self.jq(expr, old)), [])
+        new = {"jobs": [{"name": budget.BUDGET_JOB, "steps": []}, *old["jobs"]]}
+        self.assertEqual(json.loads(self.jq(expr, new)), ["success"])
+
+    def test_the_budget_job_name_is_the_workflow_s(self):
+        workflow = yaml.safe_load(REVIEW.read_text())
+        self.assertEqual(workflow["jobs"]["budget"]["name"], budget.BUDGET_JOB)
 
 
 class CliTests(unittest.TestCase):
@@ -156,6 +176,7 @@ class CliTests(unittest.TestCase):
                 "HEAD_REF": "feat",
                 "LABELS": labels,
                 "GITHUB_OUTPUT": str(out_file),
+                "RUNNER_TEMP": str(out_file.parent),
             }
             gh = fake_gh(runs, jobs)
             stdout = StringIO()
@@ -181,6 +202,16 @@ class CliTests(unittest.TestCase):
         self.assertIn("refinement PR", text)
         self.assertIn(budget.BYPASS_LABEL, text)
 
+    def test_the_output_file_must_sit_inside_the_runner_temp(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            inside = {"RUNNER_TEMP": tmp, "GITHUB_OUTPUT": f"{tmp}/cmd/out"}
+            expected = os.path.realpath(inside["GITHUB_OUTPUT"])
+            self.assertEqual(budget.output_file(inside), expected)
+            for outside in (f"{tmp}-other/out", f"{tmp}/../out", tmp):
+                env = {"RUNNER_TEMP": tmp, "GITHUB_OUTPUT": outside}
+                with self.subTest(path=outside), self.assertRaises(SystemExit):
+                    budget.output_file(env)
+
 
 class WorkflowWiringTests(unittest.TestCase):
     def setUp(self):
@@ -192,6 +223,15 @@ class WorkflowWiringTests(unittest.TestCase):
             step
             for step in self.jobs["review"]["steps"]
             if step.get("uses", "").startswith("anthropics/claude-code-action@")
+        )
+
+    def test_reviews_of_one_pr_are_admitted_one_at_a_time(self):
+        self.assertEqual(
+            self.workflow["concurrency"],
+            {
+                "group": "claude-review-${{ github.event.pull_request.number }}",
+                "cancel-in-progress": False,
+            },
         )
 
     def test_the_counted_step_name_is_the_action_step(self):
@@ -240,8 +280,8 @@ class WorkflowWiringTests(unittest.TestCase):
             self.assertIn(needle, prompt)
 
     def test_prompt_puts_the_run_link_in_every_comment_that_carries_the_verdict(self):
-        # Cortex ADR-1130: the resolver binds a verdict to a head through the run its
-        # comment links. A review posted with `gh pr comment` carried no link.
+        # ADR-1130: the resolver binds a verdict to a head through the run its comment
+        # links. A review posted with `gh pr comment` carried the verdict and no link.
         prompt = self.action()["with"]["prompt"]
         link = (
             '"[View job run](${{ github.server_url }}/${{ github.repository }}'
