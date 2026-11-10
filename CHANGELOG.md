@@ -5,6 +5,10 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 
 ## [Unreleased]
 
+### Changed
+
+- The CI follows Cortex's: the Claude review decides the merge. Codex is out of the pipeline (`Codex.yml`, the `review` job and its scripts are removed); `merge` is the aggregate of the test jobs. `claude-review.yml` caps automatic reviews at three per pull request and ends each with `Verdict: approve` or `Verdict: block`. The resolver, woken by the end of the Pipeline or of the review, merges a pull request only on an `approve` bound to the review run of its head, except a Dependabot minor or patch update of the lock and manifest files, which merges on green required checks; it then closes the issues the pull request closes. Source: Cortex ADR-1119, ADR-1120, ADR-1121, ADR-1126, ADR-1127.
+
 ### Removed
 
 - Pull requests run only the Pipeline workflow; the legacy CI, CodeQL, fuzz, identity and scanner workflows are removed; security is reviewed locally with the security-review skill.
