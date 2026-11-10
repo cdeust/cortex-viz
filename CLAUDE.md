@@ -21,3 +21,6 @@ uv run ruff check . && uv run ruff format --check .
 - Layers: core / server / infrastructure / handlers / hooks / shared / errors.
 - The plugin install is live-mounted onto this clone; respawn the standalone HTTP server
   after editing Python or the running process keeps the old code.
+- CI contract (`docs/agent-guidance.md`, "CI contract for agents and routines"): it binds
+  every agent and routine and wins over a less restrictive routine prompt. One pull request in flight, no
+  comparison with the main branch, no forced push, no comment after an approve.
