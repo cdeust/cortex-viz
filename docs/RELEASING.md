@@ -30,10 +30,19 @@ identity through the `pypi` GitHub environment.
 2. Promote the `## [Unreleased]` CHANGELOG entries to `## [<version>] - <date>`
    and leave `## [Unreleased]` in place, empty, for the next cycle. No gate
    enforces this, and the section is the human-readable release record.
-3. Merge the release change and tag that commit as `v<version>`.
-4. Push the tag. The release workflow builds and validates the wheel, source
-   archive, SBOM, and UI manifest; attests them; publishes to PyPI; then creates
-   the GitHub release.
+3. Merge the release change. Do not tag by hand: the merge is the trigger. On
+   the push to `main`, once `contract`, `unit`, `regression`, `e2e`,
+   `environment` and `install` are green on the merge commit, the `tag` job of
+   `.github/workflows/pipeline.yml` reads the version from
+   `.claude-plugin/plugin.json` (the default `version_file`; `ci.json` names no
+   other), creates the annotated tag `v<version>` on that commit and pushes it
+   with the `RELEASE_TAG_SSH_KEY` deploy key. A tag that already exists on the
+   remote is left as it is, so a merge that does not change the version
+   publishes nothing. Without that secret the job skips and no release starts.
+4. **Automatic.** The pushed tag starts `.github/workflows/Release.yaml`
+   (`on: push: tags: "v*"`). It runs the test suite, builds and validates the
+   wheel, source archive, SBOM, and UI manifest; publishes to PyPI; attests the
+   artifacts; then creates the GitHub release.
 5. **Automatic.** The `publish-registry` job in the release workflow publishes
    `server.json` to the official MCP Registry (`registry.modelcontextprotocol.io`)
    with the `mcp-publisher` CLI, after `test` and `release` succeed — it can

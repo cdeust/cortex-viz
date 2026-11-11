@@ -39,14 +39,15 @@ Security problems do **not** go through this process. See
 
 | Language | Style guide | Tool | CI job |
 |---|---|---|---|
-| Python | [PEP 8](https://peps.python.org/pep-0008/), with the project's `[tool.ruff]` settings in `pyproject.toml` | [`ruff`](https://docs.astral.sh/ruff/) | `lint` (required) |
-| JavaScript (`ui/`) | Vanilla browser script-tag JavaScript, no bundler, no framework. Match the file you are editing. | [`eslint`](https://eslint.org/) (`eslint.config.mjs`) | `js-lint` (required) |
+| Python | [PEP 8](https://peps.python.org/pep-0008/), with the project's `[tool.ruff]` settings in `pyproject.toml` | [`ruff`](https://docs.astral.sh/ruff/) | none: run locally |
+| JavaScript (`ui/`) | Vanilla browser script-tag JavaScript, no bundler, no framework. Match the file you are editing. | [`eslint`](https://eslint.org/) (`eslint.config.mjs`) | none: run locally |
 
-Both are **required CI gates**. Run them before pushing:
+Neither runs in CI: the `lint` and `js-lint` jobs went with the legacy workflows
+(#194), and the Pipeline (`ci.json`) runs tests only. Run them before pushing:
 
 ```bash
 uv run ruff check .          # rule set: [tool.ruff.lint].select in pyproject.toml
-uv run ruff format .         # CI checks this with --check
+uv run ruff format --check . # `uv run ruff format .` to fix
 npm run lint                 # ESLint over ui/
 ```
 

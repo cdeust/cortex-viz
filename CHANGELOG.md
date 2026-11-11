@@ -5,8 +5,12 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-11-11
+
 ### Changed
 
+- `docs/RELEASING.md` describes the release as it runs now: merging the version bump is the trigger, and the `tag` job of `.github/workflows/pipeline.yml` pushes `v<version>` (read from `.claude-plugin/plugin.json`) on the tested merge commit, which starts `Release.yaml`. The text that said to tag and push by hand is gone.
+- `uv run ruff check . && uv run ruff format --check .`, the command `CLAUDE.md` and `CONTRIBUTING.md` document, passes again: `scripts/tests/test_ci_review_budget.py` and `scripts/tests/test_no_main_comparison.py`, which are kept as the owner's shared CI files and not restyled here, are excluded in `[tool.ruff]`. No workflow runs ruff or ESLint since the legacy CI workflows were removed; `CONTRIBUTING.md` and the `pyproject.toml` comment no longer name a `lint` or `js-lint` CI job.
 - The resolver reads the file names of the low-risk Dependabot tier from the new required `ci.json` key `low_risk_files` (`uv.lock`, `pyproject.toml`, `package-lock.json`, `package.json`) on the default branch, and fails when the key is missing; the names are no longer written in `pipeline-post-merge.yml`. The `ci.json` validator of the `contract` job in `pipeline.yml` and `pipeline-post-merge.yml` accepts the key and reports its absence. A file is still matched by its name in any directory, and a path under `.github/` is never low risk (Cortex ADR-1131, amends Cortex ADR-1126).
 - `claude-review.yml` and `scripts/ci_review_budget.py` are now Cortex's files, byte for byte (Cortex #980): the review workflow authorizes the pinned action's fetch only on a private repository and names no reviewer count, and the budget script counts only reviews run under the review contract (ADR-1129) and refuses a `GITHUB_OUTPUT` outside `RUNNER_TEMP`. `test_ci_review_budget.py` is Cortex's test.
 - A merge that waits no longer fails `Pipeline after merge` (Cortex ADR-1128). Each head wakes the resolver twice, once at the end of the Pipeline and once at the end of the review, and the first wake-up is held; it exited 1, so the default branch showed a failed run for every normal merge. A held merge, or a head that advanced, now ends green with a notice and writes no output, and `close-issues` requires a pull request number. Every other refusal still fails.
