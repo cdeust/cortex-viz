@@ -3,5 +3,6 @@
   "regression": "python3 -B -m unittest discover -s scripts/tests -p 'test_ci_*.py' && python3 -m pip install --quiet uv && uv sync --locked --all-extras --python 3.12 && npm ci && npm test",
   "e2e": "python3 -m pip install --quiet uv && uv sync --locked --all-extras --python 3.12 && npm ci && node --test tests/e2e/*.test.mjs",
   "environment": "\"$(command -v python3 || command -v python)\" scripts/ci_environment.py",
-  "install": "claude plugin marketplace add \"${GITHUB_WORKSPACE:-$PWD}\" && claude plugin install hypermnesia-mcp-viz@hypermnesia-mcp-viz-marketplace && claude plugin list"
+  "install": "claude plugin marketplace add \"${GITHUB_WORKSPACE:-$PWD}\" && claude plugin install hypermnesia-mcp-viz@hypermnesia-mcp-viz-marketplace && claude plugin list",
+  "low_risk_files": ["uv.lock", "pyproject.toml", "package-lock.json", "package.json"]
 }
