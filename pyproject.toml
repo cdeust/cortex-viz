@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hypermnesia-mcp-viz"
-version = "3.2.0"
+version = "3.3.0"
 description = "Visualization and graph MCP server for Cortex — neural graph, methodology map, workflow graph, and trace UI extracted from the Cortex memory engine"
 readme = "README.md"
 license = "MIT"
@@ -122,10 +122,27 @@ packages = ["cortex_viz"]
 target-version = "py310"
 # `scratchpad*` are untracked local working directories; a local `ruff format .`
 # reformatting a throwaway script is noise, and CI never sees them anyway.
-extend-exclude = [".claude", "scratchpad", "scratchpad-session"]
+#
+# The two `scripts/tests` files are the owner's shared CI tests (owner rule: the
+# CI is the same in every repository): `test_ci_review_budget.py` is Cortex's
+# file byte for byte, and `test_no_main_comparison.py` is this repository's copy of the shared guard.
+# They are written to Cortex's ruff settings, not this repository's (6 findings
+# and 1 unformatted file here, measured 2026-11-11 with ruff 0.15.22), and
+# restyling them would fork them. They are excluded by exact path so that the
+# documented `uv run ruff check . && uv run ruff format --check .` passes; they
+# still run in the `regression` command of ci.json.
+extend-exclude = [
+    ".claude",
+    "scratchpad",
+    "scratchpad-session",
+    "scripts/tests/test_ci_review_budget.py",
+    "scripts/tests/test_no_main_comparison.py",
+]
 
 [tool.ruff.lint]
-# The gate enforced by the `lint` job in .github/workflows/ci.yml (issue #45).
+# The lint gate of issue #45. Its CI job (`lint` in .github/workflows/ci.yml)
+# went with the legacy workflows in #194; no workflow runs ruff now, so this
+# set is enforced by running `uv run ruff check .` before pushing.
 # Ruff's default set is E4/E7/E9 + F — syntax and undefined names only, which
 # the tree already passed. That is not "maximally strict with warnings"
 # (OpenSSF `warnings_strict`), so the set below is widened to the rule
