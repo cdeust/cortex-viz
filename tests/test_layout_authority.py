@@ -13,6 +13,7 @@ import os
 import sys
 import unittest
 from dataclasses import dataclass
+from unittest import mock
 
 # Make the package importable when this file is executed directly.
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -35,6 +36,43 @@ except ImportError:  # pragma: no cover - non-POSIX
 
 
 # ---- helpers ----------------------------------------------------------------
+
+
+class _PressureClock:
+    """Stand-in for the ``time`` module inside ``layout_authority_pressure``.
+
+    ``sleep`` advances the clock instead of waiting, so ``wait_for_clear`` is
+    observed through what it did (clock reads, each sleep it asked for) and
+    the result does not depend on how the test thread was scheduled. A wait
+    that runs past ``give_up_after`` seconds of this clock, or polls without
+    the clock advancing, fails the test instead of hanging it. ``on_sleep``
+    receives the sleeps so far and stands for another thread acting while the
+    caller sleeps.
+    """
+
+    def __init__(self, give_up_after: float, on_sleep=None) -> None:
+        self.now = 0.0
+        self.reads = 0
+        self.sleeps: list[float] = []
+        self._give_up_after = give_up_after
+        self._on_sleep = on_sleep
+
+    def monotonic(self) -> float:
+        self.reads += 1
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        if seconds < 0:  # what time.sleep itself does
+            raise ValueError("sleep length must be non-negative")
+        self.sleeps.append(seconds)
+        self.now += seconds
+        stalled = seconds == 0 and self.sleeps[-2:] == [0, 0]
+        if self.now > self._give_up_after or stalled:
+            raise AssertionError(
+                f"wait_for_clear still waiting at t={self.now:.3f}s: {self.sleeps}"
+            )
+        if self._on_sleep is not None:
+            self._on_sleep(self.sleeps)
 
 
 @dataclass(slots=True)
@@ -438,30 +476,57 @@ class TestPressureActChannel(unittest.TestCase):
 
     def test_wait_for_clear_times_out_under_persistent_pressure(self) -> None:
         # Falsifies: a stuck consumer can stall the producer forever.
+        self._trip()
+        clock = _PressureClock(give_up_after=1.0)
+        with mock.patch.object(pressure, "time", clock):
+            ok = pressure.wait_for_clear(timeout=0.05)
+        self.assertFalse(ok)
+        # It waited the timeout out and no longer: the last poll ends at the
+        # deadline, so the clock never runs past it.
+        self.assertGreater(len(clock.sleeps), 0)
+        self.assertAlmostEqual(clock.now, 0.05, places=9)
+
+    def test_wait_for_clear_returns_immediately_when_clear(self) -> None:
+        # Falsifies: producer pays a polling penalty even when idle. The path
+        # taken is observed, not timed: an already-clear flag returns without
+        # reading the clock or sleeping at all.
+        clock = _PressureClock(give_up_after=0.0)
+        with mock.patch.object(pressure, "time", clock):
+            ok = pressure.wait_for_clear(timeout=5.0)
+        self.assertTrue(ok)
+        self.assertEqual(clock.reads, 0)
+        self.assertEqual(clock.sleeps, [])
+
+    def test_wait_for_clear_returns_on_the_clear_not_at_the_timeout(self) -> None:
+        # Falsifies: the producer sleeps its whole timeout although the
+        # consumer drained. The flag clears during the second poll; the wait
+        # must end there, 4.98 s of clock before its 5 s deadline.
+        self._trip()
+
+        def drain_on_second_poll(sleeps: list[float]) -> None:
+            if len(sleeps) == 2:
+                pressure.observe(
+                    event_log_drops=0,
+                    edges_dropped=0,
+                    pending_edges=0,
+                    pending_symbols_total=0,
+                )
+
+        clock = _PressureClock(give_up_after=5.0, on_sleep=drain_on_second_poll)
+        with mock.patch.object(pressure, "time", clock):
+            ok = pressure.wait_for_clear(timeout=5.0)
+        self.assertTrue(ok)
+        self.assertEqual(len(clock.sleeps), 2)
+        self.assertLess(clock.now, 5.0)
+
+    def _trip(self) -> None:
         pressure.observe(
             event_log_drops=0,
             edges_dropped=0,
             pending_edges=90_000,
             pending_symbols_total=0,
         )
-        import time as _t
-
-        start = _t.monotonic()
-        ok = pressure.wait_for_clear(timeout=0.05)
-        elapsed = _t.monotonic() - start
-        self.assertFalse(ok)
-        # Must return within ~timeout + one poll slice (10 ms).
-        self.assertLess(elapsed, 0.2)
-
-    def test_wait_for_clear_returns_immediately_when_clear(self) -> None:
-        # Falsifies: producer pays a polling penalty even when idle.
-        import time as _t
-
-        start = _t.monotonic()
-        ok = pressure.wait_for_clear(timeout=5.0)
-        elapsed = _t.monotonic() - start
-        self.assertTrue(ok)
-        self.assertLess(elapsed, 0.01)
+        self.assertTrue(pressure.is_overloaded())
 
     def test_snapshot_exposes_every_counter(self) -> None:
         # Falsifies: Cochrane 1c (read every emitted counter) is unmet.

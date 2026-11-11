@@ -1,12 +1,5 @@
 import { defineConfig } from 'vitest/config';
 
-// V8 coverage instrumentation inflates wall-clock by roughly 2x on the trigram
-// scan (measured: 1079 ms instrumented vs 271 ms clean, against a 500 ms
-// bound), so a perf assertion cannot hold under it. Tests read this through
-// `inject('coverageEnabled')` and report the skip rather than passing silently.
-// The bound still runs unconditionally in `npm test`, which is the CI gate.
-const coverageEnabled = process.argv.includes('--coverage');
-
 // Vanilla-JS UI test config. The default environment is jsdom because most of
 // ui/ manipulates the DOM; the pure-logic trigram suite opts back into the
 // faster `node` environment with a per-file `// @vitest-environment node`
@@ -19,7 +12,6 @@ export default defineConfig({
     // files must not share a global — vitest isolates per file by default;
     // keep it explicit so a future parallelism change cannot leak state.
     isolate: true,
-    provide: { coverageEnabled },
     coverage: {
       provider: 'v8',
       // Every ui/ file this suite actually loads, plus the files it is

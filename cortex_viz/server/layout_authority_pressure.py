@@ -46,6 +46,7 @@ keep the call sites unchanged from the integrator's pattern.
 from __future__ import annotations
 
 import threading
+import time
 from dataclasses import dataclass
 
 # ── Tunables ─────────────────────────────────────────────────────────────
@@ -156,8 +157,6 @@ def wait_for_clear(timeout: float) -> bool:
         return True
     # threading.Event.wait returns True when SET; we want the opposite.
     # Poll in small slices so a clear() is detected within ~10 ms.
-    import time
-
     deadline = time.monotonic() + timeout
     while _overloaded.is_set():
         remaining = deadline - time.monotonic()

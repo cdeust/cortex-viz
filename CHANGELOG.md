@@ -20,6 +20,10 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 
 ### Fixed
 
+- Three tests no longer assert a wall-clock margin; each failed, or could fail, on a loaded runner with the code under test unchanged.
+  - `tests/js/trigram.test.mjs` asserted that a query scan over 300k labels took less than 500 ms (157-977 ms measured for the same code under CPU contention, 2026-11-11). It now drives the real `ui/brain/js/search_worker.js`, which had no test, and counts the work of one query: one `scoreNode` call per node, no tokenizing or trigram packing of indexed text at query time, no `Set` built per node, and no more reads of the query's trigram lists than a sorted merge can make. Four slower algorithms (nested-scan intersection, a hash set per word pair, trigrams packed at query time, a rescan of the index per hit) are rewritten from the shipped source inside the suite and must move those counts. The worker's timings are still printed, never asserted. The test also runs under coverage now, so the `coverageEnabled` flag is gone from `vitest.config.mjs`.
+  - `tests/test_layout_authority.py` timed `wait_for_clear` (`elapsed < 0.01`, `elapsed < 0.2`). The tests now replace the module's clock and observe the path taken: no clock read and no sleep when the flag is already clear, a wait that ends at the deadline under persistent pressure, and a wait that ends on the clear, not at the timeout (new). `layout_authority_pressure.py` imports `time` at module level so the clock can be replaced there.
+  - `tests/test_progress_honesty.py` compared two `phase_elapsed` readings taken after a 10-20 ms busy-wait. The three tests now advance a controlled monotonic clock and assert the exact durations.
 - The `merge` job of `.github/workflows/pipeline.yml` sets `GH_REPO: ${{ github.repository }}` on its `gh pr merge` step: the job runs without a checkout, so gh could not infer the repository and failed with `fatal: not a git repository` after every stage was green (session-optimizer #65, run 39756969927, 2026-10-22).
 
 ### Added
