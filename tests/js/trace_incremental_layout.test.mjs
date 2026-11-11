@@ -69,6 +69,13 @@ function d3Harness() {
   return { d3, simulations };
 }
 
+// Every graph a test mounts. mount() arms real-clock timers (the seed pin
+// re-arms every 200 ms for up to 3.5 s), so a handle left alive outlives its
+// test, and its timer can fire after vitest has removed `window` from the
+// worker: an uncaught ReferenceError that fails the run although every test
+// passed. afterEach destroys them all; destroy() is what cancels the timers.
+const mountedHandles = [];
+
 function mountTraceHarness(initialNodes, initialEdges) {
   const jug = makeJUG({ state: { activeView: 'trace' } });
   globalThis.JUG = jug;
@@ -136,6 +143,7 @@ function mountTraceHarness(initialNodes, initialEdges) {
   };
   jug.state.lastData = data;
   const handle = jug.renderWorkflowGraph(container, data);
+  mountedHandles.push(handle);
   return { handle, ctx: renders[0], redraw, redrawNow,
     stepAnimation, jumpAnimation, flushAnimation,
     pendingAnimationFrames: () => animationFrames.length,
@@ -147,15 +155,22 @@ function traceRadius(ctx, node) {
   return base + Math.min(8, Math.sqrt(ctx.degree[node.id] || 0));
 }
 
+// One assertion over every pair, not one `expect` per pair: 356 nodes are
+// 63,190 pairs, and that many matcher calls took 711 ms of this file's 834 ms
+// largest test (measured 2026-11-11), which a loaded runner stretched past the
+// 5 s test timeout. The condition per pair is unchanged.
 function expectNoOverlaps(ctx, nodes) {
+  const overlaps = [];
   for (let i = 0; i < nodes.length; i++) {
     for (let j = i + 1; j < nodes.length; j++) {
       const a = nodes[i];
       const b = nodes[j];
       const distance = Math.hypot(a.x - b.x, a.y - b.y);
-      expect(distance + Number.EPSILON).toBeGreaterThanOrEqual(traceRadius(ctx, a) + traceRadius(ctx, b));
+      const clearance = traceRadius(ctx, a) + traceRadius(ctx, b);
+      if (!(distance + Number.EPSILON >= clearance)) overlaps.push({ a: a.id, b: b.id, distance, clearance });
     }
   }
+  expect(overlaps).toEqual([]);
 }
 
 function crossOverlapCount(ctx, left, right) {
@@ -170,6 +185,7 @@ function crossOverlapCount(ctx, left, right) {
 }
 
 afterEach(() => {
+  mountedHandles.splice(0).forEach((handle) => handle.destroy());
   vi.useRealTimers();
   document.body.innerHTML = '';
   delete globalThis.JUG;
@@ -635,6 +651,67 @@ describe('Trace topology-aware append', () => {
 
     expect({ x: ctx.byId[child.id].x, y: ctx.byId[child.id].y }).toEqual(beforeDestroy);
     expect(redraw.mock.calls.length + redrawNow.mock.calls.length).toBe(redrawsBeforeDestroy);
+  });
+
+  it('cancels the seed-pin timer when its graph handle is destroyed', () => {
+    vi.useFakeTimers();
+    const { handle, ctx } = mountTraceHarness();
+    expect(vi.getTimerCount()).toBe(1);
+    // The first check re-arms itself: the seed has not settled (alpha is 1).
+    vi.advanceTimersByTime(600);
+    expect(vi.getTimerCount()).toBe(1);
+
+    // A free node the pin would freeze if it still ran after destroy.
+    ctx.nodes.push({ id: 'session:free', kind: 'session', x: 10, y: 20 });
+    handle.destroy();
+
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(5000);
+    expect(ctx.nodes.at(-1)).toEqual({ id: 'session:free', kind: 'session', x: 10, y: 20 });
+  });
+
+  it('cancels the Galaxy idle-stop timer when its graph handle is destroyed', () => {
+    vi.useFakeTimers();
+    const { handle, sim } = mountTraceHarness();
+    handle.append(
+      [{ id: 'memory:idle', kind: 'memory', domain_id: 'domain:dev' }],
+      [{ source: 'domain:dev', target: 'memory:idle', kind: 'in_domain' }]
+    );
+    expect(vi.getTimerCount()).toBe(2);
+
+    handle.destroy();
+    const stopsAtDestroy = sim.stop.mock.calls.length;
+
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(5000);
+    expect(sim.stop).toHaveBeenCalledTimes(stopsAtDestroy);
+  });
+
+  it('leaves no real timer behind once every mounted graph is destroyed', () => {
+    const armed = new Set();
+    const realSetTimeout = globalThis.setTimeout;
+    const realClearTimeout = globalThis.clearTimeout;
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation((...args) => {
+      const id = realSetTimeout(...args);
+      armed.add(id);
+      return id;
+    });
+    vi.spyOn(globalThis, 'clearTimeout').mockImplementation((id) => {
+      armed.delete(id);
+      return realClearTimeout(id);
+    });
+    try {
+      const { handle } = mountTraceHarness();
+      handle.append(
+        [{ id: 'memory:real', kind: 'memory', domain_id: 'domain:dev' }],
+        [{ source: 'domain:dev', target: 'memory:real', kind: 'in_domain' }]
+      );
+      expect(armed.size).toBe(2);
+      mountedHandles.splice(0).forEach((mounted) => mounted.destroy());
+      expect(armed.size).toBe(0);
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 
   it('composes interleaved domain appends without stranding the first animation', () => {
