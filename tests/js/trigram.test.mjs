@@ -1,6 +1,7 @@
 // @vitest-environment node
 //
-// pg_trgm conformance + scale benchmark for ui/brain/js/trigram.js.
+// pg_trgm conformance for ui/brain/js/trigram.js + the cost of one query in
+// ui/brain/js/search_worker.js.
 //
 // Absorbs the former side-channel harness tests/js/run_trigram_conformance.mjs
 // (and its pytest wrapper tests/test_trigram_conformance.py) into the JS suite
@@ -8,8 +9,8 @@
 //   1. similarity(a,b) AND the BigInt-packed path reproduce every pair in
 //      tests/fixtures/pg_trgm_reference.json (real PostgreSQL 17.9 pg_trgm
 //      output) within float tolerance 1e-6.
-//   2. Scale benchmark: index-build + one query-scan over a synthetic 300k
-//      label corpus, mirroring search_worker.js's scoreNode path.
+//   2. Query cost: the real search_worker.js indexes a synthetic 300k-label
+//      corpus and answers one query; the work it does is counted, not timed.
 //
 // The fixture (tests/fixtures/pg_trgm_reference.json) is ground truth: it was
 // generated from PostgreSQL 17.9's real pg_trgm extension (DB cortex, verified
@@ -17,7 +18,7 @@
 // re-running, against a live pg_trgm Postgres, the query whose VALUES list is
 // exactly the fixture's {a,b} pairs:
 //     SELECT a, b, similarity(a, b) FROM (VALUES ('http','http'), …) AS pairs(a, b);
-import { describe, expect, inject, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -45,10 +46,6 @@ const fixture = JSON.parse(
 // source: PostgreSQL pg_trgm reference values are exact rationals; 1e-6 covers
 // IEEE-754 rounding in the JS reimplementation. Matches the retired harness.
 const TOLERANCE = 1e-6;
-
-// source: tasks/todo.md §2 — a single off-thread query scan is not on the
-// 16.7 ms Three.js frame budget; 500 ms is a coarse regression guard.
-const QUERY_SCAN_BOUND_MS = 500.0;
 
 describe('trigram pg_trgm conformance', () => {
   it('has a non-empty reference fixture', () => {
@@ -173,7 +170,7 @@ describe('trigram dedup does not collide with inherited property names', () => {
   });
 });
 
-describe('trigram scale benchmark', () => {
+describe('trigram query cost', () => {
   const PARTS = [
     'get', 'set', 'build', 'parse', 'render', 'fetch', 'graph', 'node', 'edge',
     'brain', 'search', 'worker', 'index', 'trigram', 'similarity', 'score',
@@ -193,59 +190,206 @@ describe('trigram scale benchmark', () => {
     return labels;
   }
 
-  function buildIndex(nodes) {
-    const out = new Array(nodes.length);
-    for (let i = 0; i < nodes.length; i++) {
-      const words = TRGM.indexWords(nodes[i].label);
-      const tri = new Array(words.length);
-      for (let w = 0; w < words.length; w++) tri[w] = TRGM.wordTrigrams(words[w]);
-      out[i] = { id: nodes[i].id, wordTriLists: tri };
-    }
-    return out;
+  // Load the real worker script against a fake worker global, the way a
+  // browser runs it: importScripts() evaluates trigram.js onto `self`, then the
+  // worker installs self.onmessage. Returns the fake global and what it posted.
+  function loadWorker(mutate) {
+    const sources = {
+      trigram: readFileSync(path.join(repoRoot, 'ui/brain/js/trigram.js'), 'utf8'),
+      worker: readFileSync(path.join(repoRoot, 'ui/brain/js/search_worker.js'), 'utf8'),
+    };
+    if (mutate) mutate(sources);
+    const posted = [];
+    const self = { postMessage: (message) => posted.push(message) };
+    const importScripts = () => {
+      // eslint-disable-next-line no-new-func -- repo-committed source, not user data
+      new Function('self', 'module', sources.trigram).call(self, self, undefined);
+    };
+    // eslint-disable-next-line no-new-func -- repo-committed source, not user data
+    new Function('self', 'importScripts', sources.worker)(self, importScripts);
+    return { self, posted };
   }
 
-  function scan(index, q, limit) {
-    const queryTri = TRGM.indexWords(q).map(TRGM.wordTrigrams);
-    const scored = [];
-    for (let i = 0; i < index.length; i++) {
-      const score = TRGM.scoreNode(queryTri, index[i].wordTriLists);
-      if (score >= TRGM.SIMILARITY_THRESHOLD) scored.push({ id: index[i].id, score });
+  // Index `count` synthetic labels and run one query through the worker,
+  // counting the work instead of timing it. A wall-clock bound measures the
+  // scheduler as much as the scan (the former `query < 500 ms` assertion read
+  // 157-977 ms for the same code under CPU contention, 2026-11-11); these
+  // counters are the same number on every machine and every run.
+  //   scoreCalls        TRGM.scoreNode calls during the query
+  //   tokenizeCalls     TRGM.indexWords calls during the query
+  //   trigramCalls      TRGM.wordTrigrams calls during the query
+  //   setsBuilt         `new Set` during the query
+  //   queryReads        element reads on the query's trigram lists (opt-in:
+  //                     each read goes through a Proxy, so it is slow)
+  //   mergeReadCeiling  what a sorted-merge intersection can read at most:
+  //                     a pass over lists of m and n trigrams takes at most
+  //                     m + n steps and reads the query list at most twice per
+  //                     step (`a[i] === b[j]`, then `a[i] < b[j]`), summed over
+  //                     every (query token, indexed word) pair
+  function countQueryWork(count, { countReads = false, mutate } = {}) {
+    const { self, posted } = loadWorker(mutate);
+    const T = self.TRGM;
+    const real = { wordTrigrams: T.wordTrigrams, indexWords: T.indexWords, scoreNode: T.scoreNode };
+    const work = { scoreCalls: 0, tokenizeCalls: 0, trigramCalls: 0, setsBuilt: 0, queryReads: 0 };
+    let querying = false;
+    let indexedWords = 0;
+    let indexedTrigrams = 0;
+    let queryTrigrams = 0;
+    const isIndex = (key) => typeof key === 'string' && /^\d+$/.test(key);
+    T.wordTrigrams = (word) => {
+      const list = real.wordTrigrams(word);
+      if (!querying) {
+        indexedWords += 1;
+        indexedTrigrams += list.length;
+        return list;
+      }
+      work.trigramCalls += 1;
+      queryTrigrams += list.length;
+      if (!countReads) return list;
+      return new Proxy(list, {
+        get(target, key, receiver) {
+          if (isIndex(key)) work.queryReads += 1;
+          return Reflect.get(target, key, receiver);
+        },
+      });
+    };
+    T.indexWords = (text) => {
+      if (querying) work.tokenizeCalls += 1;
+      return real.indexWords(text);
+    };
+    T.scoreNode = (queryTri, nodeTri) => {
+      work.scoreCalls += 1;
+      return real.scoreNode(queryTri, nodeTri);
+    };
+
+    const nodes = syntheticLabels(count).map((label, i) => ({ id: 'n' + i, label }));
+    self.onmessage({ data: { type: 'index', nodes } });
+    const RealSet = globalThis.Set;
+    globalThis.Set = class extends RealSet {
+      constructor(...args) {
+        super(...args);
+        work.setsBuilt += 1;
+      }
+    };
+    querying = true;
+    try {
+      self.onmessage({ data: { type: 'query', q: 'searchNode', seq: 1, limit: 20 } });
+    } finally {
+      globalThis.Set = RealSet;
     }
-    scored.sort((x, y) => y.score - x.score);
-    return scored.slice(0, limit);
+    const [ready, results] = posted;
+    const queryTokens = work.trigramCalls;
+    const mergeReadCeiling = 2 * (indexedWords * queryTrigrams + queryTokens * indexedTrigrams);
+    return { ...work, mergeReadCeiling, ready, results };
   }
+
+  // What the design fixes for one query (tasks/todo.md "Décisions de
+  // conception" §2: "Index construit une fois ... Par requête : scan +
+  // intersection de listes triées"; trigram.js wordTrigrams: "intersect two
+  // words' trigrams in O(m+n) instead of building a hash set per call"), each
+  // stated as a count. `empty` is the same query over an empty index: whatever
+  // the query costs before it meets a node.
+  function expectDesignedQueryCost(count, measured, empty) {
+    // One score per node: the scan is a single pass, no node is scored twice.
+    expect(measured.scoreCalls).toBe(count);
+    // The index is built once: a query tokenizes and packs only its own text.
+    expect(measured.tokenizeCalls).toBe(empty.tokenizeCalls);
+    expect(measured.trigramCalls).toBe(empty.trigramCalls);
+    // No hash set per node or per word pair.
+    expect(measured.setsBuilt).toBe(empty.setsBuilt);
+  }
+
+  const QUERY_TOKENS = 2; // 'searchNode' -> 'search', 'node'
 
   it(
-    'scans a 300k-label corpus within the regression bound',
-    (ctx) => {
-      // V8 coverage instrumentation roughly doubles this scan, so the bound is
-      // unmeasurable under it. Report the skip; never pass silently.
-      if (inject('coverageEnabled')) {
-        // eslint-disable-next-line no-console
-        console.log('[trigram-bench] SKIPPED: perf bound is invalid under coverage instrumentation');
-        ctx.skip();
-        return;
-      }
+    'answers a query over a 300k-label corpus with one merge-scored pass',
+    () => {
       const N = 300000;
-      const nodes = syntheticLabels(N).map((label, i) => ({ id: 'n' + i, label }));
+      const empty = countQueryWork(0);
+      const full = countQueryWork(N);
 
-      const t0 = performance.now();
-      const index = buildIndex(nodes);
-      const indexMs = performance.now() - t0;
-
-      const t1 = performance.now();
-      const results = scan(index, 'searchNode', 20);
-      const queryMs = performance.now() - t1;
-
-      // Reported regardless of pass/fail (measure-and-report, todo.md §2).
+      // Measure-and-report (todo.md §2): the worker's own timings, printed and
+      // never asserted.
       // eslint-disable-next-line no-console
       console.log(
-        `[trigram-bench] N=${N} index_build=${indexMs.toFixed(1)}ms ` +
-          `query_scan=${queryMs.toFixed(1)}ms results=${results.length}`
+        `[trigram-bench] N=${N} index_build=${full.ready.elapsed_ms.toFixed(1)}ms ` +
+          `query_scan=${full.results.elapsed_ms.toFixed(1)}ms results=${full.results.total}`
       );
-      expect(index.length).toBe(N);
-      expect(queryMs).toBeLessThan(QUERY_SCAN_BOUND_MS);
+      expect(empty.trigramCalls).toBe(QUERY_TOKENS);
+      expect(full.ready.count).toBe(N);
+      expect(full.results.total).toBeGreaterThan(0);
+      expect(full.results.items).toHaveLength(20);
+      expectDesignedQueryCost(N, full, empty);
     },
     30000
   );
+
+  it('intersects trigram lists with a sorted merge, not a nested scan', () => {
+    // The ceiling is a property of each (token, word) pair, so it does not
+    // need the 300k corpus: 3,000 labels are 100 turns of the 30-part label
+    // cycle, 9,000 indexed words against both query tokens.
+    const N = 3000;
+    const sample = countQueryWork(N, { countReads: true });
+
+    expectDesignedQueryCost(N, sample, countQueryWork(0));
+    expect(sample.queryReads).toBeGreaterThan(0);
+    expect(sample.queryReads).toBeLessThanOrEqual(sample.mergeReadCeiling);
+  });
+
+  // The counters above only protect the design if a slower algorithm moves
+  // them. Each case rewrites the shipped source into one such algorithm, runs
+  // it through the same counting, and names the counter that catches it. All
+  // four still return the right results; only their cost differs.
+  describe('a slower algorithm is caught by its count', () => {
+    const N = 3000;
+    const MERGE = /function trigramIntersectionCount\(a, b\) \{[\s\S]*?return inter;\n {2}\}/;
+
+    function rewrite(file, pattern, replacement) {
+      return (sources) => {
+        const before = sources[file];
+        sources[file] = before.replace(pattern, replacement);
+        if (sources[file] === before) throw new Error(`rewrite of ${file} matched nothing`);
+      };
+    }
+
+    function measure(mutate) {
+      const reference = countQueryWork(N, { countReads: true });
+      const slow = countQueryWork(N, { countReads: true, mutate });
+      expect(slow.results.total).toBe(reference.results.total);
+      expect(slow.results.items).toEqual(reference.results.items);
+      return { slow, empty: countQueryWork(0, { mutate }) };
+    }
+
+    it('a nested scan in place of the sorted merge reads past the merge ceiling', () => {
+      const { slow } = measure(rewrite('trigram', MERGE,
+        'function trigramIntersectionCount(a, b) { var inter = 0;'
+        + ' for (var i = 0; i < a.length; i++) for (var j = 0; j < b.length; j++)'
+        + ' if (a[i] === b[j]) inter++; return inter; }'));
+      expect(slow.queryReads).toBeGreaterThan(slow.mergeReadCeiling);
+    });
+
+    it('a hash set per word pair builds sets in proportion to the corpus', () => {
+      const { slow, empty } = measure(rewrite('trigram', MERGE,
+        'function trigramIntersectionCount(a, b) { var s = new Set(b); var inter = 0;'
+        + ' for (var i = 0; i < a.length; i++) if (s.has(a[i])) inter++; return inter; }'));
+      expect(slow.setsBuilt).toBeGreaterThan(empty.setsBuilt + N);
+    });
+
+    it('packing node trigrams at query time packs once per indexed word', () => {
+      const { slow, empty } = measure((sources) => {
+        rewrite('worker', 'tri[w] = TRGM.wordTrigrams(words[w]);', 'tri[w] = words[w];')(sources);
+        rewrite('worker', 'TRGM.scoreNode(queryTri, node.wordTriLists)',
+          'TRGM.scoreNode(queryTri, node.wordTriLists.map(TRGM.wordTrigrams))')(sources);
+      });
+      expect(slow.trigramCalls).toBeGreaterThan(empty.trigramCalls + N);
+    });
+
+    it('rescanning the index for each hit scores nodes more than once', () => {
+      const { slow } = measure(rewrite('worker', 'path: node.path, score: score });',
+        'path: node.path, score: index.reduce(function (sum, other) {'
+        + ' return other.id === node.id ? sum + TRGM.scoreNode(queryTri, other.wordTriLists) : sum;'
+        + ' }, 0) });'));
+      expect(slow.scoreCalls).toBe(N + slow.results.total);
+    });
+  });
 });
