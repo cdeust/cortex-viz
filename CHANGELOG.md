@@ -20,6 +20,7 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 
 ### Fixed
 
+- Destroying a workflow graph cancels its timers. `mount()` in `ui/unified/js/workflow_graph.js` arms a seed-pin check (600 ms, then every 200 ms for up to 3.5 s) and, on a Galaxy append, a 3 s idle stop; `destroy()` cancelled neither, so both ran on a graph that was gone. In the test suite this failed the push Pipeline on main (run 42828507323, `regression`, 2026-11-10) with every test green: `tests/js/trace_incremental_layout.test.mjs` mounted graphs on the real clock and never destroyed them, and a pin check that fired after vitest had removed `window` from the worker, before the worker was stopped, threw `ReferenceError: window is not defined`, reported as an unhandled error. The test file now destroys every graph it mounts and asserts that `destroy()` leaves no timer armed. Its overlap helper makes one assertion over all pairs in place of one per pair (63,190 for the 356-node case), which took 711 ms of that test's 834 ms and let a loaded runner exceed the 5 s test timeout.
 - The `merge` job of `.github/workflows/pipeline.yml` sets `GH_REPO: ${{ github.repository }}` on its `gh pr merge` step: the job runs without a checkout, so gh could not infer the repository and failed with `fatal: not a git repository` after every stage was green (session-optimizer #65, run 39756969927, 2026-10-22).
 
 ### Added

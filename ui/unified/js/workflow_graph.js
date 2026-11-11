@@ -447,7 +447,6 @@
     }
 
     // Pin the seed after settling so later high-volume appends cannot push it.
-    //
     // Pinning fires when alpha first drops below 0.08 (visually
     // settled — see Maxwell-damped ADR-0047) OR after 3.5 s wall-
     // clock, whichever comes first. The alpha condition cannot use
@@ -456,11 +455,12 @@
     // reached during the seed's natural decay.
     var _pinStartedAt = (window.performance && performance.now()) || Date.now();
     function _pinSettledNodes() {
+      sim._pinTimer = null;
       if (sim._pinDone) return;
       var now = (window.performance && performance.now()) || Date.now();
       var elapsed = now - _pinStartedAt;
       if (sim.alpha() > 0.08 && elapsed < 3500) {
-        setTimeout(_pinSettledNodes, 200);
+        sim._pinTimer = setTimeout(_pinSettledNodes, 200);
         return;
       }
       sim._pinDone = true;
@@ -472,11 +472,14 @@
       console.log('[wfg] seed layout settled at α=' + sim.alpha().toFixed(3)
                   + ' — pinned ' + pinned + ' nodes');
     }
-    setTimeout(_pinSettledNodes, 600);
+    sim._pinTimer = setTimeout(_pinSettledNodes, 600);
 
     var handle = {
       destroy: function () {
         window.removeEventListener('resize', onResize);
+        // A destroyed graph owns no timer: neither the seed pin nor the idle stop may fire later.
+        clearTimeout(sim._pinTimer); clearTimeout(sim._idleTimer);
+        sim._pinTimer = sim._idleTimer = null;
         sim._traceAnimationToken = (sim._traceAnimationToken || 0) + 1;
         sim._tracePendingTargets = {}; sim._traceAnimationState = null;
         sim.stop();
