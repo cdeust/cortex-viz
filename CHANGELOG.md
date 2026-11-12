@@ -5,6 +5,11 @@ Releases before 2.7.0 were recorded as `chore(release)` / `release:` commits in 
 
 ## [Unreleased]
 
+### Changed
+
+- `pipeline.yml` and `pipeline-post-merge.yml` are byte for byte Cortex's (its commit `5ea8b83`). They bring two things. The selection of Cortex ADR-1133: a pull request whose every changed path lies under an optional `docs_paths` of `ci.json` runs `environment` and `install` on Linux alone, the resolver accepts that matrix only when it finds the pull request documentation-only itself, and the Pipeline after merge still runs the three systems; this repository's `ci.json` has no `docs_paths`, so every pull request still runs the three systems. And the `tag` job no longer checks out the tested commit with the release key: it fetches the commit into a bare repository, Cortex's answer to the CodeQL finding `actions/untrusted-checkout`, so no file of the commit is checked out while the key is present. Cortex's `test_ci_platform_selection.py` joins `scripts/tests`, which the `regression` command runs: it runs the selector and the resolver's check, so a change that puts every pull request on Linux alone fails here.
+- CI contract, rules 8 and 9 (Cortex ADR-1132, ADR-1134): the `unit` and `regression` commands of `ci.json` are run before a pull request is opened or pushed to, and their counts go in its body; a pull request that changes the `ci.json` validator leaves a tree the earlier validator still passes.
+
 ## [3.3.0] - 2026-11-11
 
 ### Changed

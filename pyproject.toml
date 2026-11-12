@@ -131,10 +131,14 @@ target-version = "py310"
 # restyling them would fork them. They are excluded by exact path so that the
 # documented `uv run ruff check . && uv run ruff format --check .` passes; they
 # still run in the `regression` command of ci.json.
+# `test_ci_platform_selection.py` is a third: Cortex's selection tests as
+# ai-architect-mcp-codebase and claude-mods carry them (2 findings here,
+# measured 2026-11-12 with ruff 0.16.9).
 extend-exclude = [
     ".claude",
     "scratchpad",
     "scratchpad-session",
+    "scripts/tests/test_ci_platform_selection.py",
     "scripts/tests/test_ci_review_budget.py",
     "scripts/tests/test_no_main_comparison.py",
 ]
