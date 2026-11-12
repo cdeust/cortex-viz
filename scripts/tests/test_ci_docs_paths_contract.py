@@ -12,10 +12,12 @@ WORKFLOWS = ROOT / ".github/workflows"
 # source: the heredoc opener of the ci.json validator in pipeline.yml.
 VALIDATOR = "          python3 - \"$GITHUB_WORKSPACE\" --github-output <<'PY'\n"
 # source: ci.json of this repository. The environment command starts the
-# standalone server through scripts/launcher.py and asks /api/capabilities; the
-# install command installs the plugin from the checkout. Neither opens a file
-# under docs/ or CHANGELOG.md. The tests that read docs/host-event-v1.schema.json
-# and CHANGELOG.md run in the unit job, on Linux, for every pull request.
+# standalone server through scripts/launcher.py and asks /api/capabilities: it
+# opens no file under these paths. The install command copies the checkout into
+# the plugin cache, these paths included, and nothing opens them afterwards. The
+# tests that read them (the host-event schema, the distribution identity, the
+# scan of every tracked file for tool prefixes) run in the unit job, on Linux,
+# for every pull request.
 DOCS = ["docs/", "CHANGELOG.md"]
 
 
